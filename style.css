@@ -1,0 +1,5054 @@
+/* ========================================================
+   مسابقة نور البيان 1448 - 1449 هـ
+   التصميم الكامل بثيم دولينجو الأصلي (Duolingo Style System)
+   ألوان دولينجو المبهجة + شخصية الأسد (لَيْث)
+   ======================================================== */
+
+:root {
+  /* ألوان دولينجو الرسمية الأساسية */
+  --duo-green: #58cc02;
+  --duo-green-dark: #46a302;
+  --duo-green-light: #79d628;
+  --duo-green-subtle: #d7ffb8;
+  --duo-green-tint: #f3fbe9;
+
+  --duo-blue: #1cb0f6;
+  --duo-blue-dark: #1899d6;
+  --duo-blue-light: #49c0f8;
+  --duo-blue-subtle: #ddf4ff;
+
+  --duo-yellow: #ffc800;
+  --duo-yellow-dark: #e5b400;
+  --duo-yellow-subtle: #fff6d6;
+
+  --duo-orange: #ff9600;
+  --duo-orange-dark: #e58800;
+
+  --duo-red: #ff4b4b;
+  --duo-red-dark: #ea2b2b;
+  --duo-red-subtle: #ffdfe0;
+
+  --duo-purple: #ce82ff;
+  --duo-purple-dark: #a55ee0;
+
+  /* الخلفيات والرماديات المعتمدة في دولينجو */
+  --bg-page: #f7f9fa;
+  --bg-card: #ffffff;
+  --border-duo: #e5e5e5;
+  --border-duo-dark: #cecece;
+
+  --text-main: #4b4b4b;
+  --text-muted: #777777;
+  --text-light: #afafaf;
+
+  --radius-sm: 12px;
+  --radius-md: 16px;
+  --radius-lg: 22px;
+  --radius-xl: 30px;
+  --radius-pill: 9999px;
+
+  /* ظلال الأزرار المجسمة 3D */
+  --btn-shadow-depth: 5px;
+}
+
+/* إعادة الضبط والقواعد الأساسية */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: 'Cairo', -apple-system, system-ui, sans-serif;
+  background-color: var(--bg-page);
+  color: var(--text-main);
+  direction: rtl;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow-x: hidden;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+/* ========================================================
+   الخلفية التفاعلية وقماش الكانفاس بأسلوب دولينجو (خلف جميع العناصر)
+   ======================================================== */
+.interactive-canvas {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none !important;
+  z-index: -1 !important;
+}
+
+.mouse-glow-aura {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 350px;
+  height: 350px;
+  margin-top: -175px;
+  margin-left: -175px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(88, 204, 2, 0.12) 0%, rgba(28, 176, 246, 0.05) 50%, transparent 70%);
+  filter: blur(28px);
+  pointer-events: none !important;
+  z-index: -1 !important;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  will-change: transform, opacity;
+}
+
+/* نمط المربعات / النقاط الخفيف جداً في الخلفية */
+.islamic-bg-ornament {
+  position: fixed;
+  inset: 0;
+  pointer-events: none !important;
+  z-index: -2 !important;
+  opacity: 0.035;
+  background-image: radial-gradient(#58cc02 1.5px, transparent 1.5px);
+  background-size: 28px 28px;
+}
+
+.light-glow {
+  position: fixed;
+  border-radius: 50%;
+  filter: blur(100px);
+  pointer-events: none !important;
+  z-index: -2 !important;
+}
+.glow-top {
+  top: -100px;
+  right: 10%;
+  width: 480px;
+  height: 400px;
+  background: radial-gradient(circle, rgba(88, 204, 2, 0.14) 0%, transparent 70%);
+}
+.glow-bottom {
+  bottom: -100px;
+  left: 10%;
+  width: 500px;
+  height: 420px;
+  background: radial-gradient(circle, rgba(28, 176, 246, 0.12) 0%, transparent 70%);
+}
+
+/* ========================================================
+   الهيدر بأسلوب دولينجو التفاعلي (Duolingo Gamified Bar)
+   ======================================================== */
+.main-header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: #ffffff;
+  border-bottom: 2px solid var(--border-duo);
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.02);
+}
+
+.header-container {
+  max-width: 1140px;
+  margin: 0 auto;
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.logo-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.logo-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: var(--radius-md);
+  background: var(--duo-green);
+  border-bottom: 4px solid var(--duo-green-dark);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.logo-box:hover .logo-icon {
+  transform: rotate(-8deg) scale(1.08);
+}
+
+.logo-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.logo-title {
+  font-family: 'Cairo', sans-serif;
+  font-size: 20px;
+  font-weight: 900;
+  color: var(--duo-green);
+  line-height: 1.2;
+}
+
+.logo-subtitle {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--duo-orange);
+}
+
+/* أدوات التحكم بالهيدر */
+.header-tools {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.btn-sound-toggle {
+  background: #ffffff;
+  border: 2px solid var(--border-duo);
+  border-bottom: 4px solid var(--border-duo);
+  border-radius: var(--radius-md);
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 16px;
+  transition: all 0.15s ease;
+}
+
+.btn-sound-toggle:hover {
+  background: #f7f7f7;
+  color: var(--duo-green);
+}
+
+.btn-sound-toggle:active {
+  transform: translateY(2px);
+  border-bottom-width: 2px;
+}
+
+/* شريط المستخدم السريع في الهيدر */
+.user-quick-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--duo-green-tint);
+  border: 2px solid var(--duo-green-subtle);
+  border-bottom: 3px solid var(--duo-green);
+  padding: 4px 14px;
+  border-radius: var(--radius-pill);
+}
+
+.quick-user-name {
+  font-size: 13.5px;
+  font-weight: 800;
+  color: var(--duo-green-dark);
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.btn-logout-small {
+  background: none;
+  border: none;
+  color: var(--duo-red);
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  transition: transform 0.2s;
+}
+
+.btn-logout-small:hover {
+  transform: scale(1.2);
+}
+
+/* ========================================================
+   أزرار دولينجو المجسمة 3D (The Iconic Duolingo Buttons)
+   ======================================================== */
+.btn-duo-green {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: var(--duo-green);
+  color: #ffffff;
+  border: none;
+  border-bottom: var(--btn-shadow-depth) solid var(--duo-green-dark);
+  border-radius: var(--radius-md);
+  padding: 16px 42px;
+  font-family: 'Cairo', sans-serif;
+  font-size: 21px;
+  font-weight: 900;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  letter-spacing: 0.5px;
+}
+
+.btn-duo-green:hover {
+  background: var(--duo-green-light);
+}
+
+.btn-duo-green:active {
+  transform: translateY(3px);
+  border-bottom-width: 2px;
+}
+
+.btn-duo-blue {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: var(--duo-blue);
+  color: #ffffff;
+  border: none;
+  border-bottom: var(--btn-shadow-depth) solid var(--duo-blue-dark);
+  border-radius: var(--radius-md);
+  padding: 14px 28px;
+  font-family: 'Cairo', sans-serif;
+  font-size: 17px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.btn-duo-blue:hover {
+  background: var(--duo-blue-light);
+}
+
+.btn-duo-blue:active {
+  transform: translateY(3px);
+  border-bottom-width: 2px;
+}
+
+.btn-duo-yellow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: var(--duo-yellow);
+  color: #451a03;
+  border: none;
+  border-bottom: var(--btn-shadow-depth) solid var(--duo-yellow-dark);
+  border-radius: var(--radius-md);
+  padding: 14px 28px;
+  font-family: 'Cairo', sans-serif;
+  font-size: 16.5px;
+  font-weight: 900;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  letter-spacing: 0.3px;
+  text-decoration: none;
+  box-shadow: 0 4px 14px rgba(255, 200, 0, 0.25);
+}
+
+.btn-duo-yellow:hover {
+  background: #fde047;
+  color: #291001;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(255, 200, 0, 0.35);
+}
+
+.btn-duo-yellow:active {
+  transform: translateY(3px);
+  border-bottom-width: 2px;
+  box-shadow: none;
+}
+
+.btn-duo-purple {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: var(--duo-purple);
+  color: #ffffff;
+  border: none;
+  border-bottom: var(--btn-shadow-depth) solid var(--duo-purple-dark);
+  border-radius: var(--radius-md);
+  padding: 13px 26px;
+  font-family: 'Cairo', sans-serif;
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  letter-spacing: 0.3px;
+  text-decoration: none;
+  box-shadow: 0 4px 14px rgba(206, 130, 255, 0.25);
+}
+
+.btn-duo-purple:hover {
+  background: #d896ff;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(206, 130, 255, 0.35);
+}
+
+.btn-duo-purple:active {
+  transform: translateY(3px);
+  border-bottom-width: 2px;
+  box-shadow: none;
+}
+
+.btn-sm {
+  padding: 8px 16px !important;
+  font-size: 13.5px !important;
+  border-bottom-width: 3.5px !important;
+  border-radius: var(--radius-sm) !important;
+}
+
+.btn-duo-outline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: #ffffff;
+  color: var(--text-muted);
+  border: 2px solid var(--border-duo);
+  border-bottom: 4px solid var(--border-duo);
+  border-radius: var(--radius-md);
+  padding: 13px 26px;
+  font-family: 'Cairo', sans-serif;
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.btn-duo-outline:hover {
+  background: #f7f7f7;
+  color: var(--text-main);
+  border-color: var(--border-duo-dark);
+}
+
+.btn-duo-outline:active {
+  transform: translateY(2px);
+  border-bottom-width: 2px;
+}
+
+.btn-block {
+  width: 100%;
+}
+
+/* ========================================================
+   شارة المصحف وصندوق الإرشادات بأسلوب دولينجو
+   ======================================================== */
+.hero-quran-badge {
+  margin-bottom: 16px;
+  display: flex;
+  justify-content: center;
+}
+
+.badge-icon-circle {
+  width: 76px;
+  height: 76px;
+  border-radius: var(--radius-lg);
+  background: var(--duo-green);
+  border-bottom: 5px solid var(--duo-green-dark);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 34px;
+  box-shadow: 0 4px 14px rgba(88, 204, 2, 0.28);
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.badge-icon-circle:hover {
+  transform: scale(1.08) rotate(-5deg);
+}
+
+/* صندوق الإرشادات التفاعلي بأسلوب دولينجو */
+.duo-instruction-box {
+  background: #f7f9fa;
+  border: 2px solid var(--border-duo);
+  border-bottom: 4px solid var(--border-duo);
+  border-radius: var(--radius-md);
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 22px;
+}
+
+.instruction-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-sm);
+  background: var(--duo-blue);
+  border-bottom: 3px solid var(--duo-blue-dark);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.instruction-text {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text-main);
+  line-height: 1.5;
+}
+
+/* ========================================================
+   الحاوية والبطاقات الرئيسية
+   ======================================================== */
+.main-content {
+  flex: 1;
+  position: relative;
+  z-index: 10;
+  max-width: 1060px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 35px 20px 60px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.view-section {
+  width: 100%;
+  position: relative;
+  z-index: 5;
+  animation: viewSlide 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.hidden {
+  display: none !important;
+}
+
+@keyframes viewSlide {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* بطاقات دولينجو المحددة بإطارات بارزة */
+.duo-card {
+  background: var(--bg-card);
+  border: 2.5px solid var(--border-duo);
+  border-bottom: 6px solid var(--border-duo);
+  border-radius: var(--radius-xl);
+  padding: 45px 36px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.03);
+  position: relative;
+}
+
+/* ========================================================
+   1. شاشة البداية Hero Section (ثيم دولينجو)
+   ======================================================== */
+.hero-card {
+  text-align: center;
+  max-width: 820px;
+  margin: 0 auto;
+}
+
+.bismillah-wrapper {
+  margin-bottom: 16px;
+}
+
+.bismillah {
+  font-family: 'Amiri', serif;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--duo-green-dark);
+  background: var(--duo-green-subtle);
+  padding: 6px 24px;
+  border-radius: var(--radius-pill);
+  display: inline-block;
+}
+
+.hero-main-title {
+  font-family: 'Cairo', sans-serif;
+  font-size: 42px;
+  font-weight: 900;
+  color: var(--duo-green);
+  margin-bottom: 8px;
+  line-height: 1.2;
+}
+
+.hero-years-badge {
+  display: inline-flex;
+  margin-bottom: 20px;
+}
+
+.hero-years-badge span {
+  background: var(--duo-yellow-subtle);
+  color: var(--duo-orange-dark);
+  border: 2px solid var(--duo-yellow);
+  font-size: 20px;
+  font-weight: 900;
+  padding: 4px 24px;
+  border-radius: var(--radius-pill);
+  letter-spacing: 1px;
+}
+
+.hero-desc {
+  font-size: 17px;
+  line-height: 1.7;
+  color: var(--text-muted);
+  max-width: 620px;
+  margin: 0 auto 30px;
+  font-weight: 600;
+}
+
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  max-width: 680px;
+  margin: 0 auto 32px;
+}
+
+.feature-item {
+  background: #f7f9fa;
+  border: 2px solid var(--border-duo);
+  border-bottom: 4px solid var(--border-duo);
+  padding: 16px 14px;
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  transition: all 0.2s ease;
+}
+
+.feature-item:hover {
+  transform: translateY(-3px);
+  border-color: var(--duo-green);
+  border-bottom-color: var(--duo-green-dark);
+  background: #ffffff;
+}
+
+.feature-item i {
+  font-size: 24px;
+  color: var(--duo-green);
+}
+
+.feature-item span {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text-main);
+}
+
+.hero-action {
+  margin-bottom: 20px;
+}
+
+.system-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-muted);
+  background: #f7f7f7;
+  padding: 6px 16px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-duo);
+}
+
+.status-indicator {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--duo-green);
+  box-shadow: 0 0 6px var(--duo-green);
+}
+
+/* ========================================================
+   2. شاشة تسجيل الدخول وكتابة الاسم الرباعي
+   ======================================================== */
+.login-card {
+  max-width: 620px;
+  margin: 0 auto;
+}
+
+.card-header {
+  text-align: center;
+  margin-bottom: 26px;
+}
+
+.header-icon {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 14px;
+  border-radius: var(--radius-lg);
+  background: var(--duo-blue);
+  border-bottom: 4px solid var(--duo-blue-dark);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+}
+
+.section-title {
+  font-size: 30px;
+  font-weight: 900;
+  color: var(--text-main);
+  margin-bottom: 6px;
+}
+
+.section-subtitle {
+  font-size: 15px;
+  color: var(--duo-blue-dark);
+  font-weight: 800;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.input-label {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.input-label i {
+  color: var(--duo-green);
+}
+
+.required-star {
+  color: var(--duo-red);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+/* شريط تقدم الاسم بأسلوب دولينجو (Duo Progress Bar) */
+.name-progress-bar-container {
+  width: 100%;
+  height: 12px;
+  background: #e5e5e5;
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+
+.name-progress-bar {
+  height: 100%;
+  width: 0%;
+  background: var(--duo-green);
+  border-radius: 10px;
+  transition: width 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.form-control {
+  width: 100%;
+  padding: 16px 20px 16px 120px;
+  font-family: 'Cairo', sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-main);
+  background: #f7f9fa;
+  border: 2px solid var(--border-duo);
+  border-radius: var(--radius-md);
+  transition: all 0.2s ease;
+}
+
+.form-control:focus {
+  outline: none;
+  background: #ffffff;
+  border-color: var(--duo-blue);
+  box-shadow: 0 0 0 4px var(--duo-blue-subtle);
+}
+
+.input-badge {
+  position: absolute;
+  left: 14px;
+  font-size: 12.5px;
+  font-weight: 800;
+  padding: 5px 12px;
+  border-radius: var(--radius-pill);
+  background: #e5e5e5;
+  color: var(--text-muted);
+  pointer-events: none;
+  transition: all 0.2s ease;
+}
+
+.input-badge.valid {
+  background: var(--duo-green);
+  color: #ffffff;
+}
+
+.input-hint {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.input-hint i {
+  color: var(--duo-orange);
+}
+
+.alert-box {
+  padding: 14px 18px;
+  border-radius: var(--radius-md);
+  font-size: 14.5px;
+  font-weight: 800;
+  line-height: 1.5;
+}
+
+.alert-box.error {
+  background: var(--duo-red-subtle);
+  border: 2px solid var(--duo-red);
+  color: var(--duo-red-dark);
+}
+
+.form-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.login-note {
+  margin-top: 24px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-light);
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* ========================================================
+   3. لوحة المشرف وبوابة الطالب (ثيم دولينجو)
+   ======================================================== */
+.dashboard-wrapper,
+.student-wrapper {
+  max-width: 980px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+}
+
+/* بطاقة الترحيب العلوية بأسلوب دولينجو */
+.welcome-banner {
+  background: #ffffff;
+  border: 2.5px solid var(--border-duo);
+  border-bottom: 5px solid var(--border-duo);
+  border-radius: var(--radius-xl);
+  padding: 32px 30px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  position: relative;
+  overflow: hidden;
+}
+
+.welcome-banner.supervisor-banner {
+  background: linear-gradient(135deg, #ffffff 60%, var(--duo-yellow-subtle) 100%);
+  border-color: var(--duo-yellow);
+  border-bottom-color: var(--duo-yellow-dark);
+}
+
+.welcome-banner.student-banner {
+  background: linear-gradient(135deg, #ffffff 60%, var(--duo-green-tint) 100%);
+  border-color: var(--duo-green-subtle);
+  border-bottom-color: var(--duo-green);
+}
+
+.banner-badge-icon {
+  width: 76px;
+  height: 76px;
+  border-radius: var(--radius-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 36px;
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+.banner-badge-icon:hover {
+  transform: scale(1.08) rotate(-4deg);
+}
+
+.banner-badge-icon.gold-crown {
+  background: var(--duo-yellow);
+  border-bottom: 5px solid var(--duo-yellow-dark);
+  color: #4b4b4b;
+  box-shadow: 0 4px 14px rgba(255, 200, 0, 0.3);
+}
+
+.banner-badge-icon.student-cap {
+  background: var(--duo-green);
+  border-bottom: 5px solid var(--duo-green-dark);
+  color: #ffffff;
+  box-shadow: 0 4px 14px rgba(88, 204, 2, 0.3);
+}
+
+.banner-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.role-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+  font-size: 13.5px;
+  font-weight: 900;
+  width: fit-content;
+}
+
+.supervisor-pill {
+  background: var(--duo-yellow);
+  color: #4b4b4b;
+  border-bottom: 3px solid var(--duo-yellow-dark);
+}
+
+.student-pill {
+  background: var(--duo-green);
+  color: #ffffff;
+  border-bottom: 3px solid var(--duo-green-dark);
+}
+
+.welcome-title {
+  font-size: 34px;
+  font-weight: 900;
+  color: var(--text-main);
+  line-height: 1.2;
+}
+
+.supervisor-name-highlight,
+.student-name-highlight {
+  font-size: 19px;
+  font-weight: 800;
+  color: var(--duo-green-dark);
+}
+
+.supervisor-name-highlight strong,
+.student-name-highlight strong {
+  color: var(--text-main);
+}
+
+.welcome-text {
+  font-size: 15px;
+  color: var(--text-muted);
+  line-height: 1.6;
+  font-weight: 600;
+}
+
+/* بطاقات الإحصائيات دولينجو (Stats Grid) */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+.stat-card {
+  background: #ffffff;
+  border: 2px solid var(--border-duo);
+  border-bottom: 4px solid var(--border-duo);
+  border-radius: var(--radius-lg);
+  padding: 18px 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  transition: transform 0.15s ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+}
+
+.stat-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  flex-shrink: 0;
+}
+
+.stat-icon.emerald {
+  background: var(--duo-green-subtle);
+  color: var(--duo-green-dark);
+}
+
+.stat-icon.gold {
+  background: var(--duo-yellow-subtle);
+  color: var(--duo-orange-dark);
+}
+
+.stat-icon.teal {
+  background: var(--duo-blue-subtle);
+  color: var(--duo-blue-dark);
+}
+
+.stat-icon.amber {
+  background: #ffe8d6;
+  color: var(--duo-orange-dark);
+}
+
+.stat-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.stat-label {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+.stat-value {
+  font-size: 24px;
+  font-weight: 900;
+  color: var(--text-main);
+}
+
+.text-success {
+  color: var(--duo-green-dark) !important;
+}
+
+/* جدول المشرف بأسلوب دولينجو */
+.data-table-card {
+  background: #ffffff;
+  border: 2.5px solid var(--border-duo);
+  border-bottom: 5px solid var(--border-duo);
+  border-radius: var(--radius-xl);
+  padding: 26px;
+}
+
+.table-header-flex {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.table-title {
+  font-size: 20px;
+  font-weight: 900;
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.table-title i {
+  color: var(--duo-green);
+}
+
+.table-subtitle {
+  font-size: 13.5px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.table-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.table-actions .btn-duo-green,
+.table-actions .btn-duo-purple {
+  padding: 11px 20px;
+  font-size: 14.5px;
+  font-weight: 800;
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search-box i {
+  position: absolute;
+  right: 14px;
+  color: var(--text-light);
+  font-size: 14px;
+}
+
+.search-box input {
+  padding: 10px 38px 10px 14px;
+  border: 2px solid var(--border-duo);
+  border-radius: var(--radius-pill);
+  font-family: 'Cairo', sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  background: #f7f9fa;
+  width: 220px;
+  transition: all 0.2s ease;
+}
+
+.search-box input:focus {
+  outline: none;
+  background: #ffffff;
+  border-color: var(--duo-green);
+  width: 260px;
+}
+
+.table-responsive {
+  overflow-x: auto;
+  border-radius: var(--radius-md);
+  border: 2px solid var(--border-duo);
+}
+
+.islamic-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: right;
+  font-size: 14.5px;
+}
+
+.islamic-table th {
+  background: #f7f9fa;
+  color: var(--text-main);
+  padding: 14px 16px;
+  font-weight: 800;
+  border-bottom: 2px solid var(--border-duo);
+}
+
+.islamic-table td {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-duo);
+  color: var(--text-main);
+  font-weight: 600;
+}
+
+.islamic-table tr:hover td {
+  background: var(--duo-green-tint);
+}
+
+.empty-state {
+  text-align: center !important;
+  padding: 35px !important;
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+.student-tag {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.tag-new {
+  background: var(--duo-green-subtle);
+  color: var(--duo-green-dark);
+}
+
+.tag-returning {
+  background: var(--duo-yellow-subtle);
+  color: var(--duo-orange-dark);
+}
+
+/* ========================================================
+   مسار ومراحل المسابقة بأسلوب دولينجو (Duolingo Path)
+   ======================================================== */
+.duo-path-wrapper {
+  background: #ffffff;
+  border: 2.5px solid var(--border-duo);
+  border-bottom: 5px solid var(--border-duo);
+  border-radius: var(--radius-xl);
+  padding: 30px 24px;
+}
+
+.duo-path-title {
+  font-size: 22px;
+  font-weight: 900;
+  color: var(--text-main);
+  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.duo-path-title i {
+  color: var(--duo-yellow);
+}
+
+.duo-path-nodes {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 32px;
+  position: relative;
+  padding: 20px 0;
+}
+
+/* الخط المنقط الرابط بين المراحل */
+.duo-path-nodes::before {
+  content: '';
+  position: absolute;
+  top: 40px;
+  bottom: 40px;
+  width: 6px;
+  background: repeating-linear-gradient(
+    to bottom,
+    var(--border-duo),
+    var(--border-duo) 10px,
+    transparent 10px,
+    transparent 18px
+  );
+  z-index: 1;
+}
+
+.path-step-card {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  width: 100%;
+  max-width: 580px;
+  background: #ffffff;
+  border: 2.5px solid var(--border-duo);
+  border-bottom: 5px solid var(--border-duo);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  transition: all 0.2s ease;
+}
+
+.path-step-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--duo-green);
+  border-bottom-color: var(--duo-green-dark);
+}
+
+.path-step-card.active-step {
+  border-color: var(--duo-green);
+  border-bottom-color: var(--duo-green-dark);
+  background: var(--duo-green-tint);
+}
+
+.path-circle-btn {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  background: var(--duo-green);
+  border-bottom: 5px solid var(--duo-green-dark);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  font-weight: 900;
+  flex-shrink: 0;
+  box-shadow: 0 4px 10px rgba(88, 204, 2, 0.25);
+}
+
+.path-step-card:nth-child(2) .path-circle-btn {
+  background: var(--duo-blue);
+  border-bottom-color: var(--duo-blue-dark);
+  box-shadow: 0 4px 10px rgba(28, 176, 246, 0.25);
+}
+
+.path-step-card:nth-child(3) .path-circle-btn {
+  background: var(--duo-yellow);
+  border-bottom-color: var(--duo-yellow-dark);
+  box-shadow: 0 4px 10px rgba(255, 200, 0, 0.25);
+  color: #4b4b4b;
+}
+
+.path-step-details {
+  flex: 1;
+}
+
+.path-step-details h4 {
+  font-size: 17px;
+  font-weight: 900;
+  color: var(--text-main);
+  margin-bottom: 4px;
+}
+
+.path-step-details p {
+  font-size: 13.5px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  font-weight: 600;
+}
+
+.path-status-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  font-weight: 800;
+  margin-top: 6px;
+}
+
+.badge-unlocked {
+  background: var(--duo-green-subtle);
+  color: var(--duo-green-dark);
+}
+
+/* بطاقة تفاصيل الطالب */
+.student-status-card {
+  background: #ffffff;
+  border: 2.5px solid var(--border-duo);
+  border-bottom: 5px solid var(--border-duo);
+  border-radius: var(--radius-xl);
+  padding: 26px;
+}
+
+.card-title-flex {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+  padding-bottom: 12px;
+  border-bottom: 2px dashed var(--border-duo);
+}
+
+.card-title-flex h3 {
+  font-size: 18px;
+  font-weight: 900;
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.badge-active {
+  background: var(--duo-green-subtle);
+  color: var(--duo-green-dark);
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+  font-size: 13px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+.info-block {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #f7f9fa;
+  padding: 14px 18px;
+  border-radius: var(--radius-md);
+  border: 2px solid var(--border-duo);
+}
+
+.info-label {
+  font-size: 14px;
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+.info-val {
+  font-size: 15px;
+  font-weight: 900;
+  color: var(--text-main);
+}
+
+/* إرشادات المسابقة دولينجو */
+.guidelines-card {
+  background: #ffffff;
+  border: 2.5px solid var(--border-duo);
+  border-bottom: 5px solid var(--border-duo);
+  border-radius: var(--radius-xl);
+  padding: 24px;
+}
+
+.guidelines-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  color: var(--duo-green-dark);
+  font-weight: 900;
+  font-size: 17px;
+}
+
+.guidelines-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.guidelines-list li {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--text-main);
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  line-height: 1.6;
+}
+
+.guidelines-list li i {
+  color: var(--duo-green);
+  font-size: 15px;
+  margin-top: 4px;
+}
+
+/* ========================================================
+   الفوتر
+   ======================================================== */
+.main-footer {
+  margin-top: auto;
+  background: #ffffff;
+  border-top: 2px solid var(--border-duo);
+  padding: 26px 20px;
+  text-align: center;
+}
+
+.footer-container {
+  max-width: 1060px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+}
+
+.footer-quote {
+  font-family: 'Amiri', serif;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--duo-green-dark);
+}
+
+.footer-copy {
+  font-size: 13.5px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+/* ========================================================
+   التوافق التام مع جميع الأجهزة (Responsive)
+   ======================================================== */
+@media (max-width: 900px) {
+  .hero-card {
+    padding: 35px 22px;
+  }
+  
+  .hero-main-title {
+    font-size: 34px;
+  }
+
+  .features-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .info-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .welcome-banner {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+
+  .banner-badge-icon {
+    width: 68px;
+    height: 68px;
+    font-size: 32px;
+  }
+
+  .role-pill {
+    margin: 0 auto;
+  }
+}
+
+@media (max-width: 600px) {
+
+  .hero-card {
+    padding: 26px 16px;
+  }
+
+  .hero-main-title {
+    font-size: 26px;
+  }
+
+  .btn-duo-green {
+    font-size: 18px;
+    padding: 14px 20px;
+    width: 100%;
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .welcome-title {
+    font-size: 26px;
+  }
+
+  .form-control {
+    padding-left: 20px;
+  }
+
+  .input-badge {
+    position: static;
+    margin-top: 6px;
+    display: inline-block;
+  }
+
+  .input-wrapper {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .path-step-card {
+    flex-direction: column;
+    text-align: center;
+  }
+}
+
+/* ========================================================
+   أنماط الخطوط القرآنية والعربية المعتمدة
+   ======================================================== */
+.font-quran {
+  font-family: 'Amiri Quran', 'Amiri', serif !important;
+  font-size: 26px !important;
+  line-height: 2.3 !important;
+  letter-spacing: 0.5px;
+  color: #1a472a;
+}
+
+.font-amiri {
+  font-family: 'Amiri', serif !important;
+  font-size: 22px !important;
+  line-height: 2 !important;
+  color: #2c3e50;
+}
+
+.font-normal {
+  font-family: 'Cairo', sans-serif !important;
+  font-size: 19px !important;
+  line-height: 1.8 !important;
+  color: var(--text-main);
+}
+
+/* شارات الأدوار في الهيدر */
+.quick-role-badge {
+  background: var(--duo-yellow-subtle);
+  color: #b78103;
+  border: 1.5px solid var(--duo-yellow);
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  font-weight: 800;
+  margin-left: 8px;
+}
+
+/* ========================================================
+   تبويبات لوحة التحكم (Dashboard Tabs)
+   ======================================================== */
+.dashboard-nav-tabs {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 24px;
+  border-bottom: 3px solid var(--border-duo);
+  padding-bottom: 12px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.nav-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-md);
+  padding: 12px 20px;
+  font-family: 'Cairo', sans-serif;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.nav-tab:hover {
+  background: #f0f4f7;
+  color: var(--text-main);
+}
+
+.nav-tab.active {
+  background: var(--duo-green-tint);
+  color: var(--duo-green-dark);
+  box-shadow: inset 0 -3px 0 var(--duo-green);
+}
+
+.tab-content-panel {
+  display: none;
+  animation: fadeInPanel 0.3s ease;
+}
+
+.tab-content-panel.active {
+  display: block;
+}
+
+@keyframes fadeInPanel {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* شريط الإجراءات السريعة بأسلوب دولينجو */
+.quick-actions-bar {
+  background: #ffffff;
+  border: 3px solid var(--border-duo);
+  border-bottom: 6px solid var(--border-duo-dark);
+  border-radius: var(--radius-xl);
+  padding: 24px;
+  margin-top: 24px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.03);
+}
+
+.quick-actions-bar h3 {
+  font-size: 19px;
+  font-weight: 800;
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.quick-actions-bar h3 i {
+  color: var(--duo-yellow);
+}
+
+.quick-btns-flex {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.quick-btns-flex .btn-duo-yellow,
+.quick-btns-flex .btn-duo-purple,
+.quick-btns-flex .btn-duo-green,
+.quick-btns-flex .btn-duo-blue,
+.quick-btns-flex .btn-duo-outline {
+  padding: 13px 22px;
+  font-size: 15px;
+}
+
+.quick-action-tile {
+  background: #ffffff;
+  border: 2.5px solid var(--border-duo);
+  border-bottom: 5px solid var(--border-duo-dark);
+  border-radius: var(--radius-lg);
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: right;
+  cursor: pointer;
+  font-family: 'Cairo', sans-serif;
+  position: relative;
+  transition: all 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.quick-action-tile:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.06);
+}
+
+.quick-action-tile:active {
+  transform: translateY(2px);
+  border-bottom-width: 2.5px;
+}
+
+.action-tile-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  margin-bottom: 12px;
+  transition: transform 0.2s ease;
+}
+
+.quick-action-tile:hover .action-tile-icon {
+  transform: scale(1.1);
+}
+
+.action-tile-content {
+  flex: 1;
+  width: 100%;
+}
+
+.action-tile-title {
+  display: block;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text-main);
+  margin-bottom: 4px;
+}
+
+.action-tile-sub {
+  display: block;
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.4;
+  margin-bottom: 10px;
+}
+
+.tile-badge-pill {
+  font-size: 11px;
+  font-weight: 800;
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: auto;
+}
+
+/* سمات ألوان البلاطات السريعة */
+.yellow-tile {
+  border-color: #fef08a;
+  border-bottom-color: #ca8a04;
+  background: #fffdf5;
+}
+.yellow-tile .action-tile-icon {
+  background: var(--duo-yellow-subtle);
+  color: #b78103;
+}
+.yellow-tile:hover {
+  border-color: var(--duo-yellow);
+  border-bottom-color: var(--duo-yellow-dark);
+}
+.tile-badge-pill.gold {
+  background: #fef08a;
+  color: #854d0e;
+}
+
+.purple-tile {
+  border-color: #f3e8ff;
+  border-bottom-color: #9333ea;
+  background: #faf5ff;
+}
+.purple-tile .action-tile-icon {
+  background: #ede9fe;
+  color: var(--duo-purple);
+}
+.purple-tile:hover {
+  border-color: var(--duo-purple);
+  border-bottom-color: #7e22ce;
+}
+.tile-badge-pill.purple {
+  background: #ede9fe;
+  color: #6b21a8;
+}
+
+.green-tile {
+  border-color: #dcfce7;
+  border-bottom-color: #16a34a;
+  background: #f0fdf4;
+}
+.green-tile .action-tile-icon {
+  background: var(--duo-green-subtle);
+  color: var(--duo-green-dark);
+}
+.green-tile:hover {
+  border-color: var(--duo-green);
+  border-bottom-color: var(--duo-green-dark);
+}
+.tile-badge-pill.green {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.blue-tile {
+  border-color: #e0f2fe;
+  border-bottom-color: #0284c7;
+  background: #f0f9ff;
+}
+.blue-tile .action-tile-icon {
+  background: var(--duo-blue-subtle);
+  color: var(--duo-blue-dark);
+}
+.blue-tile:hover {
+  border-color: var(--duo-blue);
+  border-bottom-color: var(--duo-blue-dark);
+}
+.tile-badge-pill.blue {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.emerald-tile {
+  border-color: #ccfbf1;
+  border-bottom-color: #0d9488;
+  background: #f0fdfa;
+}
+.emerald-tile .action-tile-icon {
+  background: #ccfbf1;
+  color: #0f766e;
+}
+.emerald-tile:hover {
+  border-color: #14b8a6;
+  border-bottom-color: #0d9488;
+}
+.tile-badge-pill.emerald {
+  background: #ccfbf1;
+  color: #0f766e;
+}
+
+/* ========================================================
+   فلاتر وإدارة الحسابات
+   ======================================================== */
+.filter-controls-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+
+.filters-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.filter-select {
+  padding: 8px 14px;
+  font-size: 13.5px;
+  width: auto;
+  min-width: 150px;
+  background-color: #fff;
+}
+
+.pill-role {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.pill-role.role-supervisor {
+  background: #fff8e1;
+  color: #d97706;
+  border: 1px solid #fcd34d;
+}
+
+.pill-role.role-teacher {
+  background: #e0f2fe;
+  color: #0284c7;
+  border: 1px solid #bae6fd;
+}
+
+.pill-role.role-presenter {
+  background: #f3e8ff;
+  color: #9333ea;
+  border: 1px solid #e9d5ff;
+}
+
+.pill-role.role-student {
+  background: #ecfdf5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
+}
+
+.btn-copy-direct-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #f8fafc;
+  border: 1.5px solid #cbd5e1;
+  color: #334155;
+  font-family: 'Cairo', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 5px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-copy-direct-link:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+  border-color: #94a3b8;
+}
+
+.btn-copy-direct-link.copied {
+  background: #dcfce7;
+  color: #15803d;
+  border-color: #86efac;
+}
+
+.actions-cell-flex {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-icon-action {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1.5px solid var(--border-duo);
+  background: #fff;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  transition: all 0.15s;
+}
+
+.btn-icon-action:hover {
+  background: #f1f5f9;
+  color: var(--text-main);
+  border-color: #cbd5e1;
+}
+
+.btn-icon-action.delete:hover {
+  background: #fee2e2;
+  color: #dc2626;
+  border-color: #fca5a5;
+}
+
+/* وسوم المدارس والفئات */
+.tags-list {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.tags-list li {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #f1f5f9;
+  padding: 6px 12px;
+  border-radius: var(--radius-pill);
+  font-size: 13px;
+  font-weight: 700;
+  color: #334155;
+  border: 1px solid #cbd5e1;
+}
+
+.tags-list li button {
+  background: none;
+  border: none;
+  color: #ef4444;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.add-inline-input {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/* ========================================================
+   إدارة وبنك الاختبارات
+   ======================================================== */
+.quizzes-header-flex, .live-header-flex {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 15px;
+  margin-bottom: 22px;
+}
+
+.section-heading-duo {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text-main);
+  margin-bottom: 4px;
+}
+
+.section-subheading-duo {
+  font-size: 14px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.header-action-buttons {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.live-header-flex .btn-duo-yellow {
+  padding: 13px 26px;
+  font-size: 15.5px;
+  font-weight: 800;
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 14px rgba(255, 200, 0, 0.25);
+}
+
+.quizzes-grid, .practice-quizzes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 18px;
+}
+
+.quiz-card-duo {
+  background: #fff;
+  border: 2.5px solid var(--border-duo);
+  border-bottom: 5px solid var(--border-duo-dark);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.quiz-card-duo:hover {
+  transform: translateY(-2px);
+  border-bottom-color: var(--duo-green-dark);
+}
+
+.quiz-card-top {
+  margin-bottom: 15px;
+}
+
+.quiz-grade-badge {
+  display: inline-block;
+  background: var(--duo-blue-subtle);
+  color: var(--duo-blue-dark);
+  font-size: 12px;
+  font-weight: 800;
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  margin-bottom: 8px;
+}
+
+.quiz-card-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text-main);
+  margin-bottom: 6px;
+}
+
+.quiz-card-info {
+  font-size: 13.5px;
+  color: var(--text-muted);
+  font-weight: 600;
+  display: flex;
+  gap: 15px;
+}
+
+.quiz-card-actions {
+  display: flex;
+  gap: 8px;
+  border-top: 1.5px solid #f1f5f9;
+  padding-top: 14px;
+  flex-wrap: wrap;
+}
+
+/* ========================================================
+   محرر أقسام وأسئلة الاختبار (Quiz Builder)
+   ======================================================== */
+.modal-wide {
+  max-width: 820px !important;
+  width: 95% !important;
+}
+
+.two-cols-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 15px;
+}
+
+.checkbox-row-styled {
+  background: var(--duo-green-tint);
+  border: 1.5px solid var(--duo-green-subtle);
+  border-radius: var(--radius-md);
+  padding: 12px 16px;
+  margin-bottom: 15px;
+}
+
+.checkbox-row-styled label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--duo-green-dark);
+}
+
+.sections-builder-wrapper {
+  background: #f8fafc;
+  border: 2px solid var(--border-duo);
+  border-radius: var(--radius-md);
+  padding: 18px;
+  margin-bottom: 20px;
+}
+
+.sections-builder-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.sections-builder-header h4 {
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.section-item-box {
+  background: #fff;
+  border: 2px solid var(--border-duo);
+  border-radius: var(--radius-md);
+  padding: 15px;
+  margin-bottom: 15px;
+}
+
+.section-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  gap: 10px;
+}
+
+.section-name-input {
+  flex: 1;
+  font-weight: 700;
+}
+
+.question-edit-card {
+  background: #fdfdfd;
+  border: 1.5px dashed #cbd5e1;
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  margin-bottom: 10px;
+}
+
+.question-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-wrap: nowrap;
+}
+
+.q-points-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #fefce8;
+  border: 1.5px solid #fde68a;
+  border-radius: 8px;
+  padding: 4px 8px;
+  white-space: nowrap;
+  cursor: default;
+  flex-shrink: 0;
+}
+
+.q-points-label .q-points-input {
+  width: 46px;
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 800;
+  color: #92400e;
+  text-align: center;
+  padding: 0;
+  outline: none;
+}
+
+.font-select-duo {
+  font-weight: 700;
+  color: #0369a1;
+}
+
+/* ========================================================
+   تنسيقات محرر الأسئلة المتقدم (MCQ, Matching, Ordering)
+   ======================================================== */
+.builder-subheading {
+  font-size: 13.5px;
+  font-weight: 800;
+  color: #334155;
+  margin: 12px 0 8px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.builder-subheading i {
+  color: var(--duo-blue);
+}
+
+/* 1. خيارات MCQ الاحترافية */
+.mcq-options-builder {
+  background: #f8fafc;
+  border: 1.5px solid var(--border-duo);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  margin-top: 10px;
+}
+
+.mcq-options-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.mcq-option-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #ffffff;
+  border: 1.5px solid var(--border-duo);
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  transition: all 0.15s ease;
+}
+
+.mcq-option-row:hover {
+  border-color: var(--duo-green);
+}
+
+.mcq-option-row.is-correct {
+  border-color: var(--duo-green);
+  background: var(--duo-green-tint);
+}
+
+.mcq-radio-custom {
+  cursor: pointer;
+  accent-color: var(--duo-green);
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.mcq-opt-input {
+  flex: 1;
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 6px 4px !important;
+  font-size: 14.5px !important;
+  font-weight: 700 !important;
+}
+
+.mcq-opt-input:focus {
+  outline: none !important;
+}
+
+/* 2. التوصيل الاحترافي (Matching Pairs) */
+.matching-builder-box {
+  background: #f8fafc;
+  border: 1.5px solid var(--border-duo);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  margin-top: 10px;
+}
+
+.matching-pairs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.matching-pair-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #ffffff;
+  border: 1.5px solid var(--border-duo);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+}
+
+.matching-pair-row .match-left-input,
+.matching-pair-row .match-right-input {
+  flex: 1;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.match-arrow-badge {
+  color: var(--duo-blue);
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+}
+
+/* 3. ترتيب الجمل والكلمات الاحترافي (Ordering) */
+.ordering-builder-box {
+  background: #f8fafc;
+  border: 1.5px solid var(--border-duo);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  margin-top: 10px;
+}
+
+.ordering-sentence-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.ordering-sentence-input {
+  flex: 1;
+  font-weight: 700;
+}
+
+.ordering-items-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.ordering-item-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #ffffff;
+  border: 1.5px solid var(--border-duo);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+}
+
+.ordering-num-badge {
+  background: var(--duo-blue-subtle);
+  color: var(--duo-blue-dark);
+  font-weight: 900;
+  font-size: 12px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.ordering-item-input {
+  flex: 1;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+/* 4. السؤال الشفهي (كتابة العنوان والكلمة/الآية المطلوب قراءتها) */
+.oral-builder-box {
+  background: #fefce8;
+  border: 1.5px solid #fde047;
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  margin-top: 10px;
+}
+
+.oral-target-wrapper {
+  margin-top: 8px;
+}
+
+.oral-target-input {
+  width: 100%;
+  min-height: 75px;
+  background: #ffffff;
+  border: 2px solid #facc15;
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  font-size: 19px;
+  font-weight: 800;
+  color: #1e293b;
+  line-height: 1.8;
+  resize: vertical;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+}
+
+.oral-target-input:focus {
+  border-color: #ca8a04;
+  box-shadow: 0 0 0 3px rgba(202, 138, 4, 0.2);
+  outline: none;
+}
+
+.oral-builder-hint {
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: #854d0e;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+}
+
+/* بطاقة عرض السؤال الشفهي في مسرح المسابقة الحي */
+.oral-stage-showcase {
+  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+  border: 3px solid #facc15;
+  border-bottom: 6px solid #ca8a04;
+  border-radius: var(--radius-xl);
+  padding: 24px 20px;
+  margin-top: 16px;
+  text-align: center;
+  box-shadow: 0 10px 25px rgba(202, 138, 4, 0.12);
+  position: relative;
+  overflow: hidden;
+}
+
+.oral-stage-showcase::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #f59e0b, #ca8a04, #f59e0b);
+}
+
+.oral-showcase-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #fef08a;
+  color: #854d0e;
+  border: 1.5px solid #ca8a04;
+  padding: 6px 16px;
+  border-radius: var(--radius-pill);
+  font-size: 14px;
+  font-weight: 800;
+  margin-bottom: 16px;
+}
+
+.oral-showcase-content {
+  font-size: 32px;
+  font-weight: 900;
+  color: #1e293b;
+  line-height: 1.9;
+  padding: 16px 24px;
+  background: #ffffff;
+  border: 2px dashed #eab308;
+  border-radius: var(--radius-lg);
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.03);
+  margin-bottom: 16px;
+  word-break: break-word;
+}
+
+.oral-showcase-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.oral-eval-badge {
+  background: #ffffff;
+  color: #ca8a04;
+  border: 1.5px solid #facc15;
+  padding: 4px 14px;
+  border-radius: var(--radius-pill);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 800;
+}
+
+.oral-hint-text {
+  color: #713f12;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+}
+
+/* بطاقة التدريب الشفهي للطلاب */
+.oral-practice-showcase {
+  background: #fffbeb;
+  border: 2px solid #fde047;
+  border-radius: var(--radius-md);
+  padding: 16px;
+  text-align: center;
+  margin-top: 10px;
+}
+
+.oral-practice-label {
+  font-size: 13px;
+  font-weight: 800;
+  color: #854d0e;
+  margin-bottom: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.oral-practice-content {
+  font-size: 26px;
+  font-weight: 900;
+  color: #0f172a;
+  line-height: 1.8;
+  padding: 14px;
+  background: #ffffff;
+  border: 2px dashed #facc15;
+  border-radius: 10px;
+  margin-bottom: 10px;
+  word-break: break-word;
+}
+
+.oral-practice-hint {
+  font-size: 12.5px;
+  color: #64748b;
+  margin: 0;
+  font-weight: 700;
+}
+
+
+/* ========================================================
+   مؤشر تحميل الذكاء الاصطناعي
+   ======================================================== */
+.ai-intro-text {
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+}
+
+.ai-loading-box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: #eff6ff;
+  border: 2px solid #bfdbfe;
+  color: #1d4ed8;
+  padding: 16px;
+  border-radius: var(--radius-md);
+  font-weight: 800;
+  font-size: 15px;
+  margin-bottom: 15px;
+}
+
+/* ========================================================
+   شاشات العرض والمسابقة الحية (Live Stage)
+   ======================================================== */
+.live-arena-wrapper {
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.arena-top-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #fff;
+  border: 2.5px solid var(--border-duo);
+  border-radius: var(--radius-lg);
+  padding: 12px 20px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.room-info-pill {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.room-dot.online {
+  width: 12px;
+  height: 12px;
+  background: var(--duo-green);
+  border-radius: 50%;
+  box-shadow: 0 0 10px var(--duo-green);
+}
+
+.room-name-text {
+  font-weight: 800;
+  font-size: 17px;
+}
+
+.room-code-tag {
+  background: #f1f5f9;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.arena-role-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.role-pill-live {
+  background: var(--duo-yellow-subtle);
+  color: #b78103;
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+  font-weight: 800;
+  font-size: 13px;
+  border: 1.5px solid var(--duo-yellow);
+}
+
+.arena-lobby-card, .arena-stage-card {
+  background: #fff;
+  border: 2.5px solid var(--border-duo);
+  border-bottom: 6px solid var(--border-duo-dark);
+  border-radius: var(--radius-xl);
+  padding: 30px;
+}
+
+.lobby-header {
+  text-align: center;
+  margin-bottom: 25px;
+}
+
+.lobby-icon {
+  width: 70px;
+  height: 70px;
+  background: var(--duo-blue-subtle);
+  color: var(--duo-blue-dark);
+  font-size: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 15px;
+}
+
+.lobby-leadership-box {
+  background: #fefce8;
+  border: 2px solid #fde047;
+  border-radius: var(--radius-lg);
+  padding: 16px 20px;
+  text-align: center;
+  margin-bottom: 25px;
+}
+
+.leader-badge {
+  font-size: 14px;
+  color: #ca8a04;
+  font-weight: 800;
+  margin-bottom: 4px;
+}
+
+.leader-rule-hint {
+  display: block;
+  font-size: 12px;
+  color: #a16207;
+  margin-top: 5px;
+}
+
+.connected-users-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 25px;
+}
+
+.user-tag-lobby {
+  background: #f8fafc;
+  border: 1.5px solid var(--border-duo);
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  font-size: 13.5px;
+}
+
+.lobby-action-box {
+  text-align: center;
+}
+
+/* مسرح المتسابق الحي */
+.current-contestant-banner {
+  background: linear-gradient(135deg, #f0fdf4 0%, #e0f2fe 100%);
+  border: 2px solid #86efac;
+  border-radius: var(--radius-lg);
+  padding: 20px 25px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 15px;
+}
+
+.contestant-avatar {
+  width: 60px;
+  height: 60px;
+  background: var(--duo-green);
+  color: #fff;
+  border-radius: 50%;
+  font-size: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 10px rgba(88, 204, 2, 0.3);
+}
+
+.contestant-details {
+  flex: 1;
+  min-width: 200px;
+}
+
+.badge-active-contestant {
+  background: var(--duo-green-dark);
+  color: #fff;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.contestant-details h2 {
+  font-size: 24px;
+  font-weight: 900;
+  color: var(--text-main);
+  margin: 4px 0;
+}
+
+.contestant-meta {
+  display: flex;
+  gap: 15px;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #475569;
+}
+
+.contestant-score-box {
+  background: #fff;
+  border: 2px solid #cbd5e1;
+  border-radius: var(--radius-md);
+  padding: 10px 20px;
+  text-align: center;
+  min-width: 100px;
+}
+
+.score-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #64748b;
+  display: block;
+}
+
+.score-number {
+  font-size: 32px;
+  font-weight: 900;
+  color: var(--duo-green-dark);
+  line-height: 1;
+}
+
+.score-sub {
+  font-size: 12px;
+  font-weight: 700;
+  color: #94a3b8;
+}
+
+/* شريط تحكم المشرف */
+.supervisor-controls-panel {
+  background: #f8fafc;
+  border: 2px solid var(--border-duo);
+  border-radius: var(--radius-md);
+  padding: 12px 18px;
+  margin-bottom: 20px;
+}
+
+.ctrl-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+/* بطاقة عرض السؤال */
+.stage-question-card {
+  background: #fff;
+  border: 2px solid var(--border-duo);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+}
+
+.question-header-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 2px solid #f1f5f9;
+  padding-bottom: 12px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.question-index-tag {
+  background: var(--duo-blue-subtle);
+  color: var(--duo-blue-dark);
+  font-weight: 800;
+  padding: 4px 12px;
+  border-radius: var(--radius-pill);
+  font-size: 13.5px;
+}
+
+.question-section-name {
+  font-weight: 800;
+  font-size: 15px;
+  color: #475569;
+}
+
+.stage-timer-pill {
+  background: #fee2e2;
+  color: #dc2626;
+  font-weight: 900;
+  font-size: 16px;
+  padding: 6px 16px;
+  border-radius: var(--radius-pill);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* روليت الأرقام العشوائي 3 ثواني */
+.roulette-box {
+  background: linear-gradient(135deg, #fef08a, #fde047);
+  border: 3px solid #eab308;
+  border-radius: var(--radius-lg);
+  padding: 25px;
+  text-align: center;
+  margin-bottom: 20px;
+  animation: pulseRoulette 0.5s infinite alternate;
+}
+
+@keyframes pulseRoulette {
+  from { transform: scale(1); }
+  to { transform: scale(1.02); }
+}
+
+.roulette-title {
+  font-size: 17px;
+  font-weight: 800;
+  color: #854d0e;
+  margin-bottom: 10px;
+}
+
+.roulette-slot {
+  font-size: 60px;
+  font-weight: 900;
+  color: #713f12;
+  background: #fff;
+  width: 90px;
+  height: 90px;
+  line-height: 90px;
+  margin: 0 auto;
+  border-radius: 16px;
+  border: 4px solid #ca8a04;
+  box-shadow: inset 0 4px 10px rgba(0,0,0,0.15);
+  animation: slotSpin 0.1s infinite;
+}
+
+@keyframes slotSpin {
+  0% { transform: translateY(-4px); }
+  50% { transform: translateY(4px); }
+  100% { transform: translateY(-4px); }
+}
+
+.question-body {
+  text-align: center;
+  padding: 20px 0;
+}
+
+.question-text-content {
+  margin-bottom: 25px;
+  padding: 10px;
+}
+
+/* خيارات الأسئلة التفاعلية */
+.interactive-question-area {
+  margin-top: 20px;
+}
+
+.mcq-options-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.btn-choice-duo {
+  background: #fff;
+  border: 2px solid var(--border-duo);
+  border-bottom: 4px solid var(--border-duo-dark);
+  border-radius: var(--radius-md);
+  padding: 14px 18px;
+  font-family: 'Cairo', sans-serif;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text-main);
+  cursor: pointer;
+  text-align: right;
+  transition: all 0.15s;
+}
+
+.btn-choice-duo:hover {
+  background: #f8fafc;
+  transform: translateY(-1px);
+}
+
+.btn-choice-duo.correct {
+  background: #dcfce7;
+  border-color: #86efac;
+  border-bottom-color: #22c55e;
+  color: #15803d;
+}
+
+.btn-choice-duo.wrong {
+  background: #fee2e2;
+  border-color: #fca5a5;
+  border-bottom-color: #ef4444;
+  color: #b91c1c;
+}
+
+/* شريط تقييم المعلمين الشفهي المباشر */
+.live-eval-box {
+  background: #f8fafc;
+  border: 2px solid var(--border-duo);
+  border-radius: var(--radius-md);
+  padding: 16px 20px;
+  margin-top: 25px;
+}
+
+.eval-header-flex {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 800;
+  font-size: 14.5px;
+  margin-bottom: 10px;
+}
+
+.eval-current-average {
+  color: var(--duo-green-dark);
+  font-size: 18px;
+}
+
+.eval-progress-container {
+  height: 14px;
+  background: #e2e8f0;
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+  margin-bottom: 14px;
+}
+
+.eval-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--duo-yellow), var(--duo-green));
+  transition: width 0.3s ease;
+}
+
+.teacher-voting-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 12px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.vote-prompt {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #475569;
+}
+
+.rating-buttons-group {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-rate-score {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  border: 2px solid var(--border-duo);
+  background: #fff;
+  font-weight: 800;
+  font-size: 16px;
+  color: var(--text-main);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-rate-score:hover {
+  background: #f1f5f9;
+}
+
+.btn-rate-score.active {
+  background: var(--duo-green);
+  color: #fff;
+  border-color: var(--duo-green-dark);
+}
+
+/* ========================================================
+   نظام البطاقات التكتيكية الثلاثي الأبعاد (3D Flip Effect)
+   ======================================================== */
+.cards-modal-bg {
+  background: rgba(15, 23, 42, 0.88) !important;
+  backdrop-filter: blur(8px);
+}
+
+.tactical-cards-container {
+  width: 95%;
+  max-width: 900px;
+  text-align: center;
+  animation: cardFloatIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes cardFloatIn {
+  from { opacity: 0; transform: translateY(40px) scale(0.9); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.cards-header-floating {
+  margin-bottom: 25px;
+}
+
+.cards-float-title {
+  font-size: 34px;
+  font-weight: 900;
+  color: #facc15;
+  text-shadow: 0 4px 15px rgba(250, 204, 21, 0.4);
+  letter-spacing: 1px;
+}
+
+.cards-countdown-circle {
+  width: 55px;
+  height: 55px;
+  border-radius: 50%;
+  background: #ef4444;
+  color: #fff;
+  font-size: 24px;
+  font-weight: 900;
+  line-height: 55px;
+  margin: 10px auto;
+  box-shadow: 0 0 15px rgba(239, 68, 68, 0.6);
+  animation: pulseTimer 1s infinite;
+}
+
+@keyframes pulseTimer {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+
+.cards-sub-hint {
+  color: #e2e8f0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.cards-3d-row {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  perspective: 1200px;
+  margin-bottom: 25px;
+  flex-wrap: wrap;
+}
+
+.card-3d-wrapper {
+  width: 240px;
+  height: 330px;
+  cursor: pointer;
+  animation: cardDrop 0.6s ease-out forwards;
+}
+
+@keyframes cardDrop {
+  0% { opacity: 0; transform: translateY(-100px) rotateX(45deg); }
+  100% { opacity: 1; transform: translateY(0) rotateX(0deg); }
+}
+
+.card-3d-inner {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  transform-style: preserve-3d;
+  transition: transform 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.card-3d-wrapper.flipped .card-3d-inner {
+  transform: rotateY(180deg);
+}
+
+.card-3d-front, .card-3d-back {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  backface-visibility: hidden;
+  border-radius: 20px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 22px 18px;
+  box-sizing: border-box;
+}
+
+/* ظهر البطاقة قبل القلب */
+.card-3d-back {
+  background: linear-gradient(135deg, #1e293b, #0f172a);
+  border: 4px solid #38bdf8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #38bdf8;
+  font-size: 45px;
+}
+
+.card-back-pattern {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.card-back-pattern span {
+  font-size: 16px;
+  font-weight: 800;
+  color: #cbd5e1;
+}
+
+/* وجه البطاقة بعد القلب */
+.card-3d-front {
+  background: #ffffff;
+  border: 4px solid #f59e0b;
+  transform: rotateY(180deg);
+  text-align: center;
+}
+
+.card-front-icon {
+  width: 65px;
+  height: 65px;
+  background: #fef3c7;
+  color: #d97706;
+  border-radius: 50%;
+  font-size: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto;
+}
+
+.card-front-title {
+  font-size: 18px;
+  font-weight: 900;
+  color: #1e293b;
+  margin: 10px 0 6px;
+}
+
+.card-front-desc {
+  font-size: 13.5px;
+  color: #475569;
+  line-height: 1.5;
+  font-weight: 600;
+}
+
+.card-front-badge {
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+}
+
+.btn-skip-cards {
+  background: rgba(255, 255, 255, 0.15);
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  color: #fff;
+  padding: 12px 24px;
+  border-radius: var(--radius-pill);
+  font-family: 'Cairo', sans-serif;
+  font-size: 15px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-skip-cards:hover {
+  background: rgba(255, 255, 255, 0.25);
+  transform: translateY(-2px);
+}
+
+/* ========================================================
+   لوحة الشرف (Honor Board - 3 ثواني)
+   ======================================================== */
+.honor-box {
+  background: linear-gradient(180deg, #ffffff 0%, #fefce8 100%) !important;
+  border: 3px solid #facc15 !important;
+  max-width: 550px !important;
+  text-align: center;
+}
+
+.honor-header {
+  justify-content: center;
+  border-bottom: 2px dashed #fde047;
+}
+
+.honor-podium-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 20px 0;
+}
+
+.honor-rank-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #fff;
+  border: 2px solid var(--border-duo);
+  padding: 12px 18px;
+  border-radius: var(--radius-md);
+}
+
+.honor-rank-card.rank-1 {
+  border-color: #f59e0b;
+  background: #fffbeb;
+}
+
+.honor-rank-num {
+  font-size: 20px;
+  font-weight: 900;
+  color: #ca8a04;
+  width: 30px;
+}
+
+.honor-student-name {
+  font-size: 16px;
+  font-weight: 800;
+  flex: 1;
+  text-align: right;
+  margin-right: 10px;
+}
+
+.honor-score-val {
+  font-size: 18px;
+  font-weight: 900;
+  color: var(--duo-green-dark);
+}
+
+.honor-timer-note {
+  font-size: 13px;
+  color: #713f12;
+  font-weight: 700;
+}
+
+/* ========================================================
+   شاشة الانتقال بين الأقسام (تهنئة 5 ث + عداد 3 ث)
+   ======================================================== */
+.transition-modal-box {
+  text-align: center;
+  padding: 35px 25px;
+  max-width: 480px !important;
+  background: #fff;
+  border: 3px solid var(--duo-green);
+  border-radius: var(--radius-xl);
+}
+
+.transition-stars {
+  font-size: 32px;
+  color: var(--duo-yellow);
+  margin-bottom: 12px;
+}
+
+.transition-title {
+  font-size: 26px;
+  font-weight: 900;
+  color: var(--duo-green-dark);
+  margin-bottom: 8px;
+}
+
+.transition-desc {
+  font-size: 15px;
+  color: var(--text-muted);
+  font-weight: 600;
+  margin-bottom: 20px;
+}
+
+.transition-countdown-circle {
+  width: 75px;
+  height: 75px;
+  border-radius: 50%;
+  border: 5px solid var(--duo-green);
+  margin: 0 auto 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 36px;
+  font-weight: 900;
+  color: var(--duo-green-dark);
+  animation: countdownPulse 1s infinite;
+}
+
+@keyframes countdownPulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+
+.transition-footer-hint {
+  font-size: 13px;
+  color: #64748b;
+  font-weight: 700;
+}
+
+/* ========================================================
+   إشعار التوست (Toast Notification)
+   ======================================================== */
+.duo-toast {
+  position: fixed;
+  bottom: 25px;
+  left: 50%;
+  transform: translateX(-50%) translateY(100px);
+  background: #0f172a;
+  color: #fff;
+  padding: 14px 24px;
+  border-radius: var(--radius-pill);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14.5px;
+  font-weight: 700;
+  z-index: 999999 !important;
+  opacity: 0;
+  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.duo-toast.show {
+  transform: translateX(-50%) translateY(0);
+  opacity: 1;
+}
+
+.duo-toast i {
+  color: var(--duo-green);
+  font-size: 18px;
+}
+
+/* ========================================================
+   استجابة شاشات الجوال والتطوير
+   ======================================================== */
+@media (max-width: 768px) {
+  .dashboard-nav-tabs {
+    flex-wrap: nowrap;
+  }
+  .nav-tab {
+    padding: 10px 14px;
+    font-size: 13.5px;
+  }
+  .two-cols-grid, .mcq-options-grid {
+    grid-template-columns: 1fr;
+  }
+  .cards-3d-row {
+    flex-direction: column;
+    align-items: center;
+  }
+  .card-3d-wrapper {
+    width: 260px;
+    height: 280px;
+  }
+  .current-contestant-banner {
+    flex-direction: column;
+    text-align: center;
+  }
+  .contestant-details {
+    text-align: center;
+  }
+  .contestant-meta {
+    justify-content: center;
+  }
+}
+
+/* ========================================================
+   أنماط مراحل تسجيل الدخول التفاعلية (Onboarding Steps)
+   ======================================================== */
+.login-step-panel {
+  display: none;
+  animation: fadeInStep 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.login-step-panel.active {
+  display: block;
+}
+
+@keyframes fadeInStep {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.step-instruction-bubble {
+  background: var(--duo-green-tint);
+  border: 2px solid var(--duo-green-subtle);
+  border-radius: var(--radius-md);
+  padding: 12px 18px;
+  font-size: 14.5px;
+  font-weight: 800;
+  color: var(--duo-green-dark);
+  margin-bottom: 20px;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* شبكة بطاقات المدارس والصفوف التفاعلية بأسلوب دولينجو */
+.selection-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 15px;
+  margin: 15px 0;
+}
+
+.choice-card-duo {
+  background: #ffffff;
+  border: 2.5px solid var(--border-duo);
+  border-bottom: 5px solid var(--border-duo-dark);
+  border-radius: var(--radius-lg);
+  padding: 18px 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  text-align: right;
+  user-select: none;
+}
+
+.choice-card-duo:hover {
+  transform: translateY(-3px);
+  border-color: var(--duo-green);
+  border-bottom-color: var(--duo-green-dark);
+  background: #fcfdfc;
+  box-shadow: 0 8px 18px rgba(88, 204, 2, 0.15);
+}
+
+.choice-card-duo:active {
+  transform: translateY(2px);
+  border-bottom-width: 2.5px;
+}
+
+.choice-card-duo.grade-choice:hover {
+  border-color: var(--duo-blue);
+  border-bottom-color: var(--duo-blue-dark);
+  box-shadow: 0 8px 18px rgba(28, 176, 246, 0.15);
+}
+
+.choice-card-icon {
+  width: 52px;
+  height: 52px;
+  min-width: 52px;
+  border-radius: 50%;
+  background: var(--duo-green-tint);
+  color: var(--duo-green-dark);
+  font-size: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: inset 0 0 0 1.5px var(--duo-green-subtle);
+  transition: transform 0.2s;
+}
+
+.choice-card-duo:hover .choice-card-icon {
+  transform: scale(1.1);
+}
+
+.choice-card-duo.grade-choice .choice-card-icon {
+  background: var(--duo-blue-subtle);
+  color: var(--duo-blue-dark);
+  box-shadow: inset 0 0 0 1.5px #bae6fd;
+}
+
+.choice-card-info {
+  flex: 1;
+}
+
+.choice-card-title {
+  font-size: 16.5px;
+  font-weight: 800;
+  color: var(--text-main);
+  line-height: 1.4;
+  margin-bottom: 2px;
+}
+
+.choice-card-subtitle {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+/* ========================================================
+   أنماط النوافذ المنبثقة الشاملة (Modals & Overlays)
+   ======================================================== */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 99999 !important;
+  padding: 20px;
+  box-sizing: border-box;
+  overflow-y: auto;
+}
+
+.modal-overlay.hidden {
+  display: none !important;
+}
+
+.duo-modal-box {
+  background: #ffffff;
+  border: 3px solid var(--border-duo);
+  border-bottom: 7px solid var(--border-duo-dark);
+  border-radius: 24px;
+  max-width: 580px;
+  width: 100%;
+  max-height: 88vh;
+  overflow-y: auto;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.35);
+  animation: modalPop 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  padding: 26px;
+  position: relative;
+  z-index: 100000 !important;
+  box-sizing: border-box;
+}
+
+.duo-modal-box.modal-wide {
+  max-width: 820px;
+}
+
+@keyframes modalPop {
+  from { opacity: 0; transform: scale(0.92) translateY(18px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  border-bottom: 2px solid #f1f5f9;
+  padding-bottom: 16px;
+  margin-bottom: 20px;
+}
+
+.modal-title-with-icon {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.modal-icon-bubble {
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+}
+
+.modal-icon-bubble.gold {
+  background: #fefce8;
+  color: #ca8a04;
+  border: 2px solid #fde047;
+}
+
+.modal-icon-bubble.yellow {
+  background: #fef9c3;
+  color: #a16207;
+  border: 2px solid #facc15;
+}
+
+.modal-header h3 {
+  font-size: 20px;
+  font-weight: 900;
+  color: var(--text-main);
+  margin-bottom: 3px;
+}
+
+.modal-subtitle {
+  font-size: 13px;
+  color: #64748b;
+  font-weight: 600;
+  display: block;
+}
+
+.btn-modal-close {
+  background: #f1f5f9;
+  border: 2px solid #cbd5e1;
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1;
+  color: #64748b;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.btn-modal-close:hover {
+  background: #fee2e2;
+  color: #dc2626;
+  border-color: #fca5a5;
+  transform: rotate(90deg);
+}
+
+.modal-actions-flex {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.modal-actions-flex button {
+  flex-shrink: 0;
+}
+
+/* ========================================================
+   مودال التأكيد الداخلي التفاعلي (In-Platform Confirm Dialog)
+   ======================================================== */
+.confirm-dialog-box {
+  text-align: center;
+  max-width: 460px;
+  padding: 32px 24px;
+}
+
+.confirm-dialog-icon {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30px;
+  margin: 0 auto 16px;
+}
+
+.confirm-dialog-icon.danger {
+  background: #fee2e2;
+  color: #dc2626;
+  border: 3px solid #fca5a5;
+}
+
+.confirm-dialog-icon.warning {
+  background: #fef9c3;
+  color: #ca8a04;
+  border: 3px solid #fde047;
+}
+
+.confirm-dialog-title {
+  font-size: 22px;
+  font-weight: 900;
+  color: var(--text-main);
+  margin-bottom: 8px;
+}
+
+.confirm-dialog-message {
+  font-size: 15px;
+  font-weight: 600;
+  color: #475569;
+  line-height: 1.6;
+  margin-bottom: 24px;
+}
+
+.confirm-dialog-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.btn-duo-red {
+  background: var(--duo-red);
+  color: #fff;
+  border: none;
+  border-bottom: 5px solid var(--duo-red-dark);
+  border-radius: var(--radius-md);
+  padding: 12px 24px;
+  font-family: 'Cairo', sans-serif;
+  font-size: 15.5px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-duo-red:hover {
+  background: #ff5c5c;
+  transform: translateY(-2px);
+}
+
+.btn-duo-red:active {
+  transform: translateY(3px);
+  border-bottom-width: 2px;
+}
+
+/* ========================================================
+   إدارة المدارس والصفوف الأنيقة بأسلوب دولينجو
+   ======================================================== */
+.sg-info-banner {
+  background: #f8fafc;
+  border: 1.5px solid #cbd5e1;
+  border-right: 4px solid var(--duo-purple);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  font-size: 13px;
+  color: #475569;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  font-weight: 700;
+}
+.sg-info-banner i {
+  color: var(--duo-purple);
+  font-size: 16px;
+}
+
+.sg-modal-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 768px) {
+  .sg-modal-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.sg-panel-card {
+  background: #ffffff;
+  border: 2.5px solid var(--border-duo);
+  border-bottom: 5px solid var(--border-duo-dark);
+  border-radius: var(--radius-lg);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+}
+
+.sg-panel-card.schools-theme {
+  border-color: #bbf7d0;
+  border-bottom-color: #22c55e;
+  background: #fbfdfb;
+}
+
+.sg-panel-card.grades-theme {
+  border-color: #bae6fd;
+  border-bottom-color: #0ea5e9;
+  background: #fbfdff;
+}
+
+.sg-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.sg-title-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sg-header-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+}
+
+.sg-header-icon.green {
+  background: var(--duo-green-subtle);
+  color: var(--duo-green-dark);
+}
+
+.sg-header-icon.blue {
+  background: var(--duo-blue-subtle);
+  color: var(--duo-blue-dark);
+}
+
+.sg-panel-header h4 {
+  font-size: 15.5px;
+  font-weight: 800;
+  color: #1e293b;
+  margin: 0;
+}
+
+.sg-count-badge {
+  font-size: 11.5px;
+  font-weight: 800;
+  padding: 3px 11px;
+  border-radius: var(--radius-pill);
+}
+
+.sg-count-badge.green-badge {
+  background: #dcfce7;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+}
+
+.sg-count-badge.blue-badge {
+  background: #e0f2fe;
+  color: #0369a1;
+  border: 1px solid #bae6fd;
+}
+
+.sg-add-form {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.sg-add-form input {
+  font-size: 13.5px;
+  padding: 9px 12px;
+}
+
+.sg-items-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 140px;
+  max-height: 230px;
+  overflow-y: auto;
+  padding-right: 4px;
+  margin-bottom: 12px;
+}
+
+.sg-item-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #ffffff;
+  border: 2px solid #e2e8f0;
+  border-bottom: 3.5px solid #cbd5e1;
+  border-radius: 12px;
+  padding: 10px 14px;
+  transition: all 0.15s ease;
+}
+
+.sg-item-card:hover {
+  border-color: var(--duo-green);
+  border-bottom-color: var(--duo-green-dark);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.04);
+}
+
+.sg-panel-card.grades-theme .sg-item-card:hover {
+  border-color: var(--duo-blue);
+  border-bottom-color: var(--duo-blue-dark);
+}
+
+.sg-item-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 800;
+  font-size: 14px;
+  color: #334155;
+}
+
+.sg-item-info i {
+  color: var(--duo-green-dark);
+  font-size: 15px;
+}
+
+.sg-panel-card.grades-theme .sg-item-info i {
+  color: var(--duo-blue-dark);
+}
+
+.btn-delete-tag {
+  background: #fee2e2;
+  color: #dc2626;
+  border: 1.5px solid #fca5a5;
+  border-bottom: 2.5px solid #dc2626;
+  border-radius: 8px;
+  padding: 4px 11px;
+  font-family: 'Cairo', sans-serif;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: all 0.15s ease;
+}
+
+.btn-delete-tag:hover {
+  background: #dc2626;
+  color: #ffffff;
+  border-color: #b91c1c;
+  transform: translateY(-1px);
+}
+
+.btn-delete-tag:active {
+  transform: translateY(1px);
+  border-bottom-width: 1.5px;
+}
+
+.sg-panel-footer {
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px dashed #e2e8f0;
+  text-align: center;
+}
+
+.btn-restore-link {
+  background: none;
+  border: none;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+}
+
+.btn-restore-link:hover {
+  color: var(--duo-blue);
+  background: #f1f5f9;
+}
+
+/* شرائح المقترحات السريعة لاسم الغرفة */
+.room-preset-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.preset-chip {
+  background: #f8fafc;
+  border: 1.5px solid #cbd5e1;
+  border-bottom: 3px solid #94a3b8;
+  border-radius: var(--radius-pill);
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: 'Cairo', sans-serif;
+  transition: all 0.15s ease;
+}
+
+.preset-chip:hover {
+  background: #fef9c3;
+  border-color: #facc15;
+  border-bottom-color: #ca8a04;
+  color: #854d0e;
+  transform: translateY(-1px);
+}
+
+.preset-chip:active {
+  transform: translateY(1px);
+  border-bottom-width: 1.5px;
+}
+
+/* بطاقة ميزة البطاقات التكتيكية بأسلوب دولينجو */
+.tactical-cards-feature-card {
+  background: #fefce8;
+  border: 2px solid #fef08a;
+  border-bottom: 4px solid #ca8a04;
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.tactical-icon-box {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: var(--duo-yellow);
+  color: #713f12;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  flex-shrink: 0;
+  box-shadow: 0 4px 10px rgba(254, 208, 0, 0.3);
+}
+
+.tactical-info-box {
+  flex: 1;
+}
+
+.tactical-info-box strong {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 800;
+  color: #713f12;
+  margin-bottom: 2px;
+}
+
+.tactical-info-box p {
+  font-size: 11.5px;
+  color: #854d0e;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.duo-checkbox-container {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  position: relative;
+}
+
+.duo-checkbox-container input {
+  width: 22px;
+  height: 22px;
+  accent-color: var(--duo-yellow-dark);
+  cursor: pointer;
+}
+
+/* ========================================================
+   بطاقات غرف المسابقات الحية بأسلوب دولينجو
+   ======================================================== */
+.room-card-duo {
+  background: #ffffff;
+  border: 2.5px solid var(--border-duo);
+  border-bottom: 4px solid var(--border-duo);
+  border-radius: var(--radius-lg);
+  padding: 18px 22px;
+  margin-bottom: 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.room-card-duo:hover {
+  border-color: var(--duo-yellow);
+  box-shadow: 0 8px 24px rgba(234, 179, 8, 0.12);
+  transform: translateY(-2px);
+}
+
+.room-card-details {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.room-card-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.room-card-title-row strong {
+  font-size: 17.5px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.room-pulse-dot {
+  width: 11px;
+  height: 11px;
+  background-color: #22c55e;
+  border-radius: 50%;
+  display: inline-block;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.25);
+  animation: pulseGreen 2s infinite;
+}
+
+@keyframes pulseGreen {
+  0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4); }
+  70% { box-shadow: 0 0 0 8px rgba(34, 197, 94, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+}
+
+.room-code-tag {
+  background: #f1f5f9;
+  color: #475569;
+  font-family: monospace;
+  font-size: 13px;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+}
+
+.room-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: #64748b;
+  font-weight: 700;
+}
+
+.room-card-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.room-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ========================================================
+   واجهة مهندس برومبت الذكاء الاصطناعي واستيراد JSON
+   ======================================================== */
+.ai-guide-steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.guide-step-card {
+  background: #f8fafc;
+  border: 1.5px solid #e2e8f0;
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.step-num-badge {
+  width: 28px;
+  height: 28px;
+  background: var(--duo-blue);
+  color: #fff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.guide-step-card strong {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 800;
+  color: #1e293b;
+  margin-bottom: 2px;
+}
+
+.guide-step-card p {
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.ai-input-card {
+  background: #ffffff;
+  border: 2px solid var(--border-duo);
+  border-radius: var(--radius-lg);
+  padding: 18px;
+}
+
+/* ========================================================
+   شريط تحذير انقطاع الإنترنت التنازلي (10 ثوانٍ)
+   ======================================================== */
+.arena-offline-banner {
+  background: #ef4444;
+  color: #ffffff;
+  border: 3px solid #b91c1c;
+  border-radius: var(--radius-lg);
+  padding: 16px 20px;
+  margin-bottom: 20px;
+  animation: offlinePulse 1.5s infinite;
+  box-shadow: 0 10px 25px rgba(239, 68, 68, 0.35);
+}
+
+@keyframes offlinePulse {
+  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5); }
+  50% { transform: scale(1.01); box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+
+.offline-banner-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.offline-icon-pulse {
+  font-size: 32px;
+  color: #fef08a;
+}
+
+.offline-text-group {
+  flex: 1;
+}
+
+.offline-title {
+  font-size: 18px;
+  font-weight: 800;
+  margin-bottom: 4px;
+  color: #ffffff;
+}
+
+.offline-desc {
+  font-size: 14px;
+  color: #fecaca;
+  margin: 0;
+}
+
+.offline-counter-badge {
+  background: #ffffff;
+  color: #b91c1c;
+  font-size: 24px;
+  font-weight: 900;
+  padding: 8px 18px;
+  border-radius: var(--radius-pill);
+  border: 2px solid #b91c1c;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ========================================================
+   تحسينات التوافق التام مع كافة الأجهزة (Mobile / Tablet)
+   ======================================================== */
+@media (max-width: 768px) {
+  .duo-modal-box {
+    width: 95vw !important;
+    max-height: 92vh !important;
+    padding: 18px 14px !important;
+    border-radius: 18px !important;
+  }
+
+  .quick-btns-flex {
+    grid-template-columns: 1fr !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  .quick-btns-flex button {
+    width: 100% !important;
+  }
+
+  .room-card-duo {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+
+  .room-card-actions {
+    justify-content: stretch !important;
+  }
+
+  .room-card-actions button {
+    flex: 1 !important;
+  }
+
+  .offline-banner-content {
+    flex-direction: column !important;
+    text-align: center !important;
+  }
+
+  .ai-guide-steps {
+    grid-template-columns: 1fr !important;
+  }
+
+  .question-meta-row {
+    flex-wrap: wrap !important;
+  }
+
+  .question-meta-row .q-type-select,
+  .question-meta-row .q-font-select {
+    flex: 1 1 120px !important;
+    min-width: 0 !important;
+  }
+
+  .oral-showcase-content {
+    font-size: 22px !important;
+  }
+}
+
+
+
+/* ========================================================
+   مراحل الغرفة الحية الجديدة: اختيار المتسابق + سحب الأسئلة
+   ======================================================== */
+
+/* بطاقة المرحلة العامة — مثل arena-lobby-card */
+.arena-phase-card {
+  background: var(--bg-card);
+  border: 2px solid var(--border-duo);
+  border-radius: var(--radius-xl);
+  padding: 24px 20px;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.07);
+  margin-top: 8px;
+  max-width: 760px;
+  margin-inline: auto;
+}
+
+/* هيدر المرحلة */
+.phase-header {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.phase-icon {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: var(--duo-green-subtle);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  color: var(--duo-green-dark);
+  margin-bottom: 10px;
+}
+
+.phase-icon.spin-icon i {
+  animation: spinFade 1.2s linear infinite;
+}
+
+@keyframes spinFade {
+  from { transform: rotate(0deg); opacity: 1; }
+  50%  { opacity: 0.5; }
+  to   { transform: rotate(360deg); opacity: 1; }
+}
+
+.phase-header h2 {
+  font-size: 20px;
+  font-weight: 900;
+  color: var(--text-main);
+  margin: 0 0 4px;
+}
+
+.phase-header p {
+  font-size: 13.5px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+/* صف البحث + زر الإضافة */
+.phase-search-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+/* نموذج إضافة الطالب السريع */
+.quick-add-student-form {
+  background: #f0fdf4;
+  border: 2px solid #86efac;
+  border-radius: var(--radius-md);
+  padding: 16px;
+  margin-bottom: 14px;
+}
+
+.qas-title {
+  font-size: 14px;
+  font-weight: 800;
+  color: #166534;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.qas-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.qas-actions {
+  display: flex;
+  gap: 10px;
+}
+
+/* قائمة الطلاب */
+.student-select-list {
+  max-height: 340px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.student-select-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f8fafc;
+  border: 1.5px solid var(--border-duo);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.student-select-item:hover {
+  border-color: var(--duo-green);
+  background: var(--duo-green-tint);
+  transform: translateX(-2px);
+}
+
+.student-select-item .sti-name {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text-main);
+}
+
+.student-select-item .sti-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+/* عرض الطالب المختار للمعلمين */
+.selected-student-reveal {
+  text-align: center;
+  margin-top: 20px;
+  padding: 20px;
+  background: linear-gradient(135deg, #f0fdf4, #dcfce7);
+  border: 2px solid #86efac;
+  border-radius: var(--radius-xl);
+  animation: revealPop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes revealPop {
+  from { transform: scale(0.8); opacity: 0; }
+  to   { transform: scale(1);   opacity: 1; }
+}
+
+.reveal-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: #166534;
+  margin-bottom: 8px;
+}
+
+.reveal-name {
+  font-size: 28px;
+  font-weight: 900;
+  color: #14532d;
+  margin-bottom: 6px;
+}
+
+.reveal-meta {
+  font-size: 13.5px;
+  color: #16a34a;
+  font-weight: 700;
+}
+
+/* ═══ سحب الأسئلة ═══ */
+.draw-sections-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.draw-section-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f8fafc;
+  border: 1.5px solid var(--border-duo);
+  border-radius: var(--radius-md);
+  padding: 12px 16px;
+  transition: all 0.3s ease;
+}
+
+.draw-section-row.drawn {
+  border-color: var(--duo-green);
+  background: var(--duo-green-tint);
+}
+
+.draw-section-name {
+  font-size: 14.5px;
+  font-weight: 800;
+  color: var(--text-main);
+}
+
+.draw-counter-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.draw-counter-badge {
+  background: #e2e8f0;
+  color: #475569;
+  font-size: 15px;
+  font-weight: 900;
+  padding: 4px 14px;
+  border-radius: var(--radius-pill);
+  min-width: 60px;
+  text-align: center;
+  transition: all 0.3s ease;
+}
+
+.draw-counter-badge.active {
+  background: var(--duo-yellow);
+  color: #451a03;
+  animation: counterPulse 0.3s ease;
+}
+
+.draw-counter-badge.done {
+  background: var(--duo-green);
+  color: #ffffff;
+}
+
+@keyframes counterPulse {
+  0%   { transform: scale(1); }
+  50%  { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+
+.draw-done-badge {
+  color: var(--duo-green-dark);
+  font-size: 18px;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.draw-section-row.drawn .draw-done-badge {
+  opacity: 1;
+}
+
+.draw-actions-row {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* زر تحميل (لحظة الحفظ/الإضافة) */
+.btn-loading {
+  position: relative;
+  pointer-events: none;
+  opacity: 0.75;
+}
+
+.btn-loading i {
+  animation: spinFade 0.8s linear infinite;
+}
+
+@media (max-width: 768px) {
+  .qas-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .phase-search-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+}
+
+/* ========================================================
+   تحسينات انتقال الأسئلة ولوحة الشرف الحية
+   ======================================================== */
+.question-enter-anim {
+  animation: questionSlideIn 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes questionSlideIn {
+  0% {
+    opacity: 0;
+    transform: translateY(22px) scale(0.97);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* بطاقة المتسابق المتوهجة عند زيادة النقاط أو تصدر المركز */
+.honor-rank-card.highlight-student {
+  border-color: #22c55e !important;
+  background: #f0fdf4 !important;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.3) !important;
+  transform: scale(1.03);
+  transition: all 0.4s ease;
+  animation: pulseHighlight 1s infinite alternate;
+}
+
+@keyframes pulseHighlight {
+  0% { transform: scale(1.02); }
+  100% { transform: scale(1.05); }
+}
+
+.score-increase-badge {
+  background: #22c55e;
+  color: #fff;
+  padding: 3px 8px;
+  border-radius: var(--radius-pill);
+  font-size: 13px;
+  font-weight: 900;
+  margin-right: 8px;
+  animation: popIn 0.35s ease;
+}
+
+.score-penalty-badge {
+  background: #ef4444;
+  color: #fff;
+  padding: 3px 8px;
+  border-radius: var(--radius-pill);
+  font-size: 13px;
+  font-weight: 900;
+  margin-right: 8px;
+  animation: popIn 0.35s ease;
+}
+
+@keyframes popIn {
+  0% { transform: scale(0.5); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* زر لوحة الشرف في الهيدر */
+.btn-honor-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #fef08a;
+  border: 2px solid #eab308;
+  border-bottom: 3.5px solid #ca8a04;
+  color: #854d0e;
+  font-weight: 800;
+  font-size: 13.5px;
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-honor-header i {
+  color: #ca8a04;
+  font-size: 15px;
+}
+
+.btn-honor-header:hover {
+  background: #fde047;
+  transform: translateY(-1px);
+}
+
+.btn-honor-header:active {
+  transform: translateY(2px);
+  border-bottom-width: 2px;
+}
+
+/* شريط تنبيه البطاقة النشطة */
+.active-card-banner {
+  background: linear-gradient(135deg, #eff6ff, #dbeafe);
+  border: 2px solid #60a5fa;
+  border-radius: var(--radius-md);
+  padding: 10px 16px;
+  margin-bottom: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  animation: questionSlideIn 0.3s ease;
+}
+
+.active-card-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 800;
+  color: #1e40af;
+  font-size: 14px;
+}
+
+.active-card-info i {
+  font-size: 18px;
+  color: #2563eb;
+}
+
+.active-card-desc {
+  font-size: 12.5px;
+  color: #3b82f6;
+  font-weight: 700;
+}
+
+/* تنسيقات تبويب وقائمة لوحة الشرف */
+.honor-board-tab-wrapper {
+  background: #ffffff;
+  border: 2px solid var(--border-duo);
+  border-bottom: 5px solid var(--border-duo-dark);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  box-shadow: var(--shadow-sm);
+}
+
+.honor-board-tab-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  border-bottom: 2px solid var(--border-duo);
+  padding-bottom: 16px;
+  margin-bottom: 20px;
+}
+
+.honor-board-tab-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.honor-board-tab-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  background: #f8fafc;
+  border: 2px solid var(--border-duo);
+  border-bottom: 4px solid var(--border-duo-dark);
+  border-radius: var(--radius-md);
+  transition: transform 0.15s ease;
+}
+
+.honor-board-tab-item:hover {
+  transform: translateY(-2px);
+  background: #ffffff;
+}
+
+.honor-board-tab-item.rank-1 {
+  background: linear-gradient(135deg, #fefce8, #fef08a);
+  border-color: #facc15;
+  border-bottom-color: #ca8a04;
+}
+
+.honor-board-tab-item.rank-2 {
+  background: linear-gradient(135deg, #f1f5f9, #e2e8f0);
+  border-color: #cbd5e1;
+  border-bottom-color: #94a3b8;
+}
+
+.honor-board-tab-item.rank-3 {
+  background: linear-gradient(135deg, #fff7ed, #ffedd5);
+  border-color: #fdba74;
+  border-bottom-color: #ea580c;
+}
+
+.honor-board-tab-item.current-user-item {
+  border-color: #22c55e !important;
+  border-bottom-color: #16a34a !important;
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.2);
+}
+
+.honor-item-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.honor-item-rank {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 2px solid var(--border-duo);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  font-size: 16px;
+  color: #334155;
+}
+
+.honor-board-tab-item.rank-1 .honor-item-rank {
+  background: #fef08a;
+  border-color: #ca8a04;
+  color: #854d0e;
+}
+
+.honor-item-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.honor-item-name {
+  font-size: 16px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.honor-item-school {
+  font-size: 12.5px;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.honor-item-score {
+  font-size: 18px;
+  font-weight: 900;
+  color: #ca8a04;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ========================================================
+   شارة الغرف الحية وتنبيهات الصفحة الرئيسية بثيم دولينجو
+   ======================================================== */
+.tab-live-badge {
+  background: #ef4444;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 900;
+  padding: 2px 7px;
+  border-radius: 999px;
+  margin-right: 6px;
+  box-shadow: 0 2px 6px rgba(239, 68, 68, 0.4);
+  animation: pulseBadge 1.5s infinite;
+  display: inline-block;
+}
+
+@keyframes pulseBadge {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+
+.overview-live-rooms-alert {
+  background: linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%);
+  border: 2px solid #3b82f6;
+  border-radius: var(--radius-lg);
+  padding: 18px 20px;
+  margin-bottom: 24px;
+  box-shadow: 0 8px 20px rgba(59, 130, 246, 0.12);
+  transition: all 0.3s ease;
+}
+
+.overview-live-rooms-alert.hidden {
+  display: none !important;
+}
+
+.overview-live-rooms-alert .live-alert-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.overview-live-rooms-alert .live-alert-header h4 {
+  font-size: 16px;
+  font-weight: 900;
+  color: #1e3a8a;
+  margin: 0;
+}
+
+.overview-live-rooms-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.overview-room-pill {
+  background: #ffffff;
+  border: 1.5px solid #bfdbfe;
+  border-radius: var(--radius-md);
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.overview-room-pill-meta {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.overview-room-pill-title {
+  font-size: 15px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.overview-room-pill-creator {
+  font-size: 13px;
+  font-weight: 700;
+  color: #475569;
+  background: #f1f5f9;
+  padding: 3px 9px;
+  border-radius: 999px;
+}
+
+.student-live-rooms-section {
+  margin-bottom: 24px;
+}
+
+.student-live-rooms-section.hidden {
+  display: none !important;
+}
+
+.student-live-card {
+  background: linear-gradient(135deg, #fefce8 0%, #eff6ff 100%);
+  border: 2px solid #eab308;
+  border-radius: var(--radius-lg);
+  padding: 18px 20px;
+  box-shadow: 0 6px 18px rgba(234, 179, 8, 0.15);
+}
+
+.student-live-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.student-live-header h4 {
+  font-size: 16px;
+  font-weight: 900;
+  color: #854d0e;
+  margin: 0;
+}
+
+.student-live-rooms-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.stat-icon.red {
+  background: #fee2e2;
+  color: #ef4444;
+}
+
+

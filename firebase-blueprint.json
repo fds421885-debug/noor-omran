@@ -1,0 +1,75 @@
+{
+  "entities": {
+    "Participant": {
+      "title": "Participant",
+      "description": "User account for a participant, supervisor, teacher, or screen viewer",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique participant identifier" },
+        "name": { "type": "string", "description": "Full Arabic name" },
+        "normalizedName": { "type": "string", "description": "Normalized Arabic name for deduplication" },
+        "role": { "type": "string", "enum": ["supervisor", "teacher", "student", "screen"], "description": "System role" },
+        "school": { "type": "string", "description": "School name" },
+        "grade": { "type": "string", "description": "Student grade or category" },
+        "loginCount": { "type": "number", "description": "Number of logins" },
+        "firstLoginAt": { "type": "string", "description": "ISO timestamp of first login" },
+        "lastLoginAt": { "type": "string", "description": "ISO timestamp of last login" }
+      },
+      "required": ["name", "normalizedName", "role"]
+    },
+    "SystemSetting": {
+      "title": "SystemSetting",
+      "description": "Configuration document such as schools_and_grades or honor_board",
+      "type": "object",
+      "properties": {
+        "schools": { "type": "array", "description": "Approved schools list" },
+        "grades": { "type": "array", "description": "Approved grades list" },
+        "entries": { "type": "array", "description": "Honor board leaderboard entries" }
+      }
+    },
+    "Quiz": {
+      "title": "Quiz",
+      "description": "Quranic / Noor Al-Bayan quiz definition with sections and questions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Quiz identifier" },
+        "title": { "type": "string", "description": "Quiz title" },
+        "targetGrade": { "type": "string", "description": "Target grade level" },
+        "allowPractice": { "type": "boolean", "description": "Whether students can practice this quiz" },
+        "sections": { "type": "array", "description": "Array of quiz sections with questions" }
+      },
+      "required": ["id", "title"]
+    },
+    "LiveRoom": {
+      "title": "LiveRoom",
+      "description": "Interactive live competition arena room",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Room identifier" },
+        "name": { "type": "string", "description": "Room display name" },
+        "leaderName": { "type": "string", "description": "Leader supervisor name" },
+        "status": { "type": "string", "description": "Current room state (waiting, competing, finished)" },
+        "users": { "type": "array", "description": "Array of connected users" }
+      },
+      "required": ["id", "name"]
+    }
+  },
+  "firestore": {
+    "/participants/{participantId}": {
+      "schema": { "$ref": "#/entities/Participant" },
+      "description": "Stores user profiles, credentials, scores, and access roles"
+    },
+    "/system_settings/{settingId}": {
+      "schema": { "$ref": "#/entities/SystemSetting" },
+      "description": "System-wide settings such as schools, grades, and the honor board"
+    },
+    "/quizzes/{quizId}": {
+      "schema": { "$ref": "#/entities/Quiz" },
+      "description": "Interactive quizzes and questions repository"
+    },
+    "/live_rooms/{roomId}": {
+      "schema": { "$ref": "#/entities/LiveRoom" },
+      "description": "Live real-time competition rooms"
+    }
+  }
+}
