@@ -51,6 +51,7 @@ const INITIAL_QUIZZES = [
     title: "اختبار نور البيان - مستوى الحروف والمدود",
     targetGrade: "صف أول",
     allowPractice: true,
+    updatedAt: 1,
     sections: [
       {
         sectionName: "القسم الأول: الحروف وحركاتها",
@@ -105,6 +106,7 @@ const INITIAL_QUIZZES = [
     title: "اختبار أحكام النون الساكنة والتجويد",
     targetGrade: "صف ثاني",
     allowPractice: true,
+    updatedAt: 1,
     sections: [
       {
         sectionName: "القسم الأول: أحكام النون والتنوين",
@@ -266,6 +268,7 @@ let participantsCache = [];
 let schoolsCache = [];
 let gradesCache = [];
 let quizzesCache = [];
+const recentLocalQuizUpdates = new Map(); // قفل زمني وتتبع محلي للاختبارات التي تم تعديلها أو إنشاؤها لمنع استبدالها بنسخ قديمة
 let activeRooms = [];
 let currentLiveRoom = null;
 let currentRoomUnsubscribe = null;
@@ -730,15 +733,20 @@ async function saveQuizzes(quizToSync = null) {
   }
 
   if (quizToSync && quizToSync.id) {
-    // إزالة معرف الاختبار من قائمة المحذوفات إن وُجد فيها
+    const syncId = String(quizToSync.id);
+    const now = Date.now();
+    // تسجيل المعرف في خريطة التحديثات المحلية الحديثة لمنع استبداله بسحابة قديمة
+    recentLocalQuizUpdates.set(syncId, now);
+
+    // إزالة معرف الاختبار إجبارياً وفورياً من قائمة المحذوفات إن وُجد فيها
     try {
       const deletedList = JSON.parse(localStorage.getItem("nour_deleted_quizzes") || "[]");
-      const filtered = deletedList.filter(id => id !== quizToSync.id && String(id) !== String(quizToSync.id));
+      const filtered = deletedList.filter(id => id !== syncId && String(id) !== syncId);
       localStorage.setItem("nour_deleted_quizzes", JSON.stringify(filtered));
 
       setDoc(doc(db, "system_settings", "quizzes_config"), {
         initialized: true,
-        deletedQuizIds: arrayRemove(quizToSync.id),
+        deletedQuizIds: arrayRemove(syncId),
         lastUpdated: serverTimestamp()
       }, { merge: true }).catch(() => {});
     } catch (e) {}
@@ -792,15 +800,18 @@ async function syncSchoolsAndGradesToCloud() {
 
 async function syncQuizToCloud(quizObj, isDelete = false) {
   try {
-    const quizRef = doc(db, "quizzes", quizObj.id);
+    const quizRef = doc(db, "quizzes", String(quizObj.id));
     if (isDelete) {
       await deleteDoc(quizRef);
     } else {
       const cleanQuiz = sanitizeForFirestore(quizObj);
+      const now = Date.now();
       await setDoc(quizRef, {
         ...cleanQuiz,
+        id: String(quizObj.id),
+        updatedAt: cleanQuiz.updatedAt || now,
         lastUpdated: serverTimestamp()
-      }, { merge: true });
+      });
     }
   } catch (e) {
     console.warn("Firestore quiz sync notice:", e);
@@ -997,28 +1008,48 @@ function setupRealtimeCloudListeners() {
       const cloudQuizzes = [];
       const deletedIds = new Set(JSON.parse(localStorage.getItem("nour_deleted_quizzes") || "[]"));
       snapshot.forEach(docSnap => {
-        if (!deletedIds.has(docSnap.id)) {
-          const qData = normalizeQuizFromCloud({ ...docSnap.data(), id: docSnap.id });
+        const docId = String(docSnap.id);
+        const isRecentlyUpdated = recentLocalQuizUpdates.has(docId) && (Date.now() - recentLocalQuizUpdates.get(docId) < 30000);
+        if (!deletedIds.has(docId) || isRecentlyUpdated) {
+          const qData = normalizeQuizFromCloud({ ...docSnap.data(), id: docId });
           cloudQuizzes.push(qData);
         }
       });
 
       // دمج ذكي مع الكاش المحلي لضمان عدم ضياع أي اختبار جديد أو تعديلات جديدة
-      const cloudMap = new Map(cloudQuizzes.map(q => [q.id, q]));
+      const cloudMap = new Map(cloudQuizzes.map(q => [String(q.id), q]));
       const mergedQuizzes = [...cloudQuizzes];
 
       quizzesCache.forEach(localQ => {
-        if (localQ && localQ.id && !deletedIds.has(localQ.id) && !cloudMap.has(localQ.id)) {
+        if (!localQ || !localQ.id) return;
+        const localId = String(localQ.id);
+        const isLocallyDeleted = deletedIds.has(localId);
+        const isRecentlyUpdated = recentLocalQuizUpdates.has(localId) && (Date.now() - recentLocalQuizUpdates.get(localId) < 30000);
+
+        if (isLocallyDeleted && !isRecentlyUpdated) {
+          return; // تم حذفه فعلياً ولم يُعد إنشاؤه
+        }
+
+        if (!cloudMap.has(localId)) {
+          // اختبار جديد تم إنشاؤه أو تعديله محلياً ولم يصل بعد للسحابة -> نحافظ عليه في القائمة ونرفعه
           mergedQuizzes.unshift(localQ);
           syncQuizToCloud(localQ).catch(() => {});
-        } else if (localQ && localQ.id && cloudMap.has(localQ.id)) {
-          const cloudQ = cloudMap.get(localQ.id);
+        } else {
+          const cloudQ = cloudMap.get(localId);
           const localTime = localQ.updatedAt || 0;
           const cloudTime = cloudQ.updatedAt || (cloudQ.lastUpdated?.toMillis ? cloudQ.lastUpdated.toMillis() : 0);
-          if (localTime > cloudTime) {
-            const idx = mergedQuizzes.findIndex(x => x.id === localQ.id);
-            if (idx >= 0) mergedQuizzes[idx] = localQ;
-            syncQuizToCloud(localQ).catch(() => {});
+
+          // إذا تم تحديث النسخة المحلية حديثاً أو كان تاريخها المحلي أحدث أو مساوياً -> نعتمد النسخة المحلية
+          if (isRecentlyUpdated || localTime >= cloudTime) {
+            const idx = mergedQuizzes.findIndex(x => x.id === localId || String(x.id) === localId);
+            if (idx >= 0) {
+              mergedQuizzes[idx] = localQ;
+            } else {
+              mergedQuizzes.unshift(localQ);
+            }
+            if (localTime > cloudTime) {
+              syncQuizToCloud(localQ).catch(() => {});
+            }
           }
         }
       });
@@ -1520,8 +1551,10 @@ async function loadCloudData(forceServer = false) {
 
       const cloudQuizzes = [];
       quizRes.value.forEach(d => {
-        if (!deletedIdsSet.has(d.id)) {
-          cloudQuizzes.push(normalizeQuizFromCloud({ ...d.data(), id: d.id }));
+        const docId = String(d.id);
+        const isRecentlyUpdated = recentLocalQuizUpdates.has(docId) && (Date.now() - recentLocalQuizUpdates.get(docId) < 30000);
+        if (!deletedIdsSet.has(docId) || isRecentlyUpdated) {
+          cloudQuizzes.push(normalizeQuizFromCloud({ ...d.data(), id: docId }));
         }
       });
 
@@ -1542,21 +1575,38 @@ async function loadCloudData(forceServer = false) {
       }
 
       // دمج ذكي مع الكاش المحلي لضمان عدم ضياع أي اختبار جديد أو تعديلات محلية
-      const cloudMap = new Map(cloudQuizzes.map(q => [q.id, q]));
+      const cloudMap = new Map(cloudQuizzes.map(q => [String(q.id), q]));
       const mergedQuizzes = [...cloudQuizzes];
 
       quizzesCache.forEach(localQ => {
-        if (localQ && localQ.id && !deletedIdsSet.has(localQ.id) && !cloudMap.has(localQ.id)) {
+        if (!localQ || !localQ.id) return;
+        const localId = String(localQ.id);
+        const isLocallyDeleted = deletedIdsSet.has(localId);
+        const isRecentlyUpdated = recentLocalQuizUpdates.has(localId) && (Date.now() - recentLocalQuizUpdates.get(localId) < 30000);
+
+        if (isLocallyDeleted && !isRecentlyUpdated) {
+          return;
+        }
+
+        if (!cloudMap.has(localId)) {
+          // اختبار جديد تم إنشاؤه محلياً ولم يصل السحابة بعد -> نحافظ عليه في القائمة ونرفعه
           mergedQuizzes.unshift(localQ);
           syncQuizToCloud(localQ).catch(() => {});
-        } else if (localQ && localQ.id && cloudMap.has(localQ.id)) {
-          const cloudQ = cloudMap.get(localQ.id);
+        } else {
+          const cloudQ = cloudMap.get(localId);
           const localTime = localQ.updatedAt || 0;
           const cloudTime = cloudQ.updatedAt || (cloudQ.lastUpdated?.toMillis ? cloudQ.lastUpdated.toMillis() : 0);
-          if (localTime > cloudTime) {
-            const idx = mergedQuizzes.findIndex(x => x.id === localQ.id);
-            if (idx >= 0) mergedQuizzes[idx] = localQ;
-            syncQuizToCloud(localQ).catch(() => {});
+
+          if (isRecentlyUpdated || localTime >= cloudTime) {
+            const idx = mergedQuizzes.findIndex(x => x.id === localId || String(x.id) === localId);
+            if (idx >= 0) {
+              mergedQuizzes[idx] = localQ;
+            } else {
+              mergedQuizzes.unshift(localQ);
+            }
+            if (localTime > cloudTime) {
+              syncQuizToCloud(localQ).catch(() => {});
+            }
           }
         }
       });
@@ -3193,10 +3243,13 @@ function renderQuizzesList() {
             }
           }
 
-          // 2. إزالة الاختبار من الكاش والذاكرة المحلية
+          // 2. إزالة الاختبار من الكاش والذاكرة المحلية وتصفير معرف المحرر
           quizzesCache = quizzesCache.filter(x => x.id !== safeId && x.id !== qId);
           localStorage.setItem("nour_quizzes", JSON.stringify(quizzesCache));
           localStorage.setItem("nour_quizzes_init_done", "true");
+          if (editQuizId) editQuizId.value = "";
+          if (safeId) recentLocalQuizUpdates.delete(String(safeId));
+          if (qId) recentLocalQuizUpdates.delete(String(qId));
 
           // 3. تسجيل معرف الاختبار المحذوف محلياً لمنع استرجاعه
           try {
@@ -3217,6 +3270,9 @@ function renderQuizzesList() {
           console.error("Quiz delete error:", err);
           quizzesCache = quizzesCache.filter(x => x.id !== safeId && x.id !== qId);
           localStorage.setItem("nour_quizzes", JSON.stringify(quizzesCache));
+          if (editQuizId) editQuizId.value = "";
+          if (safeId) recentLocalQuizUpdates.delete(String(safeId));
+          if (qId) recentLocalQuizUpdates.delete(String(qId));
           renderQuizzesList();
           renderStudentPracticeQuizzes();
           updateDropdowns();
@@ -3760,23 +3816,30 @@ quizEditorForm?.addEventListener("submit", async (e) => {
   const targetGrade = quizTargetGrade.value;
   const allowPractice = quizAllowPracticeToggle.checked;
   const sections = extractSectionsFromEditor();
-  const qId = editQuizId.value || ("quiz_" + Date.now());
 
   if (sections.length === 0 || sections[0].questions.length === 0) {
     showToast("يرجى إضافة سؤال واحد على الأقل للاختبار.", "fa-triangle-exclamation");
     return;
   }
 
-  const existingIdx = quizzesCache.findIndex(q => q.id === qId);
+  const now = Date.now();
+  const rawEditId = editQuizId.value ? editQuizId.value.trim() : "";
+  // إذا كان إنشاء جديد: نولّد معرفاً فريداً عشوائياً محصناً يستحيل تكراره أو تداخله مع أي اختبار محذوف
+  const qId = rawEditId || ("quiz_" + now + "_" + Math.random().toString(36).slice(2, 8));
+
+  const existingIdx = quizzesCache.findIndex(q => q.id === qId || String(q.id) === String(qId));
   const quizObj = {
     id: qId,
     title,
     targetGrade,
     allowPractice,
     sections,
-    updatedAt: Date.now(),
+    updatedAt: now,
     lastModifiedBy: currentUser ? currentUser.name : "مشرف"
   };
+
+  // تسجيل المعرف في التحديثات المحلية فوراً
+  recentLocalQuizUpdates.set(String(qId), now);
 
   if (existingIdx >= 0) {
     quizzesCache[existingIdx] = quizObj;
@@ -3786,12 +3849,14 @@ quizEditorForm?.addEventListener("submit", async (e) => {
     showToast(`تم إنشاء الاختبار «${title}» وحفظه بنجاح!`, "fa-circle-check");
   }
 
-  await saveQuizzes(quizObj);
+  // تصفير معرف التحرير وإغلاق النافذة وتحديث الواجهات فورياً
   editQuizId.value = "";
   quizEditorModal.classList.add("hidden");
   renderQuizzesList();
   renderStudentPracticeQuizzes();
   updateDropdowns();
+
+  await saveQuizzes(quizObj);
 });
 
 // تصفير معرف الاختبار عند إغلاق النافذة المنبثقة لضمان عدم الخلط بين الإنشاء والتعديل
