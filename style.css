@@ -4805,20 +4805,6 @@ body {
 /* ========================================================
    تحسينات انتقال الأسئلة ولوحة الشرف الحية
    ======================================================== */
-.question-enter-anim {
-  animation: questionSlideIn 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-@keyframes questionSlideIn {
-  0% {
-    opacity: 0;
-    transform: translateY(22px) scale(0.97);
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
 
 /* بطاقة المتسابق المتوهجة عند زيادة النقاط أو تصدر المركز */
 .honor-rank-card.highlight-student {
@@ -5862,19 +5848,43 @@ body.role-presenter .matching-tile {
 /* أنيميشن انتقال الأسئلة ولوحة الشرف والبطاقات التكتيكية */
 /* ======================================================== */
 
-/* أنيميشن خروج السؤال */
-.question-exit-anim {
-  animation: questionSlideOut 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+/* أنيميشن دخول وخروج السؤال السينمائي */
+.question-enter-anim {
+  animation: questionCardEnter 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
 }
 
-@keyframes questionSlideOut {
+@keyframes questionCardEnter {
+  0% {
+    opacity: 0;
+    transform: translateY(28px) scale(0.96);
+    filter: blur(5px);
+  }
+  60% {
+    transform: translateY(-4px) scale(1.01);
+    filter: blur(0px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0px);
+  }
+}
+
+.question-exit-anim {
+  animation: questionCardExit 0.45s cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
+  pointer-events: none;
+}
+
+@keyframes questionCardExit {
   0% {
     opacity: 1;
     transform: translateY(0) scale(1);
+    filter: blur(0px);
   }
   100% {
     opacity: 0;
     transform: translateY(-26px) scale(0.95);
+    filter: blur(5px);
   }
 }
 
@@ -5887,7 +5897,7 @@ body.role-presenter .matching-tile {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  animation: answerBannerSlideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: answerBannerSlideIn 0.38s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.12);
   direction: rtl;
 }
@@ -5917,37 +5927,93 @@ body.role-presenter .matching-tile {
   }
 }
 
-/* أنيميشن ظهور واختفاء لوحة الشرف */
+/* تأثير التحديد النابض للخيار الصحيح والخاطئ */
+.btn-choice-duo.correct {
+  background: linear-gradient(135deg, #22c55e, #16a34a) !important;
+  color: #ffffff !important;
+  border-color: #15803d !important;
+  box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.35), 0 8px 20px rgba(22, 163, 74, 0.3) !important;
+  animation: correctChoicePulse 0.5s ease !important;
+}
+
+@keyframes correctChoicePulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.04); }
+  100% { transform: scale(1); }
+}
+
+.btn-choice-duo.wrong {
+  background: linear-gradient(135deg, #ef4444, #dc2626) !important;
+  color: #ffffff !important;
+  border-color: #b91c1c !important;
+  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.35) !important;
+  animation: wrongChoiceShake 0.45s ease !important;
+}
+
+@keyframes wrongChoiceShake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-8px); }
+  40%, 80% { transform: translateX(8px); }
+}
+
+/* أنيميشن سحب الأسئلة المتزامن */
+.draw-section-row.active-drawing {
+  border-color: #eab308 !important;
+  background: #fefce8 !important;
+  box-shadow: 0 0 0 3px rgba(234, 179, 8, 0.35), 0 8px 24px rgba(234, 179, 8, 0.15) !important;
+  transform: scale(1.02);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.draw-section-row.drawn {
+  border-color: var(--duo-green) !important;
+  background: var(--duo-green-tint) !important;
+  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.15);
+  animation: drawSectionComplete 0.4s ease;
+}
+
+@keyframes drawSectionComplete {
+  0% { transform: scale(1.02); }
+  50% { transform: scale(1.04); }
+  100% { transform: scale(1); }
+}
+
+/* أنيميشن ظهور واختفاء لوحة الشرف السينمائي */
 .honor-board-entrance {
-  animation: honorBoardPopIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: honorBoardPopIn 0.55s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
 }
 
 @keyframes honorBoardPopIn {
   0% {
     opacity: 0;
-    transform: scale(0.82) translateY(32px);
+    transform: scale(0.78) translateY(42px);
+    filter: blur(8px);
   }
-  60% {
-    transform: scale(1.02) translateY(-4px);
+  65% {
+    transform: scale(1.03) translateY(-6px);
+    filter: blur(0px);
   }
   100% {
     opacity: 1;
     transform: scale(1) translateY(0);
+    filter: blur(0px);
   }
 }
 
 .honor-board-exit {
-  animation: honorBoardPopOut 0.35s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  animation: honorBoardPopOut 0.45s cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
 }
 
 @keyframes honorBoardPopOut {
   0% {
     opacity: 1;
     transform: scale(1) translateY(0);
+    filter: blur(0px);
   }
   100% {
     opacity: 0;
-    transform: scale(0.85) translateY(-24px);
+    transform: scale(0.85) translateY(-28px);
+    filter: blur(6px);
   }
 }
 
