@@ -748,7 +748,6 @@ function saveGrades() {
 }
 
 async function saveQuizzes(quizToSync = null) {
-  // حفظ محلي فوري وشامل لكاش الاختبارات
   try {
     localStorage.setItem("nour_quizzes", JSON.stringify(quizzesCache));
     localStorage.setItem("nour_quizzes_init_done", "true");
@@ -759,22 +758,7 @@ async function saveQuizzes(quizToSync = null) {
   if (quizToSync && quizToSync.id) {
     const syncId = String(quizToSync.id);
     const now = Date.now();
-    // تسجيل المعرف في خريطة التحديثات المحلية الحديثة لمنع استبداله بسحابة قديمة
     recentLocalQuizUpdates.set(syncId, now);
-
-    // إزالة معرف الاختبار إجبارياً وفورياً من قائمة المحذوفات إن وُجد فيها
-    try {
-      const deletedList = JSON.parse(localStorage.getItem("nour_deleted_quizzes") || "[]");
-      const filtered = deletedList.filter(id => id !== syncId && String(id) !== syncId);
-      localStorage.setItem("nour_deleted_quizzes", JSON.stringify(filtered));
-
-      setDoc(doc(db, "system_settings", "quizzes_config"), {
-        initialized: true,
-        deletedQuizIds: arrayRemove(syncId),
-        lastUpdated: serverTimestamp()
-      }, { merge: true }).catch(() => {});
-    } catch (e) {}
-
     await syncQuizToCloud(quizToSync);
   }
 }
@@ -823,22 +807,18 @@ async function syncSchoolsAndGradesToCloud() {
 }
 
 async function syncQuizToCloud(quizObj, isDelete = false) {
-  try {
-    const quizRef = doc(db, "quizzes", String(quizObj.id));
-    if (isDelete) {
-      await deleteDoc(quizRef);
-    } else {
-      const cleanQuiz = sanitizeForFirestore(quizObj);
-      const now = Date.now();
-      await setDoc(quizRef, {
-        ...cleanQuiz,
-        id: String(quizObj.id),
-        updatedAt: cleanQuiz.updatedAt || now,
-        lastUpdated: serverTimestamp()
-      });
-    }
-  } catch (e) {
-    console.warn("Firestore quiz sync notice:", e);
+  const quizRef = doc(db, "quizzes", String(quizObj.id));
+  if (isDelete) {
+    await deleteDoc(quizRef);
+  } else {
+    const cleanQuiz = sanitizeForFirestore(quizObj);
+    const now = Date.now();
+    await setDoc(quizRef, {
+      ...cleanQuiz,
+      id: String(quizObj.id),
+      updatedAt: cleanQuiz.updatedAt || now,
+      lastUpdated: serverTimestamp()
+    });
   }
 }
 
@@ -1030,30 +1010,11 @@ function setupRealtimeCloudListeners() {
     const quizCol = collection(db, "quizzes");
     onSnapshot(quizCol, (snapshot) => {
       const cloudQuizzes = [];
-      const deletedIds = new Set(JSON.parse(localStorage.getItem("nour_deleted_quizzes") || "[]"));
-      
+
       snapshot.forEach(docSnap => {
         const docId = String(docSnap.id);
-        const isRecentlyUpdatedLocally = recentLocalQuizUpdates.has(docId) && (Date.now() - recentLocalQuizUpdates.get(docId) < 30000);
-        if (!deletedIds.has(docId) || isRecentlyUpdatedLocally) {
-          const qData = normalizeQuizFromCloud({ ...docSnap.data(), id: docId });
-          cloudQuizzes.push(qData);
-        }
-      });
-
-      // السحابة هي المصدر الحقيقي؛ نضيف فقط الاختبارات التي تم إنشاؤها محلياً حديثاً ولم تسجل في السحابة بعد
-      const cloudMap = new Map(cloudQuizzes.map(q => [String(q.id), q]));
-      const finalQuizzes = [...cloudQuizzes];
-
-      quizzesCache.forEach(localQ => {
-        if (!localQ || !localQ.id) return;
-        const localId = String(localQ.id);
-        if (deletedIds.has(localId)) return;
-        const isRecentlyUpdatedLocally = recentLocalQuizUpdates.has(localId) && (Date.now() - recentLocalQuizUpdates.get(localId) < 30000);
-        if (!cloudMap.has(localId) && isRecentlyUpdatedLocally) {
-          finalQuizzes.unshift(localQ);
-          syncQuizToCloud(localQ).catch(() => {});
-        }
+        const qData = normalizeQuizFromCloud({ ...docSnap.data(), id: docId });
+        cloudQuizzes.push(qData);
       });
 
       // رصد التحديثات اللحظية والتغييرات الصادرة من أي مشرف أو معلم
@@ -1061,26 +1022,25 @@ function setupRealtimeCloudListeners() {
         snapshot.docChanges().forEach(change => {
           const changedDoc = change.doc.data();
           const changedId = String(change.doc.id);
-          const changedTitle = changedDoc.title || "اختبار";
-          const modifier = changedDoc.lastModifiedBy || "المشرف";
-          
+          const changedTitle = changedDoc?.title || "اختبار";
+          const modifier = changedDoc?.lastModifiedBy || "المشرف";
+
           if (change.type === "added" && !previousQuizzesMap.has(changedId)) {
             showToast(`📚 اختبار جديد: «${changedTitle}» (بواسطة ${modifier})`, "fa-book-quran", 3500);
             showRealtimeSyncPill(`⚡ أضاف ${modifier} اختباراً جديداً: «${changedTitle}»`);
           } else if (change.type === "modified") {
-            // تنبيه فوري لجميع المستخدمين بأن الاختبار تم تعديله
-            showToast(`✏️ قام ${modifier} بتحديث الاختبار: «${changedTitle}» فورياً!`, "fa-pen-to-square", 3500);
+            showToast(`✏️ تم تحديث الاختبار: «${changedTitle}» فورياً للجميع!`, "fa-pen-to-square", 3500);
             showRealtimeSyncPill(`⚡ تم تحديث الاختبار «${changedTitle}» في الوقت الفعلي ✓`);
           } else if (change.type === "removed") {
-            showToast(`🗑️ تم حذف الاختبار: «${changedTitle}»`, "fa-trash", 3000);
+            showToast(`🗑️ تم حذف الاختبار: «${changedTitle}» من السحابة`, "fa-trash", 3000);
           }
         });
       }
 
-      previousQuizzesMap = new Map(finalQuizzes.map(q => [q.id, q]));
+      previousQuizzesMap = new Map(cloudQuizzes.map(q => [String(q.id), q]));
       isFirstQuizzesSnapshot = false;
 
-      quizzesCache = finalQuizzes;
+      quizzesCache = cloudQuizzes;
       localStorage.setItem("nour_quizzes", JSON.stringify(quizzesCache));
       renderQuizzesList();
       renderStudentPracticeQuizzes();
@@ -1545,34 +1505,21 @@ async function loadCloudData(forceServer = false) {
       counts.grades = gradesCache.length;
     }
 
-    // 2. الاختبارات (استيراد كل ما في السحابة مع الحفاظ الصارم على حذف الاختبارات نهائياً)
-    let cloudDeletedIds = [];
+    // 2. الاختبارات (استيراد كافة الاختبارات المتوفرة سحابياً كمرجع وحيد معتمد)
     let isCloudInitDone = false;
     if (quizCfgRes && quizCfgRes.status === "fulfilled" && quizCfgRes.value.exists()) {
       const cfgData = quizCfgRes.value.data();
-      if (Array.isArray(cfgData.deletedQuizIds)) {
-        cloudDeletedIds = cfgData.deletedQuizIds;
-      }
       isCloudInitDone = !!cfgData.initialized;
     }
 
     if (quizRes.status === "fulfilled") {
-      const localDeleted = JSON.parse(localStorage.getItem("nour_deleted_quizzes") || "[]");
-      const combinedDeleted = Array.from(new Set([...localDeleted, ...cloudDeletedIds]));
-      localStorage.setItem("nour_deleted_quizzes", JSON.stringify(combinedDeleted));
-      const deletedIdsSet = new Set(combinedDeleted);
-
       const cloudQuizzes = [];
       quizRes.value.forEach(d => {
-        const docId = String(d.id);
-        const isRecentlyUpdated = recentLocalQuizUpdates.has(docId) && (Date.now() - recentLocalQuizUpdates.get(docId) < 30000);
-        if (!deletedIdsSet.has(docId) || isRecentlyUpdated) {
-          cloudQuizzes.push(normalizeQuizFromCloud({ ...d.data(), id: docId }));
-        }
+        cloudQuizzes.push(normalizeQuizFromCloud({ ...d.data(), id: String(d.id) }));
       });
 
       const hasInitDone = isCloudInitDone || (localStorage.getItem("nour_quizzes_init_done") === "true");
-      if (cloudQuizzes.length === 0 && !hasInitDone && deletedIdsSet.size === 0) {
+      if (cloudQuizzes.length === 0 && !hasInitDone) {
         for (const q of INITIAL_QUIZZES) {
           syncQuizToCloud(q).catch(() => {});
           cloudQuizzes.push(normalizeQuizFromCloud(q));
@@ -1580,29 +1527,13 @@ async function loadCloudData(forceServer = false) {
         localStorage.setItem("nour_quizzes_init_done", "true");
         setDoc(doc(db, "system_settings", "quizzes_config"), {
           initialized: true,
-          deletedQuizIds: [],
           lastUpdated: serverTimestamp()
         }, { merge: true }).catch(() => {});
       } else {
         localStorage.setItem("nour_quizzes_init_done", "true");
       }
 
-      // السحابة هي المصدر الحقيقي مع الحفاظ على أي اختبار جديد أنشئ محلياً ولم يصل السحابة بعد
-      const cloudMap = new Map(cloudQuizzes.map(q => [String(q.id), q]));
-      const finalQuizzes = [...cloudQuizzes];
-
-      quizzesCache.forEach(localQ => {
-        if (!localQ || !localQ.id) return;
-        const localId = String(localQ.id);
-        if (deletedIdsSet.has(localId)) return;
-        const isRecentlyUpdatedLocally = recentLocalQuizUpdates.has(localId) && (Date.now() - recentLocalQuizUpdates.get(localId) < 30000);
-        if (!cloudMap.has(localId) && isRecentlyUpdatedLocally) {
-          finalQuizzes.unshift(localQ);
-          syncQuizToCloud(localQ).catch(() => {});
-        }
-      });
-
-      quizzesCache = finalQuizzes;
+      quizzesCache = cloudQuizzes;
       localStorage.setItem("nour_quizzes", JSON.stringify(quizzesCache));
       counts.quizzes = quizzesCache.length;
     }
@@ -2740,17 +2671,21 @@ function renderAccountsTable() {
       });
 
       if (confirmed) {
-        showGlobalLoader("جاري حذف الحساب...", "يتم الحذف من قاعدة البيانات السحابية فوراً");
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+        showGlobalLoader("جاري حذف الحساب سحابياً...", "يتم الحذف من قاعدة البيانات السحابية فوراً لجميع المستخدمين");
         try {
           await deleteDoc(doc(db, "participants", userId));
           participantsCache = participantsCache.filter(p => p.id !== userId);
           saveParticipants();
           renderAccountsTable();
           renderSupervisorDashboard();
-          showToast(`تم حذف حساب (${targetUser.name}) بنجاح`, "fa-trash");
+          showToast(`تم حذف حساب (${targetUser.name}) سحابياً بنجاح!`, "fa-trash");
         } catch (err) {
           console.warn("Delete participant from cloud notice:", err);
-          showToast("حدث خطأ أثناء حذف الحساب من السحابة", "fa-triangle-exclamation");
+          showToast("حدث خطأ أثناء حذف الحساب من السحابة: " + (err.message || ""), "fa-triangle-exclamation");
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fa-solid fa-trash"></i>';
         } finally {
           hideGlobalLoader();
         }
@@ -2814,8 +2749,13 @@ btnOpenAddAccountModal?.addEventListener("click", async () => {
   openAccountModal(null);
 });
 
-accountModalForm?.addEventListener("submit", (e) => {
+accountModalForm?.addEventListener("submit", async (e) => {
   e.preventDefault();
+  if (accountModalForm.dataset.submitting === "true") return;
+
+  const btnSubmit = accountModalForm.querySelector("button[type='submit']");
+  const origBtnHtml = btnSubmit ? btnSubmit.innerHTML : "";
+
   const name = modalAccountName.value.trim();
   const role = modalAccountRole.value;
   const school = modalAccountSchool.value;
@@ -2830,42 +2770,59 @@ accountModalForm?.addEventListener("submit", (e) => {
 
   const norm = normalizeArabic(name);
 
-  if (targetId) {
-    // تعديل حساب موجود
-    const user = participantsCache.find(p => p.id === targetId);
-    if (user) {
-      user.name = name;
-      user.normalizedName = norm;
-      user.role = role;
-      user.school = school;
-      user.grade = grade;
-      syncParticipantToCloud(user);
-    }
-    showToast("تم تحديث بيانات الحساب بنجاح");
-  } else {
-    // إضافة حساب جديد
-    const newId = getDocumentId(norm);
-    const nowIso = new Date().toISOString();
-    const newUser = {
-      id: newId,
-      name,
-      normalizedName: norm,
-      role,
-      school,
-      grade,
-      firstLoginAt: nowIso,
-      lastLoginAt: nowIso,
-      loginCount: 1
-    };
-    participantsCache.push(newUser);
-    syncParticipantToCloud(newUser);
-    showToast("تم إنشاء الحساب بنجاح");
+  accountModalForm.dataset.submitting = "true";
+  if (btnSubmit) {
+    btnSubmit.disabled = true;
+    btnSubmit.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> جاري الحفظ سحابياً...';
   }
 
-  saveParticipants();
-  accountModal.classList.add("hidden");
-  renderAccountsTable();
-  renderSupervisorDashboard();
+  try {
+    if (targetId) {
+      // تعديل حساب موجود
+      const user = participantsCache.find(p => p.id === targetId);
+      if (user) {
+        user.name = name;
+        user.normalizedName = norm;
+        user.role = role;
+        user.school = school;
+        user.grade = grade;
+        await syncParticipantToCloud(user);
+      }
+      showToast("تم تحديث بيانات الحساب في السحابة بنجاح! ✓", "fa-circle-check");
+    } else {
+      // إضافة حساب جديد
+      const newId = getDocumentId(norm);
+      const nowIso = new Date().toISOString();
+      const newUser = {
+        id: newId,
+        name,
+        normalizedName: norm,
+        role,
+        school,
+        grade,
+        firstLoginAt: nowIso,
+        lastLoginAt: nowIso,
+        loginCount: 1
+      };
+      participantsCache.push(newUser);
+      await syncParticipantToCloud(newUser);
+      showToast("تم إنشاء الحساب وحفظه في السحابة بنجاح! ✓", "fa-circle-check");
+    }
+
+    saveParticipants();
+    accountModal.classList.add("hidden");
+    renderAccountsTable();
+    renderSupervisorDashboard();
+  } catch (err) {
+    console.error("Account save error:", err);
+    showToast("تعذر حفظ الحساب في السحابة: " + (err.message || ""), "fa-triangle-exclamation");
+  } finally {
+    if (btnSubmit) {
+      btnSubmit.disabled = false;
+      btnSubmit.innerHTML = origBtnHtml;
+    }
+    delete accountModalForm.dataset.submitting;
+  }
 });
 
 // --------------------------------------------------------
@@ -3153,22 +3110,13 @@ function renderQuizzesList() {
       if (ok) {
         showGlobalLoader("جاري استيراد النماذج...", "يتم حفظ النماذج المعتمدة في السحابة ومزامنتها");
         try {
-          const initIds = INITIAL_QUIZZES.map(q => q.id);
-          let localDel = JSON.parse(localStorage.getItem("nour_deleted_quizzes") || "[]");
-          localDel = localDel.filter(id => !initIds.includes(id));
-          localStorage.setItem("nour_deleted_quizzes", JSON.stringify(localDel));
-
-          try {
-            await setDoc(doc(db, "system_settings", "quizzes_config"), {
-              initialized: true,
-              deletedQuizIds: arrayRemove(...initIds),
-              lastUpdated: serverTimestamp()
-            }, { merge: true });
-          } catch (e) {}
-
           for (const q of INITIAL_QUIZZES) {
             await syncQuizToCloud(q);
           }
+          await setDoc(doc(db, "system_settings", "quizzes_config"), {
+            initialized: true,
+            lastUpdated: serverTimestamp()
+          }, { merge: true });
           await loadCloudData();
           renderQuizzesList();
           renderStudentPracticeQuizzes();
@@ -3235,67 +3183,29 @@ function renderQuizzesList() {
       });
 
       if (confirmed) {
-        showGlobalLoader("جاري حذف الاختبار نهائياً...", "يتم الحذف من قاعدة البيانات السحابية لجميع المستخدمين");
+        b.disabled = true;
+        b.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+        showGlobalLoader("جاري حذف الاختبار سحابياً...", "يتم الحذف من قاعدة البيانات السحابية Firestore لجميع المستخدمين");
         try {
-          // 1. حذف الاختبار مباشرة من Firestore مع مهلة آمنة
           if (safeId) {
-            try {
-              const delPromise = deleteDoc(doc(db, "quizzes", safeId));
-              const timeoutPromise = new Promise((_, reject) => 
-                setTimeout(() => reject(new Error("Timeout deleting quiz")), 6000)
-              );
-              await Promise.race([delPromise, timeoutPromise]);
-            } catch (cloudErr) {
-              console.warn("Firestore quiz delete warning (cleaning locally):", cloudErr);
-            }
-
-            // تسجيل معرف الاختبار المحذوف سحابياً لضمان عدم عودته من أي جهاز آخر
-            try {
-              await setDoc(doc(db, "system_settings", "quizzes_config"), {
-                initialized: true,
-                deletedQuizIds: arrayUnion(safeId),
-                lastUpdated: serverTimestamp()
-              }, { merge: true });
-            } catch (cfgErr) {
-              console.warn("Quizzes config update warning:", cfgErr);
-            }
+            await deleteDoc(doc(db, "quizzes", String(safeId)));
           }
 
-          // 2. إزالة الاختبار من الكاش والذاكرة المحلية وتصفير معرف المحرر
-          quizzesCache = quizzesCache.filter(x => x.id !== safeId && x.id !== qId);
+          quizzesCache = quizzesCache.filter(x => String(x.id) !== String(safeId) && String(x.id) !== String(qId));
           localStorage.setItem("nour_quizzes", JSON.stringify(quizzesCache));
-          localStorage.setItem("nour_quizzes_init_done", "true");
           if (editQuizId) editQuizId.value = "";
-          if (safeId) recentLocalQuizUpdates.delete(String(safeId));
-          if (qId) recentLocalQuizUpdates.delete(String(qId));
 
-          // 3. تسجيل معرف الاختبار المحذوف محلياً لمنع استرجاعه
-          try {
-            const deletedList = JSON.parse(localStorage.getItem("nour_deleted_quizzes") || "[]");
-            if (safeId && !deletedList.includes(safeId)) deletedList.push(safeId);
-            if (qId && !deletedList.includes(qId)) deletedList.push(qId);
-            localStorage.setItem("nour_deleted_quizzes", JSON.stringify(deletedList));
-          } catch (e) {}
-
-          // 4. تحديث الواجهات فوراً
           renderQuizzesList();
           renderStudentPracticeQuizzes();
           updateDropdowns();
           if (statActiveQuizzes) statActiveQuizzes.textContent = quizzesCache.length;
 
-          showToast(`تم حذف الاختبار (${title}) نهائياً بنجاح!`, "fa-trash");
+          showToast(`تم حذف الاختبار (${title}) نهائياً من السحابة بنجاح!`, "fa-trash");
         } catch (err) {
           console.error("Quiz delete error:", err);
-          quizzesCache = quizzesCache.filter(x => x.id !== safeId && x.id !== qId);
-          localStorage.setItem("nour_quizzes", JSON.stringify(quizzesCache));
-          if (editQuizId) editQuizId.value = "";
-          if (safeId) recentLocalQuizUpdates.delete(String(safeId));
-          if (qId) recentLocalQuizUpdates.delete(String(qId));
-          renderQuizzesList();
-          renderStudentPracticeQuizzes();
-          updateDropdowns();
-          if (statActiveQuizzes) statActiveQuizzes.textContent = quizzesCache.length;
-          showToast(`تم حذف الاختبار (${title}) بنجاح`, "fa-trash");
+          showToast("تعذر حذف الاختبار من السحابة: " + (err.message || ""), "fa-triangle-exclamation");
+          b.disabled = false;
+          b.innerHTML = '<i class="fa-solid fa-trash"></i>';
         } finally {
           hideGlobalLoader();
         }
@@ -3875,6 +3785,12 @@ function extractSectionsFromEditor() {
 
 quizEditorForm?.addEventListener("submit", async (e) => {
   e.preventDefault();
+
+  if (quizEditorForm.dataset.submitting === "true") return;
+
+  const btnSave = document.getElementById("btnSaveQuiz") || quizEditorForm.querySelector("button[type='submit']");
+  const origBtnHtml = btnSave ? btnSave.innerHTML : "";
+
   const title = quizTitleInput.value.trim();
   const targetGrade = quizTargetGrade.value;
   const allowPractice = quizAllowPracticeToggle ? quizAllowPracticeToggle.checked : true;
@@ -3883,17 +3799,30 @@ quizEditorForm?.addEventListener("submit", async (e) => {
   const honorBonusPoints = parseInt(quizHonorBonusPointsInput?.value || "20") || 20;
   const sections = extractSectionsFromEditor();
 
+  if (!title) {
+    showToast("يرجى كتابة عنوان للاختبار للمتابعة.", "fa-triangle-exclamation");
+    quizTitleInput.focus();
+    return;
+  }
+
   if (sections.length === 0 || sections[0].questions.length === 0) {
     showToast("يرجى إضافة سؤال واحد على الأقل للاختبار.", "fa-triangle-exclamation");
     return;
   }
 
+  quizEditorForm.dataset.submitting = "true";
+  if (btnSave) {
+    btnSave.disabled = true;
+    btnSave.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> جاري الحفظ في السحابة للجميع...';
+  }
+
   const now = Date.now();
   const rawEditId = editQuizId.value ? editQuizId.value.trim() : "";
-  // إذا كان إنشاء جديد: نولّد معرفاً فريداً عشوائياً محصناً يستحيل تكراره أو تداخله مع أي اختبار محذوف
   const qId = rawEditId || ("quiz_" + now + "_" + Math.random().toString(36).slice(2, 8));
 
-  const existingIdx = quizzesCache.findIndex(q => q.id === qId || String(q.id) === String(qId));
+  const existingIdx = quizzesCache.findIndex(q => String(q.id) === String(qId));
+  const isEdit = existingIdx >= 0 || !!rawEditId;
+
   const quizObj = {
     id: qId,
     title,
@@ -3907,25 +3836,46 @@ quizEditorForm?.addEventListener("submit", async (e) => {
     lastModifiedBy: currentUser ? currentUser.name : "مشرف"
   };
 
-  // تسجيل المعرف في التحديثات المحلية فوراً
-  recentLocalQuizUpdates.set(String(qId), now);
+  try {
+    // 1. الحفظ السحابي الحقيقي والمباشر في Firestore لجميع المستخدمين
+    const cleanQuiz = sanitizeForFirestore(quizObj);
+    const quizRef = doc(db, "quizzes", String(quizObj.id));
+    await setDoc(quizRef, {
+      ...cleanQuiz,
+      id: String(quizObj.id),
+      updatedAt: now,
+      lastUpdated: serverTimestamp()
+    });
 
-  if (existingIdx >= 0) {
-    quizzesCache[existingIdx] = quizObj;
-    showToast(`تم حفظ تعديل الاختبار «${title}» بنجاح!`, "fa-circle-check");
-  } else {
-    quizzesCache.unshift(quizObj);
-    showToast(`تم إنشاء الاختبار «${title}» وحفظه بنجاح!`, "fa-circle-check");
+    // 2. تحديث الذاكرة المحلية والكاش مباشرة بعد إتمام الحفظ السحابي
+    const normalized = normalizeQuizFromCloud(quizObj);
+    if (existingIdx >= 0) {
+      quizzesCache[existingIdx] = normalized;
+    } else {
+      quizzesCache.unshift(normalized);
+    }
+    localStorage.setItem("nour_quizzes", JSON.stringify(quizzesCache));
+    localStorage.setItem("nour_quizzes_init_done", "true");
+
+    // 3. إغلاق النافذة وتصفير المحرر وتحديث الواجهات فورياً
+    editQuizId.value = "";
+    quizEditorModal.classList.add("hidden");
+    renderQuizzesList();
+    renderStudentPracticeQuizzes();
+    updateDropdowns();
+    if (statActiveQuizzes) statActiveQuizzes.textContent = quizzesCache.length;
+
+    showToast(isEdit ? `تم حفظ تعديل الاختبار «${title}» في السحابة وتحديثه للجميع بنجاح! ✓` : `تم إنشاء الاختبار «${title}» وحفظه سحابياً للجميع بنجاح! ✓`, "fa-circle-check");
+  } catch (err) {
+    console.error("Firestore saveQuiz error:", err);
+    showToast("تعذر حفظ الاختبار في السحابة: " + (err.message || "يرجى التحقق من اتصالك بالإنترنت"), "fa-triangle-exclamation");
+  } finally {
+    if (btnSave) {
+      btnSave.disabled = false;
+      btnSave.innerHTML = origBtnHtml;
+    }
+    delete quizEditorForm.dataset.submitting;
   }
-
-  // تصفير معرف التحرير وإغلاق النافذة وتحديث الواجهات فورياً
-  editQuizId.value = "";
-  quizEditorModal.classList.add("hidden");
-  renderQuizzesList();
-  renderStudentPracticeQuizzes();
-  updateDropdowns();
-
-  await saveQuizzes(quizObj);
 });
 
 // تصفير معرف الاختبار عند إغلاق النافذة المنبثقة لضمان عدم الخلط بين الإنشاء والتعديل
@@ -4159,6 +4109,12 @@ btnOpenCreateRoomModal?.addEventListener("click", () => openCreateRoomModal());
 
 createRoomForm?.addEventListener("submit", async (e) => {
   e.preventDefault();
+
+  if (createRoomForm.dataset.submitting === "true") return;
+
+  const submitBtn = document.getElementById("btnSubmitCreateRoom") || createRoomForm.querySelector("button[type='submit']");
+  const origBtnHtml = submitBtn ? submitBtn.innerHTML : "";
+
   const roomName = newRoomNameInput.value.trim() || `مسابقة نور البيان الكبرى - ${new Date().toLocaleDateString('ar-EG')}`;
   const quizId = roomQuizSelect.value || (quizzesCache[0]?.id || "quiz_default_1");
   const cardsEnabled = roomTacticalCardsToggle ? roomTacticalCardsToggle.checked : true;
@@ -4197,13 +4153,40 @@ createRoomForm?.addEventListener("submit", async (e) => {
     createdAt: new Date().toISOString()
   };
 
-  activeRooms = activeRooms.filter(r => r.id !== newRoom.id);
-  activeRooms.unshift(newRoom);
-  await saveRooms(newRoom); // حفظ ومزامنة فورية مع Firestore
-  renderLiveRoomsList();
-  createRoomModal?.classList.add("hidden");
-  joinLiveRoom(newRoom);
-  showToast("تم فتح غرفة المسابقة بنجاح ومزامنتها سحابياً!", "fa-tv");
+  createRoomForm.dataset.submitting = "true";
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> جاري إنشاء الغرفة سحابياً...';
+  }
+  showGlobalLoader("جاري إنشاء الغرفة سحابياً...", "يتم حفظ وتجهيز غرفة المسابقة في السحابة فورياً لجميع المشاركين");
+
+  try {
+    const cleanRoom = sanitizeForFirestore(newRoom);
+    const roomRef = doc(db, "live_rooms", newRoom.id);
+    await setDoc(roomRef, {
+      ...cleanRoom,
+      lastUpdated: serverTimestamp()
+    });
+
+    activeRooms = activeRooms.filter(r => r.id !== newRoom.id);
+    activeRooms.unshift(newRoom);
+    localStorage.setItem("nour_rooms", JSON.stringify(activeRooms));
+
+    renderLiveRoomsList();
+    createRoomModal?.classList.add("hidden");
+    joinLiveRoom(newRoom);
+    showToast("تم فتح غرفة المسابقة بنجاح ومزامنتها سحابياً لجميع الأجهزة!", "fa-tv");
+  } catch (err) {
+    console.error("Firestore create room error:", err);
+    showToast("تعذر إنشاء الغرفة في السحابة: " + (err.message || "يرجى التحقق من الاتصال بالإنترنت"), "fa-triangle-exclamation");
+  } finally {
+    hideGlobalLoader();
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = origBtnHtml;
+    }
+    delete createRoomForm.dataset.submitting;
+  }
 });
 
 function renderLiveRoomsList() {
@@ -4715,15 +4698,21 @@ async function executeRoomTermination(roomId) {
     currentRoomUnsubscribe();
     currentRoomUnsubscribe = null;
   }
-  activeRooms = activeRooms.filter(r => r.id !== roomId);
-  localStorage.removeItem("nour_live_rooms");
-  localStorage.removeItem("nour_saved_room_id");
-  // حذف الغرفة من Firestore نهائياً وبشكل قطعي للجميع
+  showGlobalLoader("جاري إغلاق الغرفة سحابياً...", "يتم إنهاء الغرفة وحذفها من قاعدة البيانات السحابية لجميع المشاركين");
+
   try {
+    // حذف الغرفة من Firestore نهائياً وبشكل قطعي للجميع
     await deleteDoc(doc(db, "live_rooms", roomId));
   } catch (err) {
     console.error("Firestore delete room error:", err);
+  } finally {
+    hideGlobalLoader();
   }
+
+  activeRooms = activeRooms.filter(r => r.id !== roomId);
+  localStorage.setItem("nour_rooms", JSON.stringify(activeRooms));
+  localStorage.removeItem("nour_live_rooms");
+  localStorage.removeItem("nour_saved_room_id");
 
   localStorage.setItem("nour_last_closed_room", JSON.stringify({
     roomId: roomId,

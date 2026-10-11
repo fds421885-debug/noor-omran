@@ -6048,5 +6048,24 @@ body.role-presenter .matching-tile {
   color: #a16207;
 }
 
+/* حالة التحميل وتعطيل الأزرار أثناء العمليات السحابية */
+button:disabled,
+.btn-duo-green:disabled,
+.btn-duo-yellow:disabled,
+.btn-duo-outline:disabled,
+.btn-duo-blue:disabled {
+  opacity: 0.65 !important;
+  cursor: not-allowed !important;
+  pointer-events: none !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+button:disabled .fa-spin,
+.btn-duo-green:disabled .fa-spin,
+.btn-duo-yellow:disabled .fa-spin {
+  margin-left: 6px;
+}
+
 
 
