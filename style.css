@@ -5858,5 +5858,195 @@ body.role-presenter .matching-tile {
   padding: 16px 20px !important;
 }
 
+/* ======================================================== */
+/* أنيميشن انتقال الأسئلة ولوحة الشرف والبطاقات التكتيكية */
+/* ======================================================== */
+
+/* أنيميشن خروج السؤال */
+.question-exit-anim {
+  animation: questionSlideOut 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes questionSlideOut {
+  0% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-26px) scale(0.95);
+  }
+}
+
+/* شريط نتيجة الإجابة الفورية (ثيم دولينجو المبهج) */
+.answer-feedback-banner {
+  margin-top: 16px;
+  padding: 16px 20px;
+  border-radius: var(--radius-xl);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  animation: answerBannerSlideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.12);
+  direction: rtl;
+}
+
+.answer-feedback-banner.correct {
+  background: #dcfce7;
+  border: 2px solid #22c55e;
+  border-bottom: 5px solid #16a34a;
+  color: #14532d;
+}
+
+.answer-feedback-banner.wrong {
+  background: #fee2e2;
+  border: 2px solid #ef4444;
+  border-bottom: 5px solid #dc2626;
+  color: #7f1d1d;
+}
+
+@keyframes answerBannerSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* أنيميشن ظهور واختفاء لوحة الشرف */
+.honor-board-entrance {
+  animation: honorBoardPopIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes honorBoardPopIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.82) translateY(32px);
+  }
+  60% {
+    transform: scale(1.02) translateY(-4px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.honor-board-exit {
+  animation: honorBoardPopOut 0.35s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes honorBoardPopOut {
+  0% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.85) translateY(-24px);
+  }
+}
+
+/* الشارة العائمة المبهجة للبطاقات التكتيكية (تطفو وتتلاشى) */
+.floating-card-pill {
+  position: fixed;
+  top: 42%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 10009;
+  padding: 14px 28px;
+  border-radius: 9999px;
+  background: #ffffff;
+  font-size: 19px;
+  font-weight: 900;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.24), 0 0 0 4px var(--duo-green);
+  color: #15803d;
+  pointer-events: none;
+  animation: cardPillFloatUp 1.8s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  direction: rtl;
+}
+
+.floating-card-pill.pill-blue {
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.24), 0 0 0 4px #0ea5e9;
+  color: #0369a1;
+}
+
+.floating-card-pill.pill-gold {
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.24), 0 0 0 4px #eab308;
+  color: #a16207;
+}
+
+.floating-card-pill.pill-red {
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.24), 0 0 0 4px #ef4444;
+  color: #b91c1c;
+}
+
+@keyframes cardPillFloatUp {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 25px) scale(0.7);
+  }
+  20% {
+    opacity: 1;
+    transform: translate(-50%, -10px) scale(1.1);
+  }
+  40% {
+    transform: translate(-50%, -20px) scale(1);
+  }
+  75% {
+    opacity: 1;
+    transform: translate(-50%, -55px) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -95px) scale(0.85);
+  }
+}
+
+/* وميض وتمرير القسم والسؤال الجديد */
+.highlight-new-section {
+  animation: sectionGlow 2.2s ease-out;
+}
+
+@keyframes sectionGlow {
+  0% {
+    box-shadow: 0 0 0 4px #58cc02, 0 10px 30px rgba(88, 204, 2, 0.45);
+    border-color: #58cc02;
+  }
+  100% {
+    box-shadow: none;
+    border-color: var(--border-duo);
+  }
+}
+
+/* شريط مساعدة المعلم النشطة في مسرح المسابقة */
+.teacher-help-active-banner {
+  background: linear-gradient(135deg, #fef9c3, #fef08a);
+  border: 2px solid #eab308;
+  border-bottom: 4px solid #ca8a04;
+  border-radius: var(--radius-lg);
+  padding: 10px 18px;
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #854d0e;
+  font-weight: 800;
+  font-size: 14px;
+  animation: popInChip 0.3s ease;
+}
+
+.teacher-help-active-banner i {
+  font-size: 20px;
+  color: #a16207;
+}
+
 
 

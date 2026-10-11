@@ -1158,6 +1158,35 @@
           </label>
         </div>
 
+        <!-- إعدادات نقاط لوحة الشرف للاختبار -->
+        <div class="checkbox-row-styled" style="margin-top: 8px;">
+          <label>
+            <input type="checkbox" id="quizEnableHonorPointsToggle" checked>
+            <span>احتساب نقاط للوحة الشرف عند إكمال الاختبار التدريبي</span>
+          </label>
+        </div>
+
+        <div id="quizHonorPointsSettings" class="quiz-honor-points-box" style="margin-top: 10px; margin-bottom: 14px; padding: 14px 16px; background: #f0fdf4; border: 2px solid #86efac; border-radius: 14px;">
+          <label class="input-label" style="font-size: 13.5px; font-weight: 800; color: #166534; margin-bottom: 8px; display: block;">
+            <i class="fa-solid fa-trophy" style="color: #eab308; margin-left: 6px;"></i> نظام نقاط لوحة الشرف للاختبار:
+          </label>
+          <div style="display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 10px;">
+            <label style="font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 6px; cursor: pointer; color: #1e293b;">
+              <input type="radio" name="quizPointsModeRadio" id="quizPointsModeActual" value="actual" checked>
+              <span>احتساب الدرجات الفعلية للأسئلة</span>
+            </label>
+            <label style="font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 6px; cursor: pointer; color: #1e293b;">
+              <input type="radio" name="quizPointsModeRadio" id="quizPointsModeFixed" value="fixed">
+              <span>مكافأة نقاط محددة عند الإكمال</span>
+            </label>
+          </div>
+          <div id="quizFixedPointsContainer" class="hidden" style="align-items: center; gap: 10px; margin-top: 6px;">
+            <span style="font-size: 13px; font-weight: 700; color: #166534;">عدد نقاط المكافأة:</span>
+            <input type="number" id="quizHonorBonusPointsInput" class="form-control" value="20" min="1" max="500" style="width: 95px; padding: 6px 10px; font-weight: 800; text-align: center;">
+            <span style="font-size: 12.5px; color: #475569;">نقطة تضاف مباشرة للوحة الشرف</span>
+          </div>
+        </div>
+
         <!-- أقسام الاختبار -->
         <div class="sections-builder-wrapper">
           <div class="sections-builder-header">
@@ -1475,12 +1504,13 @@
         <i class="fa-solid fa-chalkboard-user"></i>
       </div>
       <h3 style="font-size: 20px; font-weight: 900; color: #854d0e; margin-bottom: 6px;">📢 تفعيل بطاقة: استشارة المعلم!</h3>
-      <p style="font-size: 14.5px; color: #475569; margin-bottom: 16px;">
+      <p id="teacherHelpDescription" style="font-size: 14.5px; color: #475569; margin-bottom: 16px;">
         تم اختيار أحد المعلمين أو المشرفين عشوائياً لمساعدة المتسابق وتوجيه نصيحة توضيحية له.
       </p>
       <div style="background: #fefce8; border: 2px dashed #facc15; border-radius: 12px; padding: 14px; margin-bottom: 16px;">
         <div style="font-size: 13px; font-weight: 700; color: #a16207;">المعلم المساعد المختار:</div>
         <div id="teacherHelpChosenName" style="font-size: 20px; font-weight: 900; color: #854d0e; margin-top: 4px;">--</div>
+        <div id="teacherHelpContestantTarget" style="font-size: 13px; font-weight: 700; color: #166534; margin-top: 6px;"></div>
       </div>
       <div style="background: #eff6ff; border: 1.5px solid #bfdbfe; border-radius: 10px; padding: 10px; font-size: 13.5px; color: #1e40af; font-weight: 700; margin-bottom: 18px;">
         <i class="fa-solid fa-clock"></i> تم تمديد وقت السؤال الحالي بـ <strong>+15 ثانية إضافية</strong> للتفكير والتوجيه!

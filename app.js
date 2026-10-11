@@ -323,6 +323,36 @@ function getDocumentId(normalizedName) {
   return "user_" + encodeURIComponent(normalizedName).replace(/%/g, "_");
 }
 
+// خوارزمية Fisher-Yates لخلط وتشتيت العناصر عشوائياً (مبهدلة للتفكير والذكاء)
+function shuffleArray(arr) {
+  if (!Array.isArray(arr) || arr.length <= 1) return [...(arr || [])];
+  const result = [...arr];
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
+
+// الشارة العائمة المبهجة للبطاقات التكتيكية (تظهر وتطفو وتتلاشى بثيم دولينجو)
+function showFloatingCardPill(text, icon = "fa-star", type = "green") {
+  try {
+    const pill = document.createElement("div");
+    pill.className = `floating-card-pill pill-${type}`;
+    pill.innerHTML = `
+      <i class="fa-solid ${icon}"></i>
+      <span>${escapeHtml(text)}</span>
+    `;
+    document.body.appendChild(pill);
+    try { soundFX?.celebrate(); } catch (e) {}
+    setTimeout(() => {
+      if (pill && pill.parentNode) pill.remove();
+    }, 1850);
+  } catch (e) {
+    console.warn("Floating card pill notice:", e);
+  }
+}
+
 function formatArabicDate(dateValue) {
   if (!dateValue) return "اليوم";
   let dateObj = null;
@@ -1002,72 +1032,61 @@ function setupRealtimeCloudListeners() {
       console.warn("Realtime participants notice:", err);
     });
 
-    // 3. مراقبة بنك الأسئلة والاختبارات لحظياً وبشكل فوري مع مراعاة الحذف
+    // 3. مراقبة بنك الأسئلة والاختبارات لحظياً وبشكل فوري لجميع المستخدمين
     const quizCol = collection(db, "quizzes");
     onSnapshot(quizCol, (snapshot) => {
       const cloudQuizzes = [];
       const deletedIds = new Set(JSON.parse(localStorage.getItem("nour_deleted_quizzes") || "[]"));
+      
       snapshot.forEach(docSnap => {
         const docId = String(docSnap.id);
-        const isRecentlyUpdated = recentLocalQuizUpdates.has(docId) && (Date.now() - recentLocalQuizUpdates.get(docId) < 30000);
-        if (!deletedIds.has(docId) || isRecentlyUpdated) {
+        const isRecentlyUpdatedLocally = recentLocalQuizUpdates.has(docId) && (Date.now() - recentLocalQuizUpdates.get(docId) < 30000);
+        if (!deletedIds.has(docId) || isRecentlyUpdatedLocally) {
           const qData = normalizeQuizFromCloud({ ...docSnap.data(), id: docId });
           cloudQuizzes.push(qData);
         }
       });
 
-      // دمج ذكي مع الكاش المحلي لضمان عدم ضياع أي اختبار جديد أو تعديلات جديدة
+      // السحابة هي المصدر الحقيقي؛ نضيف فقط الاختبارات التي تم إنشاؤها محلياً حديثاً ولم تسجل في السحابة بعد
       const cloudMap = new Map(cloudQuizzes.map(q => [String(q.id), q]));
-      const mergedQuizzes = [...cloudQuizzes];
+      const finalQuizzes = [...cloudQuizzes];
 
       quizzesCache.forEach(localQ => {
         if (!localQ || !localQ.id) return;
         const localId = String(localQ.id);
-        const isLocallyDeleted = deletedIds.has(localId);
-        const isRecentlyUpdated = recentLocalQuizUpdates.has(localId) && (Date.now() - recentLocalQuizUpdates.get(localId) < 30000);
-
-        if (isLocallyDeleted && !isRecentlyUpdated) {
-          return; // تم حذفه فعلياً ولم يُعد إنشاؤه
-        }
-
-        if (!cloudMap.has(localId)) {
-          // اختبار جديد تم إنشاؤه أو تعديله محلياً ولم يصل بعد للسحابة -> نحافظ عليه في القائمة ونرفعه
-          mergedQuizzes.unshift(localQ);
+        if (deletedIds.has(localId)) return;
+        const isRecentlyUpdatedLocally = recentLocalQuizUpdates.has(localId) && (Date.now() - recentLocalQuizUpdates.get(localId) < 30000);
+        if (!cloudMap.has(localId) && isRecentlyUpdatedLocally) {
+          finalQuizzes.unshift(localQ);
           syncQuizToCloud(localQ).catch(() => {});
-        } else {
-          const cloudQ = cloudMap.get(localId);
-          const localTime = localQ.updatedAt || 0;
-          const cloudTime = cloudQ.updatedAt || (cloudQ.lastUpdated?.toMillis ? cloudQ.lastUpdated.toMillis() : 0);
-
-          // إذا تم تحديث النسخة المحلية حديثاً أو كان تاريخها المحلي أحدث أو مساوياً -> نعتمد النسخة المحلية
-          if (isRecentlyUpdated || localTime >= cloudTime) {
-            const idx = mergedQuizzes.findIndex(x => x.id === localId || String(x.id) === localId);
-            if (idx >= 0) {
-              mergedQuizzes[idx] = localQ;
-            } else {
-              mergedQuizzes.unshift(localQ);
-            }
-            if (localTime > cloudTime) {
-              syncQuizToCloud(localQ).catch(() => {});
-            }
-          }
         }
       });
 
-      // رصد أي اختبارات جديدة تم إنشاؤها سحابياً من أي جهاز آخر
+      // رصد التحديثات اللحظية والتغييرات الصادرة من أي مشرف أو معلم
       if (!isFirstQuizzesSnapshot) {
-        const newlyAdded = mergedQuizzes.filter(q => !previousQuizzesMap.has(q.id));
-        if (newlyAdded.length > 0) {
-          const firstQ = newlyAdded[0];
-          showToast(`📚 تم تحديث بنك الأسئلة: «${firstQ.title}»`, "fa-book-quran");
-          showRealtimeSyncPill("⚡ تم تحديث بنك الأسئلة والاختبارات تلقائياً من السحابة ✓");
-        }
+        snapshot.docChanges().forEach(change => {
+          const changedDoc = change.doc.data();
+          const changedId = String(change.doc.id);
+          const changedTitle = changedDoc.title || "اختبار";
+          const modifier = changedDoc.lastModifiedBy || "المشرف";
+          
+          if (change.type === "added" && !previousQuizzesMap.has(changedId)) {
+            showToast(`📚 اختبار جديد: «${changedTitle}» (بواسطة ${modifier})`, "fa-book-quran", 3500);
+            showRealtimeSyncPill(`⚡ أضاف ${modifier} اختباراً جديداً: «${changedTitle}»`);
+          } else if (change.type === "modified") {
+            // تنبيه فوري لجميع المستخدمين بأن الاختبار تم تعديله
+            showToast(`✏️ قام ${modifier} بتحديث الاختبار: «${changedTitle}» فورياً!`, "fa-pen-to-square", 3500);
+            showRealtimeSyncPill(`⚡ تم تحديث الاختبار «${changedTitle}» في الوقت الفعلي ✓`);
+          } else if (change.type === "removed") {
+            showToast(`🗑️ تم حذف الاختبار: «${changedTitle}»`, "fa-trash", 3000);
+          }
+        });
       }
 
-      previousQuizzesMap = new Map(mergedQuizzes.map(q => [q.id, q]));
+      previousQuizzesMap = new Map(finalQuizzes.map(q => [q.id, q]));
       isFirstQuizzesSnapshot = false;
 
-      quizzesCache = mergedQuizzes;
+      quizzesCache = finalQuizzes;
       localStorage.setItem("nour_quizzes", JSON.stringify(quizzesCache));
       renderQuizzesList();
       renderStudentPracticeQuizzes();
@@ -1574,44 +1593,22 @@ async function loadCloudData(forceServer = false) {
         localStorage.setItem("nour_quizzes_init_done", "true");
       }
 
-      // دمج ذكي مع الكاش المحلي لضمان عدم ضياع أي اختبار جديد أو تعديلات محلية
+      // السحابة هي المصدر الحقيقي مع الحفاظ على أي اختبار جديد أنشئ محلياً ولم يصل السحابة بعد
       const cloudMap = new Map(cloudQuizzes.map(q => [String(q.id), q]));
-      const mergedQuizzes = [...cloudQuizzes];
+      const finalQuizzes = [...cloudQuizzes];
 
       quizzesCache.forEach(localQ => {
         if (!localQ || !localQ.id) return;
         const localId = String(localQ.id);
-        const isLocallyDeleted = deletedIdsSet.has(localId);
-        const isRecentlyUpdated = recentLocalQuizUpdates.has(localId) && (Date.now() - recentLocalQuizUpdates.get(localId) < 30000);
-
-        if (isLocallyDeleted && !isRecentlyUpdated) {
-          return;
-        }
-
-        if (!cloudMap.has(localId)) {
-          // اختبار جديد تم إنشاؤه محلياً ولم يصل السحابة بعد -> نحافظ عليه في القائمة ونرفعه
-          mergedQuizzes.unshift(localQ);
+        if (deletedIdsSet.has(localId)) return;
+        const isRecentlyUpdatedLocally = recentLocalQuizUpdates.has(localId) && (Date.now() - recentLocalQuizUpdates.get(localId) < 30000);
+        if (!cloudMap.has(localId) && isRecentlyUpdatedLocally) {
+          finalQuizzes.unshift(localQ);
           syncQuizToCloud(localQ).catch(() => {});
-        } else {
-          const cloudQ = cloudMap.get(localId);
-          const localTime = localQ.updatedAt || 0;
-          const cloudTime = cloudQ.updatedAt || (cloudQ.lastUpdated?.toMillis ? cloudQ.lastUpdated.toMillis() : 0);
-
-          if (isRecentlyUpdated || localTime >= cloudTime) {
-            const idx = mergedQuizzes.findIndex(x => x.id === localId || String(x.id) === localId);
-            if (idx >= 0) {
-              mergedQuizzes[idx] = localQ;
-            } else {
-              mergedQuizzes.unshift(localQ);
-            }
-            if (localTime > cloudTime) {
-              syncQuizToCloud(localQ).catch(() => {});
-            }
-          }
         }
       });
 
-      quizzesCache = mergedQuizzes;
+      quizzesCache = finalQuizzes;
       localStorage.setItem("nour_quizzes", JSON.stringify(quizzesCache));
       counts.quizzes = quizzesCache.length;
     }
@@ -3101,8 +3098,35 @@ const editQuizId = document.getElementById("editQuizId");
 const quizTitleInput = document.getElementById("quizTitleInput");
 const quizTargetGrade = document.getElementById("quizTargetGrade");
 const quizAllowPracticeToggle = document.getElementById("quizAllowPracticeToggle");
+const quizEnableHonorPointsToggle = document.getElementById("quizEnableHonorPointsToggle");
+const quizHonorPointsSettings = document.getElementById("quizHonorPointsSettings");
+const quizPointsModeActual = document.getElementById("quizPointsModeActual");
+const quizPointsModeFixed = document.getElementById("quizPointsModeFixed");
+const quizFixedPointsContainer = document.getElementById("quizFixedPointsContainer");
+const quizHonorBonusPointsInput = document.getElementById("quizHonorBonusPointsInput");
 const quizSectionsContainer = document.getElementById("quizSectionsContainer");
 const btnAddSectionBtn = document.getElementById("btnAddSectionBtn");
+
+// تفاعل حقول نقاط لوحة الشرف في محرر الاختبارات
+quizEnableHonorPointsToggle?.addEventListener("change", () => {
+  if (quizHonorPointsSettings) {
+    quizHonorPointsSettings.style.display = quizEnableHonorPointsToggle.checked ? "block" : "none";
+  }
+});
+
+document.querySelectorAll('input[name="quizPointsModeRadio"]').forEach(r => {
+  r.addEventListener("change", () => {
+    if (quizFixedPointsContainer) {
+      if (quizPointsModeFixed?.checked) {
+        quizFixedPointsContainer.classList.remove("hidden");
+        quizFixedPointsContainer.style.display = "flex";
+      } else {
+        quizFixedPointsContainer.classList.add("hidden");
+        quizFixedPointsContainer.style.display = "none";
+      }
+    }
+  });
+});
 
 function renderQuizzesList() {
   if (!quizzesListGrid) return;
@@ -3299,7 +3323,23 @@ function openQuizEditor(quiz = null) {
     editQuizId.value = quiz.id;
     quizTitleInput.value = quiz.title;
     quizTargetGrade.value = quiz.targetGrade;
-    quizAllowPracticeToggle.checked = !!quiz.allowPractice;
+    quizAllowPracticeToggle.checked = quiz.allowPractice !== false;
+    
+    // ضبط إعدادات نقاط لوحة الشرف
+    const enableHonor = quiz.enableHonorPoints !== false;
+    if (quizEnableHonorPointsToggle) quizEnableHonorPointsToggle.checked = enableHonor;
+    if (quizHonorPointsSettings) quizHonorPointsSettings.style.display = enableHonor ? "block" : "none";
+    
+    const mode = quiz.honorPointsMode || "actual";
+    if (quizPointsModeActual) quizPointsModeActual.checked = (mode === "actual");
+    if (quizPointsModeFixed) quizPointsModeFixed.checked = (mode === "fixed");
+    if (quizFixedPointsContainer) {
+      quizFixedPointsContainer.style.display = (mode === "fixed") ? "flex" : "none";
+      if (mode === "fixed") quizFixedPointsContainer.classList.remove("hidden");
+      else quizFixedPointsContainer.classList.add("hidden");
+    }
+    if (quizHonorBonusPointsInput) quizHonorBonusPointsInput.value = quiz.honorBonusPoints || 20;
+
     if (editorTitle) editorTitle.textContent = `تعديل الاختبار: ${quiz.title}`;
     renderSectionsInEditor(quiz.sections);
   } else {
@@ -3307,6 +3347,18 @@ function openQuizEditor(quiz = null) {
     quizTitleInput.value = "";
     quizTargetGrade.value = gradesCache[0] || "صف أول";
     quizAllowPracticeToggle.checked = true;
+    
+    // قيم افتراضية للاختبار الجديد
+    if (quizEnableHonorPointsToggle) quizEnableHonorPointsToggle.checked = true;
+    if (quizHonorPointsSettings) quizHonorPointsSettings.style.display = "block";
+    if (quizPointsModeActual) quizPointsModeActual.checked = true;
+    if (quizPointsModeFixed) quizPointsModeFixed.checked = false;
+    if (quizFixedPointsContainer) {
+      quizFixedPointsContainer.style.display = "none";
+      quizFixedPointsContainer.classList.add("hidden");
+    }
+    if (quizHonorBonusPointsInput) quizHonorBonusPointsInput.value = 20;
+
     if (editorTitle) editorTitle.textContent = "إنشاء اختبار قرآني جديد";
     renderSectionsInEditor([
       {
@@ -3528,7 +3580,11 @@ function bindQuestionEditorEvents() {
       const newCard = tempDiv.firstElementChild;
       if (list && newCard) {
         list.appendChild(newCard);
-        newCard.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        newCard.scrollIntoView({ behavior: "smooth", block: "center" });
+        newCard.classList.add("highlight-new-section");
+        setTimeout(() => newCard.classList.remove("highlight-new-section"), 2200);
+        const textInp = newCard.querySelector(".q-text-input");
+        if (textInp) textInp.focus();
       }
       return;
     }
@@ -3743,6 +3799,19 @@ btnAddSectionBtn?.addEventListener("click", () => {
     ]
   });
   renderSectionsInEditor(currentSections);
+
+  // التمرير التلقائي السلس إلى مكان القسم الجديد وإبرازه فوراً للمشرف
+  setTimeout(() => {
+    const allSecs = quizSectionsContainer.querySelectorAll(".section-item-box");
+    const newSec = allSecs[allSecs.length - 1];
+    if (newSec) {
+      newSec.scrollIntoView({ behavior: "smooth", block: "center" });
+      newSec.classList.add("highlight-new-section");
+      setTimeout(() => newSec.classList.remove("highlight-new-section"), 2200);
+      const nameInp = newSec.querySelector(".section-name-input");
+      if (nameInp) nameInp.focus();
+    }
+  }, 100);
 });
 
 function extractSectionsFromEditor() {
@@ -3814,7 +3883,10 @@ quizEditorForm?.addEventListener("submit", async (e) => {
   e.preventDefault();
   const title = quizTitleInput.value.trim();
   const targetGrade = quizTargetGrade.value;
-  const allowPractice = quizAllowPracticeToggle.checked;
+  const allowPractice = quizAllowPracticeToggle ? quizAllowPracticeToggle.checked : true;
+  const enableHonorPoints = quizEnableHonorPointsToggle ? quizEnableHonorPointsToggle.checked : true;
+  const honorPointsMode = quizPointsModeFixed?.checked ? "fixed" : "actual";
+  const honorBonusPoints = parseInt(quizHonorBonusPointsInput?.value || "20") || 20;
   const sections = extractSectionsFromEditor();
 
   if (sections.length === 0 || sections[0].questions.length === 0) {
@@ -3833,6 +3905,9 @@ quizEditorForm?.addEventListener("submit", async (e) => {
     title,
     targetGrade,
     allowPractice,
+    enableHonorPoints,
+    honorPointsMode,
+    honorBonusPoints,
     sections,
     updatedAt: now,
     lastModifiedBy: currentUser ? currentUser.name : "مشرف"
@@ -5129,33 +5204,77 @@ function loadStageQuestion(idx) {
     questionCardEl.classList.add("question-enter-anim");
   }
 
-  // الانتقال للسؤال التالي مع عرض لوحة الشرف أولاً وتكبير بطاقة الطالب وإبراز نقاطه
-  function advanceToNext(scoreDelta = 0, isPenalty = false) {
+  // الانتقال للسؤال التالي مع عرض كرت نتيجة الإجابة أولاً ثم خروج السؤال ثم لوحة الشرف
+  function advanceToNext(scoreDelta = 0, isPenalty = false, isCorrect = true) {
     clearInterval(liveTimerInterval);
     addContestantScore(scoreDelta);
 
     const nextIdx = idx + 1;
     const isFinished = nextIdx >= allQuestions.length;
 
-    // عرض لوحة الشرف بعد كل سؤال مباشرة مع إبراز الزيادة للمتسابق الحالي
-    showHonorBoardModal(false, () => {
-      // بعد اختفاء لوحة الشرف: فحص بطاقات تكتيكية أو الانتقال للسؤال التالي / إنهاء
-      if (isFinished) {
-        finishContestant();
+    // 1. إظهار شريط تقييم الإجابة الفورية أولاً بأسلوب دولينجو المبهج
+    const existingFeedback = stageInteractiveArea.querySelector(".answer-feedback-banner");
+    if (!existingFeedback) {
+      const fb = document.createElement("div");
+      fb.className = `answer-feedback-banner ${isCorrect ? "correct" : "wrong"}`;
+      if (isCorrect) {
+        fb.innerHTML = `
+          <div style="display:flex;align-items:center;gap:12px;">
+            <i class="fa-solid fa-circle-check" style="font-size:28px;color:#16a34a;"></i>
+            <div>
+              <div style="font-weight:900;font-size:16px;color:#14532d;">أحسنت! إجابة صحيحة ومتقنة 🌟</div>
+              <div style="font-size:12.5px;color:#15803d;font-weight:700;">+${scoreDelta} درجات تم احتسابها لرصيدك</div>
+            </div>
+          </div>
+          <div class="score-increase-badge" style="font-size:16px;">+${scoreDelta}</div>
+        `;
+        try { soundFX.correct(); } catch (e) {}
       } else {
-        // البطاقات تظهر كل ربع الأسئلة (مثال: لو 20 سؤال تظهر عند 5 و10 و15، ولا تظهر عند آخر سؤال 20)
-        const quarterStep = Math.max(2, Math.round(allQuestions.length / 4));
-        const isCardTurn = currentLiveRoom?.tacticalCardsEnabled && 
-          ((idx + 1) % quarterStep === 0) && 
-          (nextIdx < allQuestions.length);
-
-        if (isCardTurn) {
-          triggerTacticalCardsModal(() => loadStageQuestion(nextIdx));
-        } else {
-          loadStageQuestion(nextIdx);
-        }
+        fb.innerHTML = `
+          <div style="display:flex;align-items:center;gap:12px;">
+            <i class="fa-solid fa-circle-xmark" style="font-size:28px;color:#dc2626;"></i>
+            <div>
+              <div style="font-weight:900;font-size:16px;color:#7f1d1d;">إجابة غير صحيحة! ركّز في السؤال القادم 💪</div>
+              <div style="font-size:12.5px;color:#991b1b;font-weight:700;">المثابرة والتدريب هما سر التفوق</div>
+            </div>
+          </div>
+          ${isPenalty ? `<div class="score-penalty-badge" style="font-size:16px;">${scoreDelta}</div>` : ''}
+        `;
+        try { soundFX.wrong(); } catch (e) {}
       }
-    }, currentContestant?.name, scoreDelta, isPenalty);
+      stageInteractiveArea.appendChild(fb);
+    }
+
+    // 2. الانتظار 1.4 ثانية ليرى الطالب النتيجة وثيم المنصة بوضوح
+    setTimeout(() => {
+      // 3. أنيميشن خروج السؤال الحركي الجذاب
+      const questionCardEl = document.querySelector(".stage-question-card");
+      if (questionCardEl) {
+        questionCardEl.classList.remove("question-enter-anim");
+        questionCardEl.classList.add("question-exit-anim");
+      }
+
+      // 4. بعد انتهاء أنيميشن الخروج (380ms)، إظهار لوحة الشرف بأنيميشن احتفالي
+      setTimeout(() => {
+        showHonorBoardModal(false, () => {
+          // بعد اختفاء لوحة الشرف: فحص بطاقات تكتيكية أو الانتقال للسؤال التالي / إنهاء
+          if (isFinished) {
+            finishContestant();
+          } else {
+            const quarterStep = Math.max(2, Math.round(allQuestions.length / 4));
+            const isCardTurn = currentLiveRoom?.tacticalCardsEnabled && 
+              ((idx + 1) % quarterStep === 0) && 
+              (nextIdx < allQuestions.length);
+
+            if (isCardTurn) {
+              triggerTacticalCardsModal(() => loadStageQuestion(nextIdx));
+            } else {
+              loadStageQuestion(nextIdx);
+            }
+          }
+        }, currentContestant?.name, scoreDelta, isPenalty);
+      }, 380);
+    }, 1400);
 
     // مزامنة رقم السؤال الحالي والنقاط سحابياً
     if (currentLiveRoom) {
@@ -5186,6 +5305,28 @@ function loadStageQuestion(idx) {
           <span class="active-card-desc">${activeCardEffect.desc}</span>
         </div>
       `;
+
+      const helperName = activeCardEffect.helperName || currentLiveRoom?.activeTeacherHelp?.helperName;
+      if (helperName) {
+        cardBannerHtml += `
+          <div class="teacher-help-active-banner">
+            <i class="fa-solid fa-chalkboard-user"></i>
+            <div>
+              <strong>مساعدة موجهة من المعلم:</strong> ${escapeHtml(helperName)}
+              <span style="display:block;font-size:12px;opacity:0.9;margin-top:2px;">يشارك المعلم المساعد المتسابق بالتوجيه والنصيحة مع تمديد الوقت!</span>
+            </div>
+          </div>
+        `;
+      }
+
+      if (activeCardEffect.effect?.showRuleHint || activeCardEffect.effect?.hint) {
+        cardBannerHtml += `
+          <div style="background:#fefce8;border:2px dashed #facc15;border-radius:12px;padding:10px 16px;margin-bottom:12px;color:#854d0e;font-size:13.5px;font-weight:700;display:flex;align-items:center;gap:10px;">
+            <i class="fa-solid fa-lightbulb" style="color:#eab308;font-size:18px;"></i>
+            <span>تلميح تجويدي مضيء: ركّز في الحركات ومخرج الحرف والحكم المتصل به قبل الإجابة.</span>
+          </div>
+        `;
+      }
     }
 
     if (activeCardEffect.effect) {
@@ -5196,6 +5337,9 @@ function loadStageQuestion(idx) {
       if (eff.eliminateOptions) eliminateActive = eff.eliminateOptions;
       if (eff.penaltyOnWrong) penaltyOnWrong = eff.penaltyOnWrong;
       if (eff.speedBonusUnder5s) speedBonusExtra = eff.speedBonusUnder5s;
+      if (eff.zoomScript) {
+        stageQuestionText.style.fontSize = "28px";
+      }
     }
   }
 
@@ -5246,7 +5390,7 @@ function loadStageQuestion(idx) {
           btn.classList.add("correct");
           showToast(`✅ إجابة صحيحة! (+${earnedPoints} درجات)`, "fa-circle-check");
           activeCardEffect = null; // استهلاك البطاقة
-          advanceToNext(earnedPoints, false);
+          advanceToNext(earnedPoints, false, true);
         } else {
           // فحص بطاقة "فرصة ثانية"
           if (activeCardEffect?.effect?.secondChance) {
@@ -5271,21 +5415,21 @@ function loadStageQuestion(idx) {
           if (hasImmunity) {
             showToast("🛡️ درع الأمان: تم إحباط أي خصم للدرجات!", "fa-shield-halved");
             activeCardEffect = null;
-            advanceToNext(0, false);
+            advanceToNext(0, false, false);
           } else if (penaltyOnWrong > 0) {
             showToast(`❌ إجابة خاطئة — المخاطرة الكبرى: خصم ${penaltyOnWrong} درجات!`, "fa-fire-flame-curved", 3000);
             activeCardEffect = null;
-            advanceToNext(-penaltyOnWrong, true);
+            advanceToNext(-penaltyOnWrong, true, false);
           } else {
             showToast("❌ إجابة خاطئة", "fa-xmark");
             activeCardEffect = null;
-            advanceToNext(0, false);
+            advanceToNext(0, false, false);
           }
         }
       }, { once: true });
     });
 
-  // ── Matching: توصيل تفاعلي بالأزواج ──
+  // ── Matching: توصيل تفاعلي بالأزواج ومبعثر تماماً ──
   } else if (q.type === "matching" && q.pairs && q.pairs.length > 0) {
     const isSup = currentUser && (currentUser.role === "supervisor" || isSupervisor(currentUser.name));
     let earnedPoints = q.points || 5;
@@ -5294,9 +5438,20 @@ function loadStageQuestion(idx) {
 
     const autoMatchOneActive = !!(activeCardEffect?.effect?.autoMatchOne);
 
-    const leftItems = q.pairs.map((p, idx) => ({ id: `left_${idx}`, text: p[0], pairIdx: idx, matched: false }));
-    const rightItems = [...q.pairs].map((p, origIdx) => ({ id: `right_${origIdx}`, text: p[1], pairIdx: origIdx, matched: false }))
-      .sort(() => 0.5 - Math.random());
+    // تطهير الأزواج ودعم كلا الشكلين [a,b] أو {left, right}
+    const cleanPairs = q.pairs.map(p => {
+      if (Array.isArray(p)) return [p[0] || "", p[1] || ""];
+      if (p && typeof p === "object") return [p.left || p.first || "", p.right || p.second || ""];
+      return ["", ""];
+    }).filter(p => p[0] || p[1]);
+
+    const leftItems = cleanPairs.map((p, idx) => ({ id: `left_${idx}`, text: p[0], pairIdx: idx, matched: false }));
+    let rightItems = shuffleArray(cleanPairs.map((p, origIdx) => ({ id: `right_${origIdx}`, text: p[1], pairIdx: origIdx, matched: false })));
+    // التأكد من أن الطرف (ب) مبهدل ومبعثر بالكامل ليجبر الطالب على التفكير وليس حفظ المواضع
+    if (rightItems.length > 1 && rightItems[0].pairIdx === 0) {
+      const first = rightItems.shift();
+      rightItems.push(first);
+    }
 
     // إذا كانت بطاقة "توصيل الحكمة" نشطة: توصيل أول زوج تلقائياً
     if (autoMatchOneActive && leftItems.length > 0) {
@@ -5327,7 +5482,7 @@ function loadStageQuestion(idx) {
             `).join("")}
           </div>
           <div class="matching-items-column">
-            <div class="matching-col-header"><i class="fa-solid fa-align-left"></i> الطرف (ب):</div>
+            <div class="matching-col-header"><i class="fa-solid fa-align-left"></i> الطرف (ب) [مبعثر]:</div>
             ${rightItems.map(item => `
               <div class="matching-tile font-${q.font || 'quran'} ${item.matched ? 'matched' : ''}" 
                    data-right-id="${item.id}" data-pair="${item.pairIdx}">
@@ -5349,7 +5504,7 @@ function loadStageQuestion(idx) {
         showToast(`✅ تم توصيل جميع الأزواج بنجاح! (+${earnedPoints} درجات)`, "fa-circle-check");
         try { soundFX.correct(); } catch (e) {}
         activeCardEffect = null;
-        setTimeout(() => advanceToNext(earnedPoints, false), 1200);
+        advanceToNext(earnedPoints, false, true);
         return;
       }
 
@@ -5421,8 +5576,11 @@ function loadStageQuestion(idx) {
     const lockTwoActive = !!(activeCardEffect?.effect?.lockTwoItems);
 
     let placedWords = [];
-    let bankWords = originalItems.map((word, idx) => ({ id: `word_${idx}_${Math.random()}`, text: word, origIdx: idx, locked: false }));
-    bankWords.sort(() => 0.5 - Math.random());
+    let bankWords = shuffleArray(originalItems.map((word, idx) => ({ id: `word_${idx}_${Math.random().toString(36).slice(2, 6)}`, text: word, origIdx: idx, locked: false })));
+    // التأكد من أن الكلمات مبعثرة ومبهدلة بالكامل للتفكير
+    if (bankWords.length > 1 && bankWords.every((w, i) => w.origIdx === i)) {
+      bankWords.reverse();
+    }
 
     // إذا كانت بطاقة "حصانة الترتيب" نشطة: تثبيت أول عنصرين تلقائياً في موقعهما الصحيح
     if (lockTwoActive && originalItems.length >= 2) {
@@ -5537,7 +5695,7 @@ function loadStageQuestion(idx) {
           try { soundFX.correct(); } catch (e) {}
           showToast(`✅ أحسنت! الترتيب صحيح ومتقن تماماً (+${earnedPoints} درجات)`, "fa-circle-check");
           activeCardEffect = null;
-          advanceToNext(earnedPoints, false);
+          advanceToNext(earnedPoints, false, true);
         } else {
           try { soundFX.wrong(); } catch (e) {}
           if (activeCardEffect?.effect?.secondChance) {
@@ -5549,11 +5707,11 @@ function loadStageQuestion(idx) {
           if (hasImmunity) {
             showToast("🛡️ درع الأمان: الترتيب غير صحيح ولكن تم منع أي خصم!", "fa-shield-halved", 3000);
             activeCardEffect = null;
-            advanceToNext(0, false);
+            advanceToNext(0, false, false);
           } else if (penaltyOnWrong > 0) {
             showToast(`❌ ترتيب غير صحيح — المخاطرة الكبرى: خصم ${penaltyOnWrong} درجات!`, "fa-fire-flame-curved", 3000);
             activeCardEffect = null;
-            advanceToNext(-penaltyOnWrong, true);
+            advanceToNext(-penaltyOnWrong, true, false);
           } else {
             showToast("❌ الترتيب غير صحيح، حاول مرة أخرى أو اضغط إعادة الترتيب", "fa-xmark", 3000);
           }
@@ -5563,7 +5721,7 @@ function loadStageQuestion(idx) {
       // قبول فوري للمشرف
       document.getElementById("btnManualAcceptOrdering")?.addEventListener("click", () => {
         activeCardEffect = null;
-        advanceToNext(earnedPoints, false);
+        advanceToNext(earnedPoints, false, true);
       }, { once: true });
     }
 
@@ -5772,9 +5930,31 @@ document.querySelectorAll(".btn-rate-score").forEach(btn => {
 function showTeacherHelpModal(helperName, contestantName, cardTitle = "استشارة المعلم") {
   const modal = document.getElementById("teacherHelpModal");
   const nameEl = document.getElementById("teacherHelpChosenName");
+  const descEl = document.getElementById("teacherHelpDescription");
+  const targetEl = document.getElementById("teacherHelpContestantTarget");
   if (!modal) return;
+
+  const isMe = currentUser && (currentUser.name === helperName);
+  const isSupervisorUser = currentUser && (currentUser.role === "supervisor" || isSupervisor(currentUser.name));
+  const isPresenter = currentUser && currentUser.role === "presenter";
+
   if (nameEl) nameEl.textContent = helperName;
-  try { soundFX.btnClick(); } catch (e) {}
+  if (targetEl) targetEl.innerHTML = `<i class="fa-solid fa-graduation-cap"></i> المتسابق المستفيد: <strong>${escapeHtml(contestantName || "المتسابق")}</strong>`;
+
+  if (descEl) {
+    if (isMe) {
+      descEl.innerHTML = `<span style="color:#16a34a;font-weight:900;font-size:16px;">🌟 أنت المعلم المختار!</span><br>وقع الاختيار عليك لمساعدة الطالب <strong>«${escapeHtml(contestantName)}»</strong> وتوجيهه بالإشارة أو النصيحة المفيدة.`;
+    } else if (isPresenter) {
+      descEl.innerHTML = `تنبيه على شاشة العارض: المعلم <strong>«${escapeHtml(helperName)}»</strong> يتدخل الآن لتقديم الدعم والتوجيه للمتسابق <strong>«${escapeHtml(contestantName)}»</strong>.`;
+    } else if (isSupervisorUser) {
+      descEl.innerHTML = `تنبيه المشرف: تم تفعيل مساعدة المعلم <strong>«${escapeHtml(helperName)}»</strong> للمتسابق <strong>«${escapeHtml(contestantName)}»</strong> مع تمديد الوقت بـ +15 ثانية.`;
+    } else {
+      descEl.innerHTML = `تم اختيار الأستاذ <strong>«${escapeHtml(helperName)}»</strong> عشوائياً لمساعدة المتسابق <strong>«${escapeHtml(contestantName)}»</strong> وتقديم نصيحة توضيحية له.`;
+    }
+  }
+
+  showFloatingCardPill(`👨‍🏫 مساعدة المعلم: ${helperName}`, "fa-chalkboard-user", "gold");
+  try { soundFX.celebrate(); } catch (e) {}
   modal.classList.remove("hidden");
   showToast(`📢 تنبيه بطاقة: تم اختيار الأستاذ (${helperName}) لمساعدة المتسابق (${contestantName})!`, "fa-chalkboard-user", 5000);
 }
@@ -5956,11 +6136,12 @@ function chooseCard(card) {
 
   const eff = card.effect || {};
 
-  // ── تأثيرات فورية (لا تحتاج الانتظار للسؤال) ──
+  // ── تأثيرات فورية وتوليد الشارة العائمة المبهجة ──
 
   // 1. تجميد الوقت: إيقاف العداد لـ N ثانية ثم إعادة تشغيله
   if (eff.freezeTime) {
     clearInterval(liveTimerInterval);
+    showFloatingCardPill(`تجميد المؤقت ${eff.freezeTime}ث ❄️`, "fa-snowflake", "blue");
     showToast(`❄️ تجميد الوقت: العداد متوقف لـ ${eff.freezeTime} ثانية!`, "fa-snowflake", 3000);
     setTimeout(() => {
       // إعادة تشغيل العداد من الوقت المتبقي الحالي
@@ -5973,23 +6154,24 @@ function chooseCard(card) {
     activeCardEffect = card; // تُحفظ لتُطبَّق على السؤال القادم
   }
 
-  // 2. إضافة/إنقاص وقت: تعديل الوقت المتبقي مباشرة
-  if (eff.timeDelta && eff.timeDelta !== 0) {
+  // 2. إضافة/إنقاص وقت: تعديل الوقت المتبقي مباشرة مع شارة عائمة
+  else if (eff.timeDelta && eff.timeDelta !== 0) {
     liveTimeRemaining = Math.max(3, liveTimeRemaining + eff.timeDelta);
     if (stageTimerSeconds) stageTimerSeconds.textContent = liveTimeRemaining;
     const sign = eff.timeDelta > 0 ? "+" : "";
+    showFloatingCardPill(`${sign}${eff.timeDelta} ثانية ⏱️`, eff.timeDelta > 0 ? "fa-hourglass-start" : "fa-bolt", eff.timeDelta > 0 ? "green" : "red");
     showToast(`⏱️ ${sign}${eff.timeDelta} ثانية على الوقت!`, eff.timeDelta > 0 ? "fa-hourglass-start" : "fa-bolt", 2500);
-    activeCardEffect = card; // تُحفظ للاستخدام في الأسئلة القادمة
+    activeCardEffect = card;
   }
 
   // 3. تخطي السؤال: الانتقال مباشرة بدون درجات/خصم
-  if (eff.passQuestion) {
+  else if (eff.passQuestion) {
+    showFloatingCardPill("تخطي السؤال بأمان ⏭️", "fa-forward", "blue");
     showToast("⏭️ تخطي السؤال: انتقال بدون درجات!", "fa-forward", 2500);
     activeCardEffect = null;
     if (typeof tacticalCardsCallback === "function") {
       tacticalCardsCallback = null;
     }
-    // تخطي مباشر بدون استدعاء callback (سننتقل للسؤال التالي)
     const allQ = currentLiveRoom?.drawnQuestions || [];
     const nextIdx = (currentLiveRoom?.currentQuestionIdx || 0) + 1;
     if (nextIdx >= allQ.length) {
@@ -6002,8 +6184,9 @@ function chooseCard(card) {
   }
 
   // 4. نقاط ذهبية فورية: +7 نقاط
-  if (eff.bonus7Points) {
+  else if (eff.bonus7Points) {
     addContestantScore(7);
+    showFloatingCardPill("+7 نقاط ذهبية 💎", "fa-gem", "gold");
     showToast("💎 قلب الموازين: +7 نقاط ذهبية فورية!", "fa-gem", 3000);
     activeCardEffect = null;
     if (tacticalCardsCallback) { const cb = tacticalCardsCallback; tacticalCardsCallback = null; cb(); }
@@ -6011,8 +6194,9 @@ function chooseCard(card) {
   }
 
   // 5. وسام الشرف: +1 نقطة شرف
-  if (eff.honorBadge) {
+  else if (eff.honorBadge) {
     addContestantScore(1);
+    showFloatingCardPill("+1 نقطة شرف 🏅", "fa-award", "gold");
     showToast("🏅 وسام الشرف: +1 نقطة شرف فورية!", "fa-award", 3000);
     activeCardEffect = null;
     if (tacticalCardsCallback) { const cb = tacticalCardsCallback; tacticalCardsCallback = null; cb(); }
@@ -6020,8 +6204,9 @@ function chooseCard(card) {
   }
 
   // 6. إعادة وقت السؤال: يُعيد ضبط العداد من البداية
-  if (eff.resetQuestionTimer) {
+  else if (eff.resetQuestionTimer) {
     const timeLimit = currentLiveRoom?.questionTimer || 30;
+    showFloatingCardPill(`إعادة شحن المؤقت 🔋`, "fa-battery-full", "green");
     showToast("🔋 طاقة العزيمة: تمت إعادة ضبط وقت السؤال!", "fa-battery-full", 3000);
     activeCardEffect = null;
     startQuestionTimer(timeLimit, () => {
@@ -6032,17 +6217,17 @@ function chooseCard(card) {
     return;
   }
 
-  // 7. نصف الوقت + نقاط مكافأة (مخاطرة ذكية) — halfTime
-  if (eff.halfTime) {
+  // 7. نصف الوقت + نقاط مكافأة (مخاطرة ذكية)
+  else if (eff.halfTime) {
     liveTimeRemaining = Math.max(5, Math.floor(liveTimeRemaining / 2));
     if (stageTimerSeconds) stageTimerSeconds.textContent = liveTimeRemaining;
+    showFloatingCardPill(`نصف الوقت مضاعف النقاط ⚡`, "fa-medal", "gold");
     showToast(`⚡ تحدي الفارس: الوقت نُصِّف! لكن الإجابة الصحيحة +${eff.pointsBonus||3} نقاط إضافية`, "fa-medal", 3500);
-    // تُحفظ للاستخدام في نتيجة السؤال الحالي
     activeCardEffect = card;
   }
 
-  // 8. استشارة المعلم أو مساعدة الزميل: اختيار معلم أو مشرف عشوائياً وتنبيهه مع +15 ثانية
-  if (eff.teacherHelp || eff.peerHelp || eff.adaptiveQuestion) {
+  // 8. استشارة المعلم أو مساعدة الزميل: اختيار معلم عشوائياً وتنبيهه
+  else if (eff.teacherHelp || eff.peerHelp || eff.adaptiveQuestion) {
     liveTimeRemaining += 15;
     if (stageTimerSeconds) stageTimerSeconds.textContent = liveTimeRemaining;
 
@@ -6054,7 +6239,7 @@ function chooseCard(card) {
     const fallbackTeachers = participantsCache.filter(p => p.role === "teacher" || p.role === "supervisor" || isSupervisor(p.name)).map(t => t.name);
     const pool = teacherCandidates.length > 0 ? teacherCandidates : (fallbackTeachers.length > 0 ? fallbackTeachers : [MASTER_SUPERVISOR_NAME]);
     const chosenHelper = pool[Math.floor(Math.random() * pool.length)];
-    const studentName = currentContestant ? currentContestant.name : "المتسابق";
+    const studentName = currentContestant ? currentContestant.name : (currentUser ? currentUser.name : "المتسابق");
 
     showTeacherHelpModal(chosenHelper, studentName, card.title);
 
@@ -6069,11 +6254,13 @@ function chooseCard(card) {
         lastUpdated: serverTimestamp()
       }).catch(() => {});
     }
+    card.helperName = chosenHelper;
     activeCardEffect = card;
   }
 
   // 9. استبدال السؤال الحالي (Swap Question)
-  if (eff.swapQuestion) {
+  else if (eff.swapQuestion) {
+    showFloatingCardPill("استبدال السؤال بسؤال بديل 🔄", "fa-arrows-rotate", "blue");
     const allQuizQuestions = [];
     (currentQuizData?.sections || []).forEach(s => {
       (s.questions || []).forEach(q => allQuizQuestions.push({ ...q, sectionName: s.sectionName }));
@@ -6094,26 +6281,50 @@ function chooseCard(card) {
   }
 
   // 10. رصيد وقت بنكي إضافي (+15 ثانية)
-  if (eff.totalBankTime) {
+  else if (eff.totalBankTime) {
     liveTimeRemaining += eff.totalBankTime;
     if (stageTimerSeconds) stageTimerSeconds.textContent = liveTimeRemaining;
+    showFloatingCardPill(`+${eff.totalBankTime} ثانية بنكية ⏳`, "fa-clock-rotate-left", "green");
     showToast(`⏱️ التأني والسلامة: +${eff.totalBankTime} ثانية إضافية للوقت!`, "fa-clock-rotate-left", 3000);
   }
 
   // 11. تعزيز مركز الشرف (+5 نقاط فورية في لوحة الشرف)
-  if (eff.rankBoost) {
+  else if (eff.rankBoost) {
     if (currentContestant) {
       recordHonorScore(currentContestant.name, 5);
+      showFloatingCardPill("+5 نقاط شرف فورية 🚀", "fa-arrow-up-right-dots", "gold");
       showToast("🚀 مضاعف الشرف: +5 نقاط شرف فورية للمتسابق!", "fa-arrow-up-right-dots", 3000);
     }
   }
 
-  // 12. باقي التأثيرات المؤجلة (تؤثر على السؤال القادم/الحالي):
-  // immunity, doublePoints, eliminateOptions, penaltyOnWrong, speedBonusUnder5s,
-  // minRating, noTimeLimit, secondChance, lockTwoItems, autoMatchOne, hint, zoomScript,
-  // coloredHarakat, showRuleHint, forgivingTajweed, finaleBonus
-  if (!eff.freezeTime && !eff.timeDelta && !eff.halfTime) {
+  // 12. باقي التأثيرات المؤجلة: الشارات العائمة حسب النوع
+  else {
     activeCardEffect = card;
+    if (eff.eliminateOptions) {
+      showFloatingCardPill(`حذف خيارات خاطئة 🎯`, "fa-filter", "blue");
+    } else if (eff.doublePoints) {
+      showFloatingCardPill(`مضاعفة النقاط x2 ⭐`, "fa-angles-up", "gold");
+    } else if (eff.immunity) {
+      showFloatingCardPill(`درع الحماية مفعّل 🛡️`, "fa-shield-halved", "blue");
+    } else if (eff.secondChance) {
+      showFloatingCardPill(`فرصة ثانية عند الخطأ 🔁`, "fa-rotate-right", "green");
+    } else if (eff.coloredHarakat) {
+      showFloatingCardPill(`ألوان الترتيل والتجويد 🎨`, "fa-palette", "gold");
+    } else if (eff.showRuleHint || eff.hint) {
+      showFloatingCardPill(`تلميح مضيء للقاعدة 💡`, "fa-lightbulb", "gold");
+    } else if (eff.forgivingTajweed) {
+      showFloatingCardPill(`رخصة التيسير والتجاوز ✨`, "fa-heart", "green");
+    } else if (eff.zoomScript) {
+      showFloatingCardPill(`تكبير الخط القرآني 🔍`, "fa-magnifying-glass-plus", "blue");
+    } else if (eff.lockTwoItems) {
+      showFloatingCardPill(`حصانة تثبيت عنصرين 🔒`, "fa-lock", "gold");
+    } else if (eff.autoMatchOne) {
+      showFloatingCardPill(`توصيل الحكمة التلقائي ⚡`, "fa-link", "green");
+    } else if (eff.speedBonusUnder5s) {
+      showFloatingCardPill(`مكافأة السرعة الخارقة ⚡`, "fa-forward-fast", "gold");
+    } else {
+      showFloatingCardPill(`تفعيل «${card.title}» ✨`, card.icon || "fa-bolt", card.type === 'buff' ? "green" : "gold");
+    }
   }
 
   showToast(`✨ تم تفعيل بطاقة: «${card.title}»!`, card.icon, 3000);
@@ -6249,7 +6460,14 @@ function showHonorBoardModal(openNextStudentAfter = false, onDone = null, highli
     }).join("");
   }
 
+  const honorBoxEl = honorBoardModal.querySelector(".honor-box") || honorBoardModal.querySelector(".duo-modal-box");
+  if (honorBoxEl) {
+    honorBoxEl.classList.remove("honor-board-exit");
+    honorBoxEl.classList.add("honor-board-entrance");
+  }
+
   honorBoardModal.classList.remove("hidden");
+  try { soundFX.celebrate(); } catch (e) {}
 
   let secLeft = 3;
   if (honorCountdownSec) honorCountdownSec.textContent = secLeft;
@@ -6259,12 +6477,19 @@ function showHonorBoardModal(openNextStudentAfter = false, onDone = null, highli
     if (honorCountdownSec) honorCountdownSec.textContent = secLeft;
     if (secLeft <= 0) {
       clearInterval(hInt);
-      honorBoardModal.classList.add("hidden");
-      if (typeof onDone === 'function') {
-        onDone();
-      } else if (openNextStudentAfter) {
-        openPickStudentModal();
+      if (honorBoxEl) {
+        honorBoxEl.classList.remove("honor-board-entrance");
+        honorBoxEl.classList.add("honor-board-exit");
       }
+      setTimeout(() => {
+        honorBoardModal.classList.add("hidden");
+        if (honorBoxEl) honorBoxEl.classList.remove("honor-board-exit");
+        if (typeof onDone === 'function') {
+          onDone();
+        } else if (openNextStudentAfter) {
+          openPickStudentModal();
+        }
+      }, 350);
     }
   }, 1000);
 }
@@ -6510,8 +6735,24 @@ function startStudentPractice(quiz) {
 
   function renderPracticeSection(secIdx) {
     if (secIdx >= quiz.sections.length) {
-      if (currentUser && earnedScore > 0) {
-        recordHonorScore(currentUser.name, earnedScore);
+      const shouldCountHonor = quiz.enableHonorPoints !== false;
+      let pointsToAward = 0;
+      let honorMessage = "";
+
+      if (shouldCountHonor) {
+        if (quiz.honorPointsMode === "fixed") {
+          pointsToAward = quiz.honorBonusPoints || 20;
+          honorMessage = `تم منح مكافأة إكمال الاختبار: <strong>${pointsToAward} نقطة</strong> في لوحة الشرف والرصيد السحابي!`;
+        } else {
+          pointsToAward = earnedScore;
+          honorMessage = `تم احتساب وحفظ <strong>${pointsToAward} نقطة</strong> (الدرجات الفعلية) في رصيدك السحابي وفي لوحة الشرف بنجاح!`;
+        }
+      } else {
+        honorMessage = `هذا الاختبار مخصص للتدريب الذاتي فقط دون احتساب نقاط في لوحة الشرف بناءً على إعدادات المشرف.`;
+      }
+
+      if (currentUser && pointsToAward > 0) {
+        recordHonorScore(currentUser.name, pointsToAward);
         if (!Array.isArray(currentUser.completedQuizzes)) {
           currentUser.completedQuizzes = [];
         }
@@ -6527,9 +6768,9 @@ function startStudentPractice(quiz) {
           <i class="fa-solid fa-circle-check" style="font-size: 60px; color: var(--duo-green); margin-bottom: 15px;"></i>
           <h2>أحسنت صنعاً وبوركت جهودك!</h2>
           <p style="color: #64748b; margin-top: 8px;">أتممت هذا الاختبار التدريبي بنجاح تام.</p>
-          <div style="margin: 20px 0; padding: 15px; background: #f0fdf4; border: 1.5px solid #86efac; border-radius: 12px; color: #166534; font-weight: 700; font-size: 16px;">
+          <div style="margin: 20px 0; padding: 15px; background: ${shouldCountHonor ? '#f0fdf4' : '#f8fafc'}; border: 1.5px solid ${shouldCountHonor ? '#86efac' : '#cbd5e1'}; border-radius: 12px; color: ${shouldCountHonor ? '#166534' : '#475569'}; font-weight: 700; font-size: 15.5px;">
             <i class="fa-solid fa-trophy" style="color: #eab308; margin-left: 6px;"></i>
-            تم احتساب وحفظ <strong>${earnedScore} نقطة</strong> في رصيدك السحابي وفي لوحة الشرف بنجاح!
+            ${honorMessage}
           </div>
           <button class="btn-duo-green" style="margin-top: 10px;" onclick="document.getElementById('practiceRunnerModal').classList.add('hidden')">
             إنهاء ومتابعة
@@ -6542,10 +6783,22 @@ function startStudentPractice(quiz) {
     const sec = quiz.sections[secIdx];
     runnerContent.innerHTML = `
       <div class="practice-sec-box">
-        <h3 style="font-size: 18px; margin-bottom: 15px; color: var(--duo-green-dark);">
-          <i class="fa-solid fa-bookmark"></i> ${sec.sectionName}
-        </h3>
-        ${sec.questions.map((q, idx) => `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;flex-wrap:wrap;gap:10px;">
+          <h3 style="font-size: 18px; margin: 0; color: var(--duo-green-dark);">
+            <i class="fa-solid fa-bookmark"></i> ${sec.sectionName}
+          </h3>
+          <button type="button" class="btn-duo-outline btn-sm btn-practice-trigger-card">
+            <i class="fa-solid fa-bolt" style="color:#eab308;"></i> سحب بطاقة تكتيكية ذكية
+          </button>
+        </div>
+        ${sec.questions.map((q, idx) => {
+          const rawPairs = (q.pairs || []).map(p => {
+            if (Array.isArray(p)) return [p[0] || "", p[1] || ""];
+            if (p && typeof p === "object") return [p.left || p.first || "", p.right || p.second || ""];
+            return ["", ""];
+          }).filter(p => p[0] || p[1]);
+
+          return `
           <div style="background: #f8fafc; border: 1.5px solid var(--border-duo); border-radius: var(--radius-md); padding: 18px; margin-bottom: 15px;">
             <p class="font-${q.font || 'quran'}" style="margin-bottom: 12px; font-weight: 700;">${idx + 1}. ${q.text}</p>
             ${q.type === 'mcq' && q.options && q.options.length > 0 ? `
@@ -6554,7 +6807,7 @@ function startStudentPractice(quiz) {
                   <button class="btn-choice-duo btn-practice-mcq font-${q.font || 'quran'}" data-q="${idx}" data-choice="${oIdx}">${opt}</button>
                 `).join("")}
               </div>
-            ` : q.type === 'matching' && q.pairs && q.pairs.length > 0 ? `
+            ` : q.type === 'matching' && rawPairs.length > 0 ? `
               <div class="practice-matching-area" id="pracMatchArea_${secIdx}_${idx}">
                 <p style="font-size: 13px; color: #475569; font-weight: 800; margin-bottom: 10px;">
                   <i class="fa-solid fa-arrows-split-up-and-left"></i> اضغط على عنصر من الطرف (أ) ثم على ما يطابقه من الطرف (ب):
@@ -6562,20 +6815,18 @@ function startStudentPractice(quiz) {
                 <div class="matching-play-grid">
                   <div class="matching-items-column">
                     <div class="matching-col-header"><i class="fa-solid fa-align-right"></i> الطرف (أ):</div>
-                    ${q.pairs.map((p, pIdx) => `
+                    ${rawPairs.map((p, pIdx) => `
                       <div class="matching-tile font-${q.font || 'quran'} prac-tile-a" data-sec="${secIdx}" data-q="${idx}" data-pair="${pIdx}">
                         ${p[0]}
                       </div>
                     `).join("")}
                   </div>
                   <div class="matching-items-column">
-                    <div class="matching-col-header"><i class="fa-solid fa-align-left"></i> الطرف (ب):</div>
-                    ${[...q.pairs].map((p, origIdx) => ({ text: p[1], origIdx }))
-                      .sort(() => 0.5 - Math.random())
-                      .map(pObj => `
-                        <div class="matching-tile font-${q.font || 'quran'} prac-tile-b" data-sec="${secIdx}" data-q="${idx}" data-pair="${pObj.origIdx}">
-                          ${pObj.text}
-                        </div>
+                    <div class="matching-col-header"><i class="fa-solid fa-align-left"></i> الطرف (ب) [مبعثر]:</div>
+                    ${shuffleArray(rawPairs.map((p, origIdx) => ({ text: p[1], origIdx }))).map(pObj => `
+                      <div class="matching-tile font-${q.font || 'quran'} prac-tile-b" data-sec="${secIdx}" data-q="${idx}" data-pair="${pObj.origIdx}">
+                        ${pObj.text}
+                      </div>
                     `).join("")}
                   </div>
                 </div>
@@ -6584,8 +6835,10 @@ function startStudentPractice(quiz) {
                 const targetItems = Array.isArray(q.items) && q.items.length > 0 
                   ? [...q.items] 
                   : (q.targetSentence ? q.targetSentence.split(/\s+/).filter(Boolean) : ["كلمة 1", "كلمة 2"]);
-                const scrambled = targetItems.map((w, wIdx) => ({ text: w, origIdx: wIdx, id: `pw_${secIdx}_${idx}_${wIdx}` }))
-                  .sort(() => 0.5 - Math.random());
+                const scrambled = shuffleArray(targetItems.map((w, wIdx) => ({ text: w, origIdx: wIdx, id: `pw_${secIdx}_${idx}_${wIdx}` })));
+                if (scrambled.length > 1 && scrambled.every((w, i) => w.origIdx === i)) {
+                  scrambled.reverse();
+                }
                 return `
                   <div class="practice-ordering-area ordering-play-area" id="pracOrderArea_${secIdx}_${idx}">
                     <p style="font-size: 13px; color: #475569; font-weight: 800; margin-bottom: 8px;">
@@ -6626,13 +6879,20 @@ function startStudentPractice(quiz) {
               </div>
             ` : ``}
           </div>
-        `).join("")}
+        `}).join("")}
 
         <button id="btnNextPracticeSection" class="btn-duo-green" style="margin-top: 15px;">
           ${secIdx + 1 === quiz.sections.length ? 'إكمال الاختبار' : 'الانتقال للقسم التالي'}
         </button>
       </div>
     `;
+
+    // تفعيل زر البطاقات التكتيكية في التدريب
+    runnerContent.querySelector(".btn-practice-trigger-card")?.addEventListener("click", () => {
+      triggerTacticalCardsModal(() => {
+        showToast("✨ تم تطبيق ميزة البطاقة في تدريبك الحالي بنجاح!", "fa-bolt");
+      });
+    });
 
     // 1. تفعيل خيارات MCQ في التدريب
     runnerContent.querySelectorAll(".btn-practice-mcq").forEach(b => {
