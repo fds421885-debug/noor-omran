@@ -17,7 +17,9 @@ import {
   query, 
   orderBy, 
   serverTimestamp,
-  onSnapshot
+  onSnapshot,
+  arrayUnion,
+  arrayRemove
 } from "./firebase-config.js";
 
 import { soundFX } from "./audio-fx.js";
@@ -214,6 +216,10 @@ const arenaStage = document.getElementById("arenaStage");
 const arenaCurrentLeaderName = document.getElementById("arenaCurrentLeaderName");
 const arenaConnectedUsersList = document.getElementById("arenaConnectedUsersList");
 const btnStartLiveContest = document.getElementById("btnStartLiveContest");
+const arenaConnectedCount = document.getElementById("arenaConnectedCount");
+const arenaLobbyUsersCount = document.getElementById("arenaLobbyUsersCount");
+const arenaLobbyWaitingForLeader = document.getElementById("arenaLobbyWaitingForLeader");
+const arenaWaitingLeaderName = document.getElementById("arenaWaitingLeaderName");
 
 // أدوات المسرح
 const stageStudentName = document.getElementById("stageStudentName");
@@ -262,6 +268,8 @@ let gradesCache = [];
 let quizzesCache = [];
 let activeRooms = [];
 let currentLiveRoom = null;
+let currentRoomUnsubscribe = null;
+let lastKnownUsersList = [];
 let liveTimerInterval = null;
 let liveTimeRemaining = 30;
 let roomTeachersRatings = {};
@@ -1039,19 +1047,149 @@ function setupRealtimeCloudListeners() {
   }
 }
 
+// --------------------------------------------------------
+// مستمع غرفة المسابقة الحية اللحظي المباشر (Dedicated Room Document Listener)
+// --------------------------------------------------------
+function listenToActiveRoom(roomId) {
+  if (currentRoomUnsubscribe) {
+    currentRoomUnsubscribe();
+    currentRoomUnsubscribe = null;
+  }
+
+  const roomRef = doc(db, "live_rooms", roomId);
+  currentRoomUnsubscribe = onSnapshot(roomRef, (docSnap) => {
+    if (!docSnap.exists()) {
+      const wasInArena = views.liveArena && !views.liveArena.classList.contains("hidden");
+      currentLiveRoom = null;
+      currentContestant = null;
+      localStorage.removeItem("nour_saved_room_id");
+      clearInterval(liveTimerInterval);
+      clearInterval(cardsTimerInterval);
+      stopOfflineCountdown();
+
+      if (currentRoomUnsubscribe) {
+        currentRoomUnsubscribe();
+        currentRoomUnsubscribe = null;
+      }
+
+      if (wasInArena) {
+        showView(currentUser ? (currentUser.role === 'student' ? "student" : "supervisor") : "hero");
+        showToast("قام المشرف بإغلاق الغرفة أو إنهاء المسابقة نهائياً", "fa-door-closed");
+      }
+      return;
+    }
+
+    const roomData = { id: docSnap.id, ...docSnap.data() };
+    const prevUsers = Array.isArray(lastKnownUsersList) ? [...lastKnownUsersList] : [];
+    const newUsers = Array.isArray(roomData.users) ? roomData.users : [];
+    lastKnownUsersList = [...newUsers];
+
+    // رصد وتنبيه فوري عند انضمام أي متسابق أو معلم جديد على الهواء مباشرة
+    if (prevUsers.length > 0 && newUsers.length > prevUsers.length) {
+      const joinedUsers = newUsers.filter(u => !prevUsers.includes(u));
+      joinedUsers.forEach(u => {
+        if (!currentUser || u !== currentUser.name) {
+          showToast(`🟢 انضم «${u}» إلى الغرفة الآن!`, "fa-user-plus");
+          showRealtimeSyncPill(`⚡ انضم متسابق جديد للغرفة: ${u}`);
+        }
+      });
+    }
+
+    // رصد مغادرة أي عضو
+    if (prevUsers.length > newUsers.length) {
+      const leftUsers = prevUsers.filter(u => !newUsers.includes(u));
+      leftUsers.forEach(u => {
+        if (!currentUser || u !== currentUser.name) {
+          showToast(`🚪 غادر «${u}» الغرفة`, "fa-user-minus");
+        }
+      });
+    }
+
+    currentLiveRoom = roomData;
+    updateArenaUIRealtime(roomData);
+  }, (err) => {
+    console.warn("Active room snapshot notice:", err);
+  });
+}
+
 // تحديث واجهة المسرح الحي عند وصول تحديث سحابي من Firestore
 function updateArenaUIRealtime(room) {
   if (!room) return;
   if (arenaRoomTitle) arenaRoomTitle.textContent = room.name;
+  if (arenaRoomCode) arenaRoomCode.textContent = `#${room.id}`;
   if (arenaCurrentLeaderName) arenaCurrentLeaderName.textContent = room.leaderName || MASTER_SUPERVISOR_NAME;
-  if (arenaConnectedUsersList && Array.isArray(room.users)) {
-    arenaConnectedUsersList.innerHTML = room.users.map(u => `
-      <div class="user-tag-lobby">
-        <i class="fa-solid fa-circle-user" style="color: var(--duo-blue);"></i>
-        <span>${u}</span>
-        ${u === room.leaderName ? '<i class="fa-solid fa-crown" style="color: #ca8a04; margin-right: auto;" title="مشرف الغرفة"></i>' : ''}
-      </div>
-    `).join("");
+
+  const usersList = Array.isArray(room.users) ? room.users : [];
+  if (arenaConnectedCount) arenaConnectedCount.textContent = usersList.length;
+  if (arenaLobbyUsersCount) arenaLobbyUsersCount.textContent = usersList.length;
+
+  // تحديد صفة المستخدم ودوره الحالي بدقة
+  const isLead = currentUser && (
+    currentUser.name === room.leaderName || 
+    isSupervisor(currentUser.name)
+  );
+
+  if (arenaUserRolePill) {
+    if (isLead) {
+      arenaUserRolePill.textContent = "مشرف الغرفة المعتمد";
+      arenaUserRolePill.className = "role-pill-live";
+    } else if (currentUser?.role === 'presenter') {
+      arenaUserRolePill.textContent = "العارض (شاشة العرض)";
+      arenaUserRolePill.className = "role-pill-live";
+    } else if (currentUser?.role === 'student') {
+      arenaUserRolePill.textContent = "طالب متسابق";
+      arenaUserRolePill.className = "role-pill-live";
+    } else {
+      arenaUserRolePill.textContent = "لجنة المعلمين والتحكيم";
+      arenaUserRolePill.className = "role-pill-live";
+    }
+  }
+
+  // التحكم في ظهور زر بدء المسابقة للقائد فقط مقابل رسالة الانتظار للآخرين
+  if (btnStartLiveContest && arenaLobbyWaitingForLeader) {
+    if (isLead) {
+      btnStartLiveContest.classList.remove("hidden");
+      arenaLobbyWaitingForLeader.classList.add("hidden");
+    } else {
+      btnStartLiveContest.classList.add("hidden");
+      arenaLobbyWaitingForLeader.classList.remove("hidden");
+      if (arenaWaitingLeaderName) {
+        arenaWaitingLeaderName.textContent = room.leaderName || MASTER_SUPERVISOR_NAME;
+      }
+    }
+  }
+
+  // ملء قائمة المتواجدين في اللوبي مع الشارات والأسماء
+  if (arenaConnectedUsersList) {
+    arenaConnectedUsersList.innerHTML = usersList.map(u => {
+      const isCurrent = currentUser && currentUser.name === u;
+      const isRoomLead = u === room.leaderName || isSupervisor(u);
+      const participant = participantsCache.find(p => p.name === u || p.normalizedName === normalizeArabic(u));
+      let roleLabel = "عضو";
+      let roleClass = "teacher";
+      if (isRoomLead) {
+        roleLabel = "مشرف";
+        roleClass = "supervisor";
+      } else if (participant?.role === "student") {
+        roleLabel = "طالب";
+        roleClass = "student";
+      } else if (participant?.role === "presenter") {
+        roleLabel = "عارض";
+        roleClass = "presenter";
+      } else if (participant?.role === "teacher") {
+        roleLabel = "معلم";
+        roleClass = "teacher";
+      }
+
+      return `
+        <div class="user-tag-lobby ${isCurrent ? 'is-me' : ''}">
+          <i class="fa-solid fa-circle-user" style="color: ${isCurrent ? '#16a34a' : 'var(--duo-blue)'};"></i>
+          <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${u} ${isCurrent ? '<small style="color: #16a34a; font-weight: 800;">(أنت)</small>' : ''}</span>
+          ${isRoomLead ? '<i class="fa-solid fa-crown" style="color: #ca8a04; margin-right: 4px;" title="مشرف الغرفة"></i>' : ''}
+          <span class="user-role-badge-small ${roleClass}">${roleLabel}</span>
+        </div>
+      `;
+    }).join("");
   }
 
   // ── تغيير المرحلة بناءً على بيانات Firestore ──
@@ -1065,7 +1203,10 @@ function updateArenaUIRealtime(room) {
   if (!isInArena) return;
 
   const phase = room.phase;
-  if (!phase || phase === "lobby") return; // Lobby يُعرض عند الدخول
+  if (!phase || phase === "lobby") {
+    showArenaPhase("lobby");
+    return; // Lobby يُعرض عند الدخول
+  }
 
   // إذا كان المستخدم قائد الغرفة أو مشرفاً، لا نفرض عليه واجهة الانتظار — هو يتحكم بالمسابقة
   if (isController) return;
@@ -3611,61 +3752,87 @@ function renderLiveRoomsList() {
   });
 }
 
-function joinLiveRoom(room) {
-  currentLiveRoom = room;
+async function joinLiveRoom(room) {
+  if (!room || !room.id) return;
+  const roomId = room.id;
 
-  // قانون قيادة الغرفة: أول معلم ينضم يكون مشرفاً، وتنتقل القيادة فوراً للمشرف العام محمد منتصر محمد يونس عند دخوله
+  // إيقاف أي مستمع سابق للغرفة السابقة لتفادي تكرار الاستماع
+  if (currentRoomUnsubscribe) {
+    currentRoomUnsubscribe();
+    currentRoomUnsubscribe = null;
+  }
+
+  // 1. جلب أحدث نسخة فورية للغرفة من سحابة Firestore لتجنب استبدال أي بيانات قديمة
+  let freshRoom = { ...room };
+  try {
+    const roomRef = doc(db, "live_rooms", roomId);
+    const snap = await getDoc(roomRef);
+    if (snap.exists()) {
+      freshRoom = { id: snap.id, ...snap.data() };
+    }
+  } catch (err) {
+    console.warn("Direct room fetch notice:", err);
+  }
+
+  currentLiveRoom = freshRoom;
+  if (!Array.isArray(freshRoom.users)) freshRoom.users = [];
+
+  // 2. تحديث قائمة المستخدمين وقائد الغرفة سحابياً بشكل ذري وآمن
   if (currentUser) {
-    let changed = false;
-    if (!Array.isArray(room.users)) {
-      room.users = [];
-    }
-    if (!room.users.includes(currentUser.name)) {
-      room.users.push(currentUser.name);
-      changed = true;
-    }
+    const userName = currentUser.name;
+    const isMasterSup = isSupervisor(userName);
+    const needLeaderTransfer = isMasterSup && freshRoom.leaderName !== userName;
 
-    if (isSupervisor(currentUser.name) && room.leaderName !== currentUser.name) {
-      room.leaderName = currentUser.name;
-      changed = true;
-    } else if (!room.leaderName) {
-      room.leaderName = currentUser.name;
-      changed = true;
-    }
-    if (changed) {
-      saveRooms(room); // حفظ ومزامنة الغرفة سحابياً عند حدوث تعديل فقط
+    try {
+      const roomRef = doc(db, "live_rooms", roomId);
+      const updatePayload = {
+        users: arrayUnion(userName),
+        lastUpdated: serverTimestamp()
+      };
+      if (needLeaderTransfer) {
+        updatePayload.leaderName = userName;
+        freshRoom.leaderName = userName;
+      } else if (!freshRoom.leaderName) {
+        updatePayload.leaderName = userName;
+        freshRoom.leaderName = userName;
+      }
+
+      await updateDoc(roomRef, updatePayload);
+
+      if (!freshRoom.users.includes(userName)) {
+        freshRoom.users.push(userName);
+      }
+    } catch (e) {
+      console.warn("Realtime room join update notice:", e);
+      if (!freshRoom.users.includes(userName)) {
+        freshRoom.users.push(userName);
+      }
+      if (needLeaderTransfer || !freshRoom.leaderName) {
+        freshRoom.leaderName = userName;
+      }
+      await syncRoomToCloud(freshRoom);
     }
   }
 
-  arenaRoomTitle.textContent = room.name;
-  arenaRoomCode.textContent = `#${room.id}`;
-  arenaCurrentLeaderName.textContent = room.leaderName || MASTER_SUPERVISOR_NAME;
-
-  if (arenaUserRolePill) {
-    const isLead = currentUser && (currentUser.name === room.leaderName || isSupervisor(currentUser.name));
-    arenaUserRolePill.textContent = isLead ? "مشرف الغرفة المعتمد" : (currentUser?.role === 'presenter' ? "العارض" : "لجنة المعلمين");
+  // 3. تحديث الكاش المحلي
+  const roomIdx = activeRooms.findIndex(r => r.id === roomId);
+  if (roomIdx >= 0) {
+    activeRooms[roomIdx] = { ...activeRooms[roomIdx], ...freshRoom };
+  } else {
+    activeRooms.unshift(freshRoom);
   }
 
-  // ملء قائمة المتواجدين في اللوبي
-  if (arenaConnectedUsersList) {
-    arenaConnectedUsersList.innerHTML = room.users.map(u => `
-      <div class="user-tag-lobby">
-        <i class="fa-solid fa-circle-user" style="color: var(--duo-blue);"></i>
-        <span>${u}</span>
-        ${u === room.leaderName ? '<i class="fa-solid fa-crown" style="color: #ca8a04; margin-right: auto;" title="مشرف الغرفة"></i>' : ''}
-      </div>
-    `).join("");
-  }
-
-  arenaLobby.classList.remove("hidden");
-  arenaStage.classList.add("hidden");
-
-  // حفظ الغرفة الحالية لضمان البقاء داخلها عند تحديث الصفحة
-  localStorage.setItem("nour_saved_room_id", room.id);
+  // 4. حفظ الجلسة محلياً لضمان البقاء في الغرفة عند تحديث الصفحة
+  localStorage.setItem("nour_saved_room_id", roomId);
   localStorage.setItem("nour_saved_view", "liveArena");
   hideLiveBroadcastBanner();
 
+  // 5. تحديث واجهة المسرح الحي فورياً
+  updateArenaUIRealtime(freshRoom);
   showView("liveArena");
+
+  // 6. تشغيل مستمع الغرفة المباشر الحصري
+  listenToActiveRoom(roomId);
 }
 
 // --------------------------------------------------------
@@ -3714,6 +3881,10 @@ btnExitArena?.addEventListener("click", async () => {
 
       if (keepRoomActive) {
         // إبقاء الغرفة مفتوحة في Firestore والعودة للوحة التحكم
+        if (currentRoomUnsubscribe) {
+          currentRoomUnsubscribe();
+          currentRoomUnsubscribe = null;
+        }
         clearInterval(liveTimerInterval);
         clearInterval(cardsTimerInterval);
         stopOfflineCountdown();
@@ -3743,8 +3914,20 @@ btnExitArena?.addEventListener("click", async () => {
 
     if (confirmed) {
       if (currentLiveRoom && currentUser) {
-        currentLiveRoom.users = currentLiveRoom.users.filter(u => u !== currentUser.name);
-        await saveRooms(currentLiveRoom);
+        try {
+          const roomRef = doc(db, "live_rooms", currentLiveRoom.id);
+          await updateDoc(roomRef, {
+            users: arrayRemove(currentUser.name),
+            lastUpdated: serverTimestamp()
+          });
+        } catch (e) {
+          currentLiveRoom.users = (currentLiveRoom.users || []).filter(u => u !== currentUser.name);
+          await saveRooms(currentLiveRoom);
+        }
+      }
+      if (currentRoomUnsubscribe) {
+        currentRoomUnsubscribe();
+        currentRoomUnsubscribe = null;
       }
       clearInterval(liveTimerInterval);
       clearInterval(cardsTimerInterval);
@@ -3770,10 +3953,23 @@ btnHandoverAndExit?.addEventListener("click", async () => {
   // تسليم القيادة
   currentLiveRoom.leaderName = newLeader;
   if (currentUser) {
-    currentLiveRoom.users = currentLiveRoom.users.filter(u => u !== currentUser.name);
+    try {
+      const roomRef = doc(db, "live_rooms", currentLiveRoom.id);
+      await updateDoc(roomRef, {
+        leaderName: newLeader,
+        users: arrayRemove(currentUser.name),
+        lastUpdated: serverTimestamp()
+      });
+    } catch (e) {
+      currentLiveRoom.users = (currentLiveRoom.users || []).filter(u => u !== currentUser.name);
+      await saveRooms(currentLiveRoom);
+    }
   }
 
-  await saveRooms(currentLiveRoom);
+  if (currentRoomUnsubscribe) {
+    currentRoomUnsubscribe();
+    currentRoomUnsubscribe = null;
+  }
 
   leaderExitModal?.classList.add("hidden");
   clearInterval(liveTimerInterval);
@@ -3809,6 +4005,10 @@ btnTerminateContestForAll?.addEventListener("click", async () => {
 });
 
 async function executeRoomTermination(roomId) {
+  if (currentRoomUnsubscribe) {
+    currentRoomUnsubscribe();
+    currentRoomUnsubscribe = null;
+  }
   activeRooms = activeRooms.filter(r => r.id !== roomId);
   localStorage.removeItem("nour_live_rooms");
   localStorage.removeItem("nour_saved_room_id");

@@ -583,6 +583,10 @@
           </div>
 
           <div class="arena-role-status">
+            <div class="arena-connected-counter-badge" id="arenaConnectedBadge" title="المتواجدون حالياً في الغرفة">
+              <i class="fa-solid fa-users" style="color: var(--duo-blue);"></i>
+              <span>المتواجدون: <strong id="arenaConnectedCount">1</strong></span>
+            </div>
             <span class="role-pill-live" id="arenaUserRolePill">مشرف الغرفة</span>
             <button id="btnExitArena" class="btn-duo-outline btn-sm" style="border-color: #ff4b4b; color: #ff4b4b;">
               <i class="fa-solid fa-person-walking-arrow-right"></i> مغادرة الغرفة
@@ -622,14 +626,23 @@
             <span class="leader-rule-hint">(أول معلم ينضم يكون مشرفاً، وتنتقل القيادة فوراً للمشرف العام محمد منتصر محمد يونس عند دخوله)</span>
           </div>
 
+          <div class="lobby-users-header">
+            <h4><i class="fa-solid fa-users"></i> المتواجدون حالياً في الغرفة (<span id="arenaLobbyUsersCount">1</span>):</h4>
+            <span class="live-realtime-indicator"><span class="pulse-dot-green"></span> تحديث فوري مباشر</span>
+          </div>
+
           <div class="connected-users-grid" id="arenaConnectedUsersList">
-            <!-- قائمة المعلمين المتصلين -->
+            <!-- قائمة المعلمين والطلاب المتصلين -->
           </div>
 
           <div class="lobby-action-box">
             <button id="btnStartLiveContest" class="btn-duo-green btn-lg">
               <i class="fa-solid fa-play"></i> بدء المسابقة الآن
             </button>
+            <div id="arenaLobbyWaitingForLeader" class="lobby-waiting-box hidden">
+              <i class="fa-solid fa-hourglass-half fa-spin" style="color: #ca8a04;"></i>
+              <span>في انتظار بدء المسابقة من مشرف الغرفة (<strong id="arenaWaitingLeaderName">...</strong>)</span>
+            </div>
           </div>
         </div>
 

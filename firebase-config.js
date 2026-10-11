@@ -13,7 +13,9 @@ import {
   query, 
   orderBy, 
   serverTimestamp,
-  onSnapshot 
+  onSnapshot,
+  arrayUnion,
+  arrayRemove 
 } from "firebase/firestore";
 import { firebaseAppletConfig } from "./firebase-applet-config.js";
 
@@ -81,5 +83,7 @@ export {
   query, 
   orderBy, 
   serverTimestamp,
-  onSnapshot
+  onSnapshot,
+  arrayUnion,
+  arrayRemove
 };
