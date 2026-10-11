@@ -550,11 +550,6 @@ document.querySelectorAll(".nav-tab").forEach(tabBtn => {
 // تحميل وتهيئة البيانات المحلية والسحابية (خالية من أي بيانات وهمية)
 // --------------------------------------------------------
 function loadInitialStorage() {
-  // إلغاء وحذف أي كاش محلي للاختبارات والغرف ولوحة الشرف نهائياً لضمان توحيد المنصة واعتماد السحابة
-  localStorage.removeItem("nour_quizzes");
-  localStorage.removeItem("nour_live_rooms");
-  localStorage.removeItem("nour_honor_board");
-
   // المدارس المعتمدة
   try {
     const savedSchools = localStorage.getItem("nour_schools");
@@ -605,12 +600,22 @@ function loadInitialStorage() {
     saveParticipants();
   }
 
-  // الاختبارات: تبدأ من النسخة المحلية المحفوظة وتُحدّث فوراً من السحابة
+  // الاختبارات: تبدأ من النسخة المحلية المحفوظة ولا تعيد الاختبارات المحذوفة نهائياً
   try {
     const savedQuizzes = localStorage.getItem("nour_quizzes");
-    quizzesCache = savedQuizzes ? JSON.parse(savedQuizzes) : [...INITIAL_QUIZZES];
+    const deletedQuizzes = JSON.parse(localStorage.getItem("nour_deleted_quizzes") || "[]");
+    const hasInitDone = localStorage.getItem("nour_quizzes_init_done") === "true";
+
+    if (savedQuizzes) {
+      const parsed = JSON.parse(savedQuizzes);
+      quizzesCache = Array.isArray(parsed) ? parsed.filter(q => !deletedQuizzes.includes(q.id)) : [];
+    } else if (!hasInitDone && deletedQuizzes.length === 0) {
+      quizzesCache = [...INITIAL_QUIZZES];
+    } else {
+      quizzesCache = [];
+    }
   } catch (e) {
-    quizzesCache = [...INITIAL_QUIZZES];
+    quizzesCache = [];
   }
 
   // الغرف الحية: تبدأ من الذاكرة المؤقتة وتُقرأ مباشرة ولحظياً من Firestore
@@ -917,7 +922,7 @@ function setupRealtimeCloudListeners() {
       console.warn("Realtime participants notice:", err);
     });
 
-    // 3. مراقبة بنك الأسئلة والاختبارات لحظياً وبشكل فوري
+    // 3. مراقبة بنك الأسئلة والاختبارات لحظياً وبشكل فوري مع مراعاة الحذف
     const quizCol = collection(db, "quizzes");
     onSnapshot(quizCol, (snapshot) => {
       const cloudQuizzes = [];
@@ -942,6 +947,7 @@ function setupRealtimeCloudListeners() {
       isFirstQuizzesSnapshot = false;
 
       quizzesCache = cloudQuizzes;
+      localStorage.setItem("nour_quizzes", JSON.stringify(quizzesCache));
       renderQuizzesList();
       renderStudentPracticeQuizzes();
       updateDropdowns();
@@ -1287,11 +1293,12 @@ async function loadCloudData(forceServer = false) {
       getDocs(collection(db, "quizzes")),
       getDocs(collection(db, "participants")),
       getDocs(collection(db, "live_rooms")),
-      getDoc(doc(db, "system_settings", "honor_board"))
+      getDoc(doc(db, "system_settings", "honor_board")),
+      getDoc(doc(db, "system_settings", "quizzes_config"))
     ]);
 
     const results = await Promise.race([fetchPromises, timeoutPromise]);
-    const [sgRes, quizRes, partRes, roomRes, honorRes] = results;
+    const [sgRes, quizRes, partRes, roomRes, honorRes, quizCfgRes] = results;
 
     const anyFulfilled = results.some(r => r.status === "fulfilled");
     if (!anyFulfilled) {
@@ -1332,22 +1339,43 @@ async function loadCloudData(forceServer = false) {
       counts.grades = gradesCache.length;
     }
 
-    // 2. الاختبارات (استيراد كل ما في السحابة فورياً)
+    // 2. الاختبارات (استيراد كل ما في السحابة مع الحفاظ الصارم على حذف الاختبارات نهائياً)
+    let cloudDeletedIds = [];
+    let isCloudInitDone = false;
+    if (quizCfgRes && quizCfgRes.status === "fulfilled" && quizCfgRes.value.exists()) {
+      const cfgData = quizCfgRes.value.data();
+      if (Array.isArray(cfgData.deletedQuizIds)) {
+        cloudDeletedIds = cfgData.deletedQuizIds;
+      }
+      isCloudInitDone = !!cfgData.initialized;
+    }
+
     if (quizRes.status === "fulfilled") {
+      const localDeleted = JSON.parse(localStorage.getItem("nour_deleted_quizzes") || "[]");
+      const combinedDeleted = Array.from(new Set([...localDeleted, ...cloudDeletedIds]));
+      localStorage.setItem("nour_deleted_quizzes", JSON.stringify(combinedDeleted));
+      const deletedIdsSet = new Set(combinedDeleted);
+
       const cloudQuizzes = [];
-      const deletedIds = new Set(JSON.parse(localStorage.getItem("nour_deleted_quizzes") || "[]"));
       quizRes.value.forEach(d => {
-        if (!deletedIds.has(d.id)) {
+        if (!deletedIdsSet.has(d.id)) {
           cloudQuizzes.push({ ...d.data(), id: d.id });
         }
       });
 
-      const hasInitDone = localStorage.getItem("nour_quizzes_init_done");
-      if (cloudQuizzes.length === 0 && !hasInitDone && deletedIds.size === 0) {
+      const hasInitDone = isCloudInitDone || (localStorage.getItem("nour_quizzes_init_done") === "true");
+      if (cloudQuizzes.length === 0 && !hasInitDone && deletedIdsSet.size === 0) {
         for (const q of INITIAL_QUIZZES) {
           syncQuizToCloud(q).catch(() => {});
           cloudQuizzes.push(q);
         }
+        localStorage.setItem("nour_quizzes_init_done", "true");
+        setDoc(doc(db, "system_settings", "quizzes_config"), {
+          initialized: true,
+          deletedQuizIds: [],
+          lastUpdated: serverTimestamp()
+        }, { merge: true }).catch(() => {});
+      } else {
         localStorage.setItem("nour_quizzes_init_done", "true");
       }
       quizzesCache = cloudQuizzes;
@@ -1481,8 +1509,108 @@ function updateDropdowns() {
 }
 
 // --------------------------------------------------------
-// معالجة الدخول المباشر عبر الرابط (Direct URL Login Handler)
+// معالجة الدخول المباشر عبر الرابط ونسخ الروابط بأمان
 // --------------------------------------------------------
+async function copyTextToClipboard(text) {
+  if (!text) return false;
+  let copied = false;
+  if (navigator.clipboard && window.isSecureContext) {
+    try {
+      await navigator.clipboard.writeText(text);
+      copied = true;
+    } catch (e) {}
+  }
+  if (!copied) {
+    try {
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "fixed";
+      textarea.style.left = "-9999px";
+      textarea.style.top = "-9999px";
+      document.body.appendChild(textarea);
+      textarea.select();
+      copied = document.execCommand("copy");
+      document.body.removeChild(textarea);
+    } catch (e) {}
+  }
+  return copied;
+}
+
+function showDirectUrlDialog(url) {
+  const existing = document.getElementById("directUrlFallbackModal");
+  if (existing) existing.remove();
+
+  const modal = document.createElement("div");
+  modal.id = "directUrlFallbackModal";
+  modal.className = "modal-overlay";
+  modal.innerHTML = `
+    <div class="modal-card" style="max-width: 520px; text-align: right;" dir="rtl">
+      <div class="modal-header">
+        <h3 class="modal-title"><i class="fa-solid fa-link" style="color: var(--duo-blue);"></i> رابط الدخول المباشر للحساب</h3>
+        <button class="btn-close-modal" id="btnCloseDirectUrlModal"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body" style="padding: 16px 20px;">
+        <p style="font-size: 13.5px; color: #475569; margin-bottom: 12px; line-height: 1.6;">
+          يمكنك نسخ هذا الرابط وإرساله للمستخدم، وبمجرد الضغط عليه سيتم فتح حسابه مباشرة دون الحاجة لأي تسجيل:
+        </p>
+        <div style="display: flex; gap: 8px;">
+          <input type="text" id="directUrlModalInput" value="${url}" readonly class="form-control" style="font-size: 12px; direction: ltr; text-align: left; background: #f8fafc; font-family: monospace;" />
+          <button id="btnCopyInDirectUrlModal" class="btn-duo-green btn-sm" style="white-space: nowrap;"><i class="fa-solid fa-copy"></i> نسخ الرابط</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  const input = modal.querySelector("#directUrlModalInput");
+  input?.select();
+  modal.querySelector("#btnCloseDirectUrlModal")?.addEventListener("click", () => modal.remove());
+  modal.querySelector("#btnCopyInDirectUrlModal")?.addEventListener("click", async () => {
+    input?.select();
+    document.execCommand("copy");
+    showToast("تم نسخ الرابط بنجاح! 📋", "fa-check");
+    modal.remove();
+  });
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) modal.remove();
+  });
+}
+
+function updateImpersonationBanner() {
+  let banner = document.getElementById("impersonationNoticeBar");
+  const prevSupJson = localStorage.getItem("nour_previous_supervisor");
+
+  if (prevSupJson && currentUser && currentUser.role !== "supervisor") {
+    if (!banner) {
+      banner = document.createElement("div");
+      banner.id = "impersonationNoticeBar";
+      banner.style.cssText = "background: linear-gradient(90deg, #4f46e5, #7c3aed); color: #fff; padding: 7px 16px; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 9999; box-shadow: 0 2px 8px rgba(0,0,0,0.15);";
+      document.body.prepend(banner);
+    }
+    const roleLabels = { teacher: "معلم", presenter: "عارض", student: "طالب" };
+    banner.innerHTML = `
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <i class="fa-solid fa-user-gear"></i>
+        <span>أنت تتصفح المنصة حالياً بحساب: <strong>${currentUser.name}</strong> (${roleLabels[currentUser.role] || "مشارك"})</span>
+      </div>
+      <button id="btnReturnToSupervisor" style="background: #ffffff; color: #4f46e5; border: none; padding: 4px 12px; border-radius: 6px; font-size: 12px; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+        <i class="fa-solid fa-crown"></i> العودة لحساب المشرف العام
+      </button>
+    `;
+    banner.querySelector("#btnReturnToSupervisor")?.addEventListener("click", () => {
+      try {
+        const supObj = JSON.parse(prevSupJson);
+        localStorage.removeItem("nour_previous_supervisor");
+        finalizeUserSession(supObj, true);
+        showToast("تمت العودة لحساب المشرف العام بنجاح 👑", "fa-crown");
+      } catch (e) {}
+    });
+  } else {
+    if (banner) banner.remove();
+  }
+}
+
 function extractAuthTokenFromUrl() {
   try {
     const params = new URLSearchParams(window.location.search);
@@ -1493,7 +1621,11 @@ function extractAuthTokenFromUrl() {
       token = hashParams.get("auth") || hashParams.get("token") || hashParams.get("user") || hashParams.get("id");
     }
     if (token) {
-      return decodeURIComponent(token).trim();
+      try {
+        return decodeURIComponent(token).trim();
+      } catch (e) {
+        return token.trim();
+      }
     }
   } catch (e) {
     console.warn("URL token extraction error:", e);
@@ -1509,24 +1641,37 @@ async function checkDirectUrlAuthentication(overrideToken = null) {
   const tokenNorm = normalizeArabic(directToken);
   const derivedDocId = getDocumentId(tokenNorm);
 
-  // 1. البحث في الكاش أولاً
+  // استخراج النص العربي إذا كان المعرف مرمّزاً بصيغة user__...
+  let decodedFromToken = "";
+  if (directToken.startsWith("user__")) {
+    try {
+      const percentStr = directToken.replace(/^user_/, "").replace(/_/g, "%");
+      decodedFromToken = decodeURIComponent(percentStr);
+    } catch (e) {}
+  }
+  const decodedNorm = decodedFromToken ? normalizeArabic(decodedFromToken) : "";
+
+  // 1. البحث في الكاش أولاً بكل الاحتمالات
   let user = participantsCache.find(u => 
     u.id === directToken || 
     u.id === derivedDocId ||
     u.id === rawToken || 
-    (u.normalizedName && u.normalizedName === tokenNorm) || 
-    (u.name && (u.name.trim() === directToken || normalizeArabic(u.name) === tokenNorm))
+    (u.normalizedName && (u.normalizedName === tokenNorm || (decodedNorm && u.normalizedName === decodedNorm))) || 
+    (u.name && (u.name.trim() === directToken || normalizeArabic(u.name) === tokenNorm || (decodedNorm && normalizeArabic(u.name) === decodedNorm)))
   );
 
   // 2. إذا لم يوجد في الكاش، نجلبه مباشرة من Cloud Firestore
   if (!user) {
     try {
-      let snap = await getDoc(doc(db, "participants", directToken));
-      if (!snap.exists() && derivedDocId !== directToken) {
-        snap = await getDoc(doc(db, "participants", derivedDocId));
-      }
-      if (!snap.exists() && directToken !== rawToken) {
-        snap = await getDoc(doc(db, "participants", rawToken));
+      let snap = null;
+      try {
+        snap = await getDoc(doc(db, "participants", directToken));
+      } catch (e) {}
+
+      if ((!snap || !snap.exists()) && derivedDocId !== directToken) {
+        try {
+          snap = await getDoc(doc(db, "participants", derivedDocId));
+        } catch (e) {}
       }
       
       if (snap && snap.exists()) {
@@ -1537,7 +1682,14 @@ async function checkDirectUrlAuthentication(overrideToken = null) {
         allSnap.forEach(d => {
           const dData = d.data();
           const dNorm = dData.normalizedName || normalizeArabic(dData.name || "");
-          if (d.id === directToken || d.id === derivedDocId || d.id === rawToken || dNorm === tokenNorm || (dData.name && dData.name.trim() === directToken)) {
+          if (
+            d.id === directToken || 
+            d.id === derivedDocId || 
+            d.id === rawToken || 
+            dNorm === tokenNorm || 
+            (decodedNorm && dNorm === decodedNorm) || 
+            (dData.name && (dData.name.trim() === directToken || (decodedFromToken && dData.name.trim() === decodedFromToken)))
+          ) {
             user = { ...dData, id: d.id, normalizedName: dNorm };
           }
         });
@@ -1558,7 +1710,17 @@ async function checkDirectUrlAuthentication(overrideToken = null) {
   }
 
   if (user) {
-    // تسجيل الدخول المباشر للحساب فوراً
+    // إذا كان هناك جلسة نشطة للمشرف العام والمستخدم الجديد ليس مشرفاً، نحفظ جلسة المشرف للعودة السريعة
+    const activeSaved = localStorage.getItem("active_quran_user");
+    if (activeSaved) {
+      try {
+        const activeObj = JSON.parse(activeSaved);
+        if (activeObj && activeObj.role === "supervisor" && user.role !== "supervisor") {
+          localStorage.setItem("nour_previous_supervisor", JSON.stringify(activeObj));
+        }
+      } catch (e) {}
+    }
+
     user.lastLoginAt = new Date().toISOString();
     user.loginCount = (user.loginCount || 1) + 1;
     saveParticipants();
@@ -2015,6 +2177,14 @@ function finalizeUserSession(user, isReturning) {
     renderSupervisorDashboard();
     showView("supervisor");
 
+    // تنشيط تبويب بنك الاختبارات والتأكد من إزالة أي تبويب غير متاح للمعلم
+    document.querySelectorAll(".nav-tab").forEach(t => t.classList.remove("active"));
+    document.querySelectorAll(".tab-content-panel").forEach(p => p.classList.remove("active"));
+    const quizTab = document.querySelector(".nav-tab[data-tab='tabQuizzes']");
+    if (quizTab) quizTab.classList.add("active");
+    document.getElementById("tabQuizzes")?.classList.add("active");
+    localStorage.setItem("nour_saved_tab", "tabQuizzes");
+
   } else if (user.role === "presenter") {
     // واجهة العارض (المسابقات الحية)
     if (supervisorGreetingTitle) {
@@ -2030,7 +2200,12 @@ function finalizeUserSession(user, isReturning) {
     showView("supervisor");
 
     // تنشيط تبويب العروض مباشرة
-    document.querySelector("[data-tab='tabLive']")?.click();
+    document.querySelectorAll(".nav-tab").forEach(t => t.classList.remove("active"));
+    document.querySelectorAll(".tab-content-panel").forEach(p => p.classList.remove("active"));
+    const liveTab = document.querySelector(".nav-tab[data-tab='tabLive']");
+    if (liveTab) liveTab.classList.add("active");
+    document.getElementById("tabLive")?.classList.add("active");
+    localStorage.setItem("nour_saved_tab", "tabLive");
 
   } else {
     // واجهة الطالب
@@ -2057,6 +2232,8 @@ function finalizeUserSession(user, isReturning) {
     renderHonorLeaderboardTab();
     showView("student");
   }
+
+  updateImpersonationBanner();
 }
 
 // --------------------------------------------------------
@@ -2200,7 +2377,8 @@ function renderAccountsTable() {
 
   accountsTableBody.innerHTML = filtered.map((u, idx) => {
     const baseUrl = window.location.origin + window.location.pathname;
-    const directUrl = `${baseUrl}?auth=${encodeURIComponent(u.id)}`;
+    const safeUserDocId = u.id || getDocumentId(u.normalizedName || normalizeArabic(u.name));
+    const directUrl = `${baseUrl}?auth=${encodeURIComponent(safeUserDocId)}`;
     return `
       <tr>
         <td><strong>${idx + 1}</strong></td>
@@ -2211,7 +2389,7 @@ function renderAccountsTable() {
         <td><small style="color: #64748b;">${formatArabicDate(u.lastLoginAt)}</small></td>
         <td>
           <div class="direct-link-cell-group">
-            <button type="button" class="btn-open-direct-link" data-id="${u.id}" title="فتح هذا الحساب فوراً والدخول به مباشرة">
+            <button type="button" class="btn-open-direct-link" data-id="${safeUserDocId}" title="فتح هذا الحساب فوراً والدخول به مباشرة">
               <i class="fa-solid fa-right-to-bracket"></i> فتح الحساب
             </button>
             <button type="button" class="btn-copy-direct-link" data-url="${directUrl}" title="نسخ رابط الدخول المباشر">
@@ -2246,10 +2424,14 @@ function renderAccountsTable() {
   accountsTableBody.querySelectorAll(".btn-open-direct-link").forEach(btn => {
     btn.addEventListener("click", async () => {
       const userId = btn.getAttribute("data-id");
-      const targetUser = participantsCache.find(p => p.id === userId);
+      const targetUser = participantsCache.find(p => p.id === userId) ||
+                         participantsCache.find(p => getDocumentId(p.normalizedName || normalizeArabic(p.name)) === userId);
       if (targetUser) {
         showGlobalLoader("جاري الانتقال للحساب...", `يتم فتح حساب (${targetUser.name}) مباشرة`);
         try {
+          if (currentUser && currentUser.role === "supervisor" && targetUser.role !== "supervisor") {
+            localStorage.setItem("nour_previous_supervisor", JSON.stringify(currentUser));
+          }
           targetUser.lastLoginAt = new Date().toISOString();
           targetUser.loginCount = (targetUser.loginCount || 1) + 1;
           saveParticipants();
@@ -2263,21 +2445,22 @@ function renderAccountsTable() {
     });
   });
 
-  // مستمعات الأحداث لنسخ الرابط المباشر داخل الجدول
+  // مستمعات الأحداث لنسخ الرابط المباشر داخل الجدول مع الدعم التام لبيئة الآي فريم
   accountsTableBody.querySelectorAll(".btn-copy-direct-link").forEach(btn => {
-    btn.addEventListener("click", () => {
+    btn.addEventListener("click", async () => {
       const url = btn.getAttribute("data-url");
-      navigator.clipboard.writeText(url).then(() => {
+      const success = await copyTextToClipboard(url);
+      if (success) {
         btn.classList.add("copied");
         btn.innerHTML = `<i class="fa-solid fa-check"></i> تم النسخ!`;
-        showToast("تم نسخ رابط الدخول المباشر للحساب بنجاح!", "fa-copy");
+        showToast("تم نسخ رابط الدخول المباشر للحساب بنجاح! 📋", "fa-copy");
         setTimeout(() => {
           btn.classList.remove("copied");
           btn.innerHTML = `<i class="fa-solid fa-copy"></i> نسخ`;
         }, 2500);
-      }).catch(() => {
-        showToast("تم تحديد الرابط، يرجى نسخه يدوياً", "fa-copy");
-      });
+      } else {
+        showDirectUrlDialog(url);
+      }
     });
   });
 
@@ -2717,11 +2900,32 @@ function renderQuizzesList() {
         icon: "fa-cloud-arrow-up"
       });
       if (ok) {
-        for (const q of INITIAL_QUIZZES) {
-          await syncQuizToCloud(q);
+        showGlobalLoader("جاري استيراد النماذج...", "يتم حفظ النماذج المعتمدة في السحابة ومزامنتها");
+        try {
+          const initIds = INITIAL_QUIZZES.map(q => q.id);
+          let localDel = JSON.parse(localStorage.getItem("nour_deleted_quizzes") || "[]");
+          localDel = localDel.filter(id => !initIds.includes(id));
+          localStorage.setItem("nour_deleted_quizzes", JSON.stringify(localDel));
+
+          try {
+            await setDoc(doc(db, "system_settings", "quizzes_config"), {
+              initialized: true,
+              deletedQuizIds: arrayRemove(...initIds),
+              lastUpdated: serverTimestamp()
+            }, { merge: true });
+          } catch (e) {}
+
+          for (const q of INITIAL_QUIZZES) {
+            await syncQuizToCloud(q);
+          }
+          await loadCloudData();
+          renderQuizzesList();
+          renderStudentPracticeQuizzes();
+          updateDropdowns();
+          showToast("تم استيراد وحفظ نماذج الاختبارات في السحابة بنجاح!", "fa-circle-check");
+        } finally {
+          hideGlobalLoader();
         }
-        await loadCloudData();
-        showToast("تم استيراد وحفظ نماذج الاختبارات في السحابة بنجاح!", "fa-circle-check");
       }
     });
     return;
@@ -2780,32 +2984,43 @@ function renderQuizzesList() {
       });
 
       if (confirmed) {
-        showGlobalLoader("جاري حذف الاختبار...", "يتم الحذف من قاعدة البيانات السحابية لجميع المستخدمين");
+        showGlobalLoader("جاري حذف الاختبار نهائياً...", "يتم الحذف من قاعدة البيانات السحابية لجميع المستخدمين");
         try {
-          // 1. حذف الاختبار مباشرة من Firestore مع مهلة آمنة لمنع أي تجميد
+          // 1. حذف الاختبار مباشرة من Firestore مع مهلة آمنة
           if (safeId) {
             try {
               const delPromise = deleteDoc(doc(db, "quizzes", safeId));
               const timeoutPromise = new Promise((_, reject) => 
-                setTimeout(() => reject(new Error("Timeout deleting quiz")), 5000)
+                setTimeout(() => reject(new Error("Timeout deleting quiz")), 6000)
               );
               await Promise.race([delPromise, timeoutPromise]);
             } catch (cloudErr) {
               console.warn("Firestore quiz delete warning (cleaning locally):", cloudErr);
+            }
+
+            // تسجيل معرف الاختبار المحذوف سحابياً لضمان عدم عودته من أي جهاز آخر
+            try {
+              await setDoc(doc(db, "system_settings", "quizzes_config"), {
+                initialized: true,
+                deletedQuizIds: arrayUnion(safeId),
+                lastUpdated: serverTimestamp()
+              }, { merge: true });
+            } catch (cfgErr) {
+              console.warn("Quizzes config update warning:", cfgErr);
             }
           }
 
           // 2. إزالة الاختبار من الكاش والذاكرة المحلية
           quizzesCache = quizzesCache.filter(x => x.id !== safeId && x.id !== qId);
           localStorage.setItem("nour_quizzes", JSON.stringify(quizzesCache));
+          localStorage.setItem("nour_quizzes_init_done", "true");
 
-          // 3. تسجيل معرف الاختبار المحذوف لمنع استرجاعه تلقائياً
+          // 3. تسجيل معرف الاختبار المحذوف محلياً لمنع استرجاعه
           try {
             const deletedList = JSON.parse(localStorage.getItem("nour_deleted_quizzes") || "[]");
-            if (safeId && !deletedList.includes(safeId)) {
-              deletedList.push(safeId);
-              localStorage.setItem("nour_deleted_quizzes", JSON.stringify(deletedList));
-            }
+            if (safeId && !deletedList.includes(safeId)) deletedList.push(safeId);
+            if (qId && !deletedList.includes(qId)) deletedList.push(qId);
+            localStorage.setItem("nour_deleted_quizzes", JSON.stringify(deletedList));
           } catch (e) {}
 
           // 4. تحديث الواجهات فوراً
@@ -2814,7 +3029,7 @@ function renderQuizzesList() {
           updateDropdowns();
           if (statActiveQuizzes) statActiveQuizzes.textContent = quizzesCache.length;
 
-          showToast(`تم حذف الاختبار (${title}) نهائياً بنجاح`, "fa-trash");
+          showToast(`تم حذف الاختبار (${title}) نهائياً بنجاح!`, "fa-trash");
         } catch (err) {
           console.error("Quiz delete error:", err);
           quizzesCache = quizzesCache.filter(x => x.id !== safeId && x.id !== qId);
@@ -5795,19 +6010,18 @@ async function initApp() {
   if (directAuthToken) {
     showGlobalLoader("مسابقة نور البيان", "جاري التحقق من رابط الحساب وتسجيل الدخول المباشر...");
     try {
-      if (participantsCache.length === 0) {
-        await loadCloudData();
-      }
+      await loadCloudData();
       directLoginSucceeded = await checkDirectUrlAuthentication(directAuthToken);
     } catch (e) {
       console.warn("Direct auth on start notice:", e);
+    } finally {
+      hideGlobalLoader();
     }
   }
 
   if (directLoginSucceeded) {
     try {
       setupRealtimeCloudListeners();
-      loadCloudData().catch(() => {});
     } finally {
       hideGlobalLoader();
     }
