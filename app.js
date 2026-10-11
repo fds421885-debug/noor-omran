@@ -1100,7 +1100,14 @@ function updateArenaUIRealtime(room) {
 }
 
 // تحميل ومزامنة البيانات السحابية من فايربيس (اعتماد السحابة 100% كمصدر وحيد للحقيقة)
-async function loadCloudData() {
+async function loadCloudData(forceServer = false) {
+  const syncBtn = document.getElementById("btnHeaderCloudSync");
+  const dot = syncBtn?.querySelector(".cloud-status-dot");
+  if (syncBtn) syncBtn.classList.add("syncing");
+  if (dot) { dot.classList.remove("online"); dot.classList.add("syncing"); }
+
+  let counts = { users: 0, quizzes: 0, rooms: 0, schools: 0, grades: 0, honor: 0 };
+
   try {
     // جلب كافة المجموعات السحابية بالتوازي لمنع أي تأخير أو انسداد
     const [sgRes, quizRes, partRes, roomRes, honorRes] = await Promise.allSettled([
@@ -1129,6 +1136,8 @@ async function loadCloudData() {
         gradesCache = [...DEFAULT_GRADES];
         setDoc(doc(db, "system_settings", "schools_and_grades"), { grades: gradesCache }, { merge: true }).catch(() => {});
       }
+      counts.schools = schoolsCache.length;
+      counts.grades = gradesCache.length;
     } else if (sgRes.status === "fulfilled" && !sgRes.value.exists()) {
       // إنشاء التكوين الأولي للمدارس والصفوف في السحابة
       schoolsCache = [...DEFAULT_SCHOOLS];
@@ -1140,6 +1149,8 @@ async function loadCloudData() {
       }, { merge: true }).catch(() => {});
       localStorage.setItem("nour_schools", JSON.stringify(schoolsCache));
       localStorage.setItem("nour_grades", JSON.stringify(gradesCache));
+      counts.schools = schoolsCache.length;
+      counts.grades = gradesCache.length;
     }
 
     // 2. الاختبارات (استيراد كل ما في السحابة فورياً)
@@ -1157,6 +1168,7 @@ async function loadCloudData() {
         }
       }
       quizzesCache = cloudQuizzes;
+      counts.quizzes = cloudQuizzes.length;
     }
 
     // 3. الحسابات والمشاركون (استيراد كل الحسابات السحابية بدقة تامة)
@@ -1192,6 +1204,7 @@ async function loadCloudData() {
       }
       participantsCache = cloudUsers;
       localStorage.setItem("nour_participants", JSON.stringify(participantsCache));
+      counts.users = cloudUsers.length;
 
       // مزامنة وتحديث بيانات الجلسة الحالية لضمان بقاء المستخدم متصلاً دون خروج
       if (currentUser) {
@@ -1215,12 +1228,14 @@ async function loadCloudData() {
         cloudRooms.push({ id: d.id, ...d.data() });
       });
       activeRooms = cloudRooms;
+      counts.rooms = cloudRooms.length;
     }
 
     // 5. لوحة الشرف من السحابة مباشرة
     if (honorRes.status === "fulfilled" && honorRes.value.exists()) {
       const hData = honorRes.value.data();
       honorLeaderboardCache = Array.isArray(hData.entries) ? hData.entries : [];
+      counts.honor = honorLeaderboardCache.length;
     }
 
     // 6. تحديث كافة الواجهات بعد اكتمال قراءة كافة البيانات السحابية
@@ -1230,16 +1245,20 @@ async function loadCloudData() {
     renderQuizzesList();
     renderStudentPracticeQuizzes();
     renderLiveRoomsList();
-    renderHonorLeaderboard();
+    renderHonorLeaderboardTab();
 
     if (currentUser && (currentUser.role === "supervisor" || currentUser.role === "teacher" || currentUser.role === "presenter")) {
       renderSupervisorDashboard();
     }
+
+    return counts;
   } catch (err) {
     console.warn("Cloud load notice:", err);
+    throw err;
+  } finally {
+    if (syncBtn) syncBtn.classList.remove("syncing");
   }
 }
-
 
 function updateDropdowns() {
   if (schoolSelect) {
@@ -5040,19 +5059,37 @@ document.getElementById("btnHeaderImportTemplates")?.addEventListener("click", a
   }
 });
 
-// زر التحديث السحابي المباشر في الهيدر
+// زر التحديث السحابي المباشر في الهيدر (تحديث حقيقي مع عداد البيانات)
 document.getElementById("btnHeaderCloudSync")?.addEventListener("click", async () => {
   const btn = document.getElementById("btnHeaderCloudSync");
   const icon = btn?.querySelector("i");
-  if (icon) icon.classList.add("fa-spin");
-  showGlobalLoader("جاري تحديث السحابة...", "يتم قراءة ومزامنة كافة البيانات مباشرة من Firestore");
+  const dot = btn?.querySelector(".cloud-status-dot");
+  if (icon) {
+    icon.className = "fa-solid fa-arrows-rotate fa-spin";
+  }
+  if (dot) {
+    dot.className = "cloud-status-dot syncing";
+  }
+  btn?.classList.add("syncing");
+
+  showGlobalLoader("جاري مزامنة السحابة المباشرة...", "يتم قراءة أحدث الحسابات، الاختبارات، الغرف، ولوحة الشرف من Firestore");
+
   try {
-    await loadCloudData();
-    showToast("✅ تم تحديث وقراءة كافة البيانات مباشرة من السحابة بنجاح!", "fa-arrows-rotate");
+    const stats = await loadCloudData(true);
+    soundFX?.click();
+    showToast(`✅ تم تحديث السحابة بنجاح! (${stats.users} حساب، ${stats.quizzes} اختبار، ${stats.rooms} غرفة)`, "fa-cloud-arrow-down");
+    showRealtimeSyncPill(`☁️ اكتمل التحديث السحابي: ${stats.users} حساب · ${stats.quizzes} اختبار · ${stats.rooms} غرفة نشطة`);
   } catch (err) {
-    showToast("تعذر الاتصال بالسحابة حالياً", "fa-triangle-exclamation");
+    console.error("Cloud sync button error:", err);
+    showToast("تعذر الاتصال بالسحابة حالياً، يرجى التحقق من اتصالك", "fa-triangle-exclamation");
   } finally {
-    if (icon) icon.classList.remove("fa-spin");
+    if (icon) {
+      icon.className = "fa-solid fa-cloud-arrow-down";
+    }
+    if (dot) {
+      dot.className = "cloud-status-dot online";
+    }
+    btn?.classList.remove("syncing");
     hideGlobalLoader();
   }
 });
@@ -5061,15 +5098,17 @@ document.getElementById("btnHeaderCloudSync")?.addEventListener("click", async (
 document.getElementById("btnSupervisorRefreshCloud")?.addEventListener("click", async () => {
   const btn = document.getElementById("btnSupervisorRefreshCloud");
   const icon = btn?.querySelector("i");
-  if (icon) icon.classList.add("fa-spin");
+  if (icon) icon.className = "fa-solid fa-arrows-rotate fa-spin";
   showGlobalLoader("جاري تحديث السحابة...", "يتم مزامنة جميع الحسابات والاختبارات ولوحة الشرف");
   try {
-    await loadCloudData();
-    showToast("✅ تم تحديث جميع الحسابات والاختبارات ولوحة الشرف من السحابة!", "fa-arrows-rotate");
+    const stats = await loadCloudData(true);
+    soundFX?.click();
+    showToast(`✅ تم تحديث جميع البيانات من السحابة (${stats.users} حساب، ${stats.quizzes} اختبار)`, "fa-circle-check");
   } catch (err) {
+    console.error("Supervisor cloud refresh error:", err);
     showToast("تعذر الاتصال بالسحابة حالياً", "fa-triangle-exclamation");
   } finally {
-    if (icon) icon.classList.remove("fa-spin");
+    if (icon) icon.className = "fa-solid fa-arrows-rotate";
     hideGlobalLoader();
   }
 });
