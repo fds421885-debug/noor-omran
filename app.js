@@ -504,8 +504,13 @@ function showView(viewName) {
       const roleMap = { supervisor: "مشرف", teacher: "معلم", presenter: "عارض", student: "طالب" };
       quickRoleBadge.textContent = roleMap[currentUser.role] || "مشارك";
     }
+    // حفظ الشاشة الحالية فوراً لضمان البقاء في نفس الشاشة عند تحديث الصفحة
+    localStorage.setItem("nour_saved_view", viewName);
   } else {
     userQuickStatus?.classList.add("hidden");
+    if (viewName === "hero" || viewName === "login") {
+      localStorage.removeItem("nour_saved_view");
+    }
   }
 
   window.scrollTo({ top: 0, behavior: "smooth" });
@@ -516,7 +521,7 @@ function showView(viewName) {
   }
 }
 
-// تبديل تبويبات لوحة التحكم مع التحديث الفوري المباشر من Firestore
+// تبديل تبويبات لوحة التحكم مع التحديث الفوري المباشر من Firestore وحفظ التبويب
 document.querySelectorAll(".nav-tab").forEach(tabBtn => {
   tabBtn.addEventListener("click", async () => {
     const targetTabId = tabBtn.getAttribute("data-tab");
@@ -524,6 +529,9 @@ document.querySelectorAll(".nav-tab").forEach(tabBtn => {
     document.querySelectorAll(".tab-content-panel").forEach(p => p.classList.remove("active"));
     tabBtn.classList.add("active");
     document.getElementById(targetTabId)?.classList.add("active");
+
+    // حفظ التبويب النشط حالياً للبقاء عليه عند تحديث الصفحة
+    localStorage.setItem("nour_saved_tab", targetTabId);
 
     // تحديث فوري مباشر من السحابة فور الضغط على أي تبويب
     await loadCloudData();
@@ -744,6 +752,59 @@ function cleanGhostRooms() {
 // مستمعو البيانات السحابية الحية الفورية (Firestore Realtime onSnapshot)
 // --------------------------------------------------------
 let realtimeListenersInitialized = false;
+let previousRoomsMap = new Map();
+let isFirstRoomsSnapshot = true;
+let previousQuizzesMap = new Map();
+let isFirstQuizzesSnapshot = true;
+let syncPillTimer = null;
+
+function showRealtimeSyncPill(text = "تم استلام تحديث جديد من السحابة وتحديث البيانات فورياً ✓") {
+  const pill = document.getElementById("realtimeSyncPill");
+  const textEl = document.getElementById("realtimeSyncText");
+  if (!pill) return;
+  if (textEl) textEl.textContent = text;
+  pill.classList.remove("hidden");
+  if (syncPillTimer) clearTimeout(syncPillTimer);
+  syncPillTimer = setTimeout(() => {
+    pill.classList.add("hidden");
+    syncPillTimer = null;
+  }, 3500);
+}
+
+function showLiveBroadcastBanner(room) {
+  if (!room) return;
+  if (currentLiveRoom && currentLiveRoom.id === room.id && views.liveArena && !views.liveArena.classList.contains("hidden")) {
+    return;
+  }
+  const banner = document.getElementById("liveRoomBroadcastBanner");
+  const titleEl = document.getElementById("broadcastRoomTitle");
+  const metaEl = document.getElementById("broadcastRoomMeta");
+  const joinBtn = document.getElementById("btnJoinBroadcastRoom");
+  const closeBtn = document.getElementById("btnCloseBroadcastBanner");
+  if (!banner) return;
+
+  if (titleEl) titleEl.textContent = `🔴 بدأت مسابقة حية جديدة الآن: «${room.name}»`;
+  if (metaEl) metaEl.textContent = `بإشراف: ${room.leaderName || room.creatorName || 'المشرف'} | ${(room.users || []).length} متواجد حالياً`;
+  
+  if (joinBtn) {
+    joinBtn.onclick = () => {
+      banner.classList.add("hidden");
+      joinLiveRoom(room);
+    };
+  }
+  if (closeBtn) {
+    closeBtn.onclick = () => {
+      banner.classList.add("hidden");
+    };
+  }
+
+  banner.classList.remove("hidden");
+}
+
+function hideLiveBroadcastBanner() {
+  const banner = document.getElementById("liveRoomBroadcastBanner");
+  if (banner) banner.classList.add("hidden");
+}
 
 function setupRealtimeCloudListeners() {
   if (realtimeListenersInitialized) return;
@@ -769,13 +830,13 @@ function setupRealtimeCloudListeners() {
         if (changed) {
           updateDropdowns();
           renderSchoolsAndGradesTags();
-          // تحديث شاشة اختيار المدارس أو الصفوف إذا كان هناك طالب جديد قيد التسجيل
           if (loginStepSchool && !loginStepSchool.classList.contains("hidden")) {
             showOnboardingSchoolStep();
           }
           if (loginStepGrade && !loginStepGrade.classList.contains("hidden")) {
             showOnboardingGradeStep();
           }
+          showRealtimeSyncPill("⚡ تم تحديث قائمة المدارس والصفوف من السحابة");
         }
       }
     }, (err) => {
@@ -840,6 +901,20 @@ function setupRealtimeCloudListeners() {
       snapshot.forEach(docSnap => {
         cloudQuizzes.push({ id: docSnap.id, ...docSnap.data() });
       });
+
+      // رصد أي اختبارات جديدة تم إنشاؤها سحابياً من أي جهاز آخر
+      if (!isFirstQuizzesSnapshot) {
+        const newlyAdded = cloudQuizzes.filter(q => !previousQuizzesMap.has(q.id));
+        if (newlyAdded.length > 0) {
+          const firstQ = newlyAdded[0];
+          showToast(`📚 تم إضافة اختبار جديد في السحابة: «${firstQ.title}»`, "fa-book-quran");
+          showRealtimeSyncPill("⚡ تم تحديث بنك الأسئلة والاختبارات تلقائياً من السحابة ✓");
+        }
+      }
+
+      previousQuizzesMap = new Map(cloudQuizzes.map(q => [q.id, q]));
+      isFirstQuizzesSnapshot = false;
+
       quizzesCache = cloudQuizzes;
       renderQuizzesList();
       renderStudentPracticeQuizzes();
@@ -857,6 +932,48 @@ function setupRealtimeCloudListeners() {
         const rData = docSnap.data();
         cloudRooms.push({ id: docSnap.id, ...rData });
       });
+
+      // رصد فوري للغرف التي بدأت الآن دون الحاجة لأي تحديث يدوي للصفحة
+      if (!isFirstRoomsSnapshot) {
+        const newlyAdded = cloudRooms.filter(r => !previousRoomsMap.has(r.id));
+        if (newlyAdded.length > 0) {
+          const roomStarted = newlyAdded[0];
+          // إشعار المستخدمين الآخرين فقط حتى لا يتكرر التنبيه لمنشئ الغرفة
+          if (!currentUser || (currentUser.name !== roomStarted.creatorName && currentUser.name !== roomStarted.leaderName)) {
+            showLiveBroadcastBanner(roomStarted);
+            showToast(`🔴 بدأت غرفة مسابقة جديدة الآن: «${roomStarted.name}»`, "fa-tower-broadcast");
+            showRealtimeSyncPill("⚡ تم رصد غرفة مسابقة جديدة وبدء الفعالية في السحابة فوراً!");
+          }
+        }
+
+        // فحص تغير مراحل الغرف
+        cloudRooms.forEach(cr => {
+          const prev = previousRoomsMap.get(cr.id);
+          if (prev) {
+            if (prev.phase !== cr.phase) {
+              if (currentLiveRoom && currentLiveRoom.id === cr.id) {
+                const phaseLabels = {
+                  lobby: "غرفة الانتظار",
+                  select: "اختيار المتسابق",
+                  draw: "سحب الأسئلة والقرعة",
+                  competing: "المسرح الحي وعرض الأسئلة"
+                };
+                showToast(`🔔 انتقلت المسابقة لمرحلة: ${phaseLabels[cr.phase] || cr.phase}`, "fa-bolt");
+              }
+              showRealtimeSyncPill(`⚡ تحديث مباشر: المسابقة «${cr.name}» قيد التشغيل`);
+            }
+            if (!prev.contestantName && cr.contestantName) {
+              if (currentLiveRoom && currentLiveRoom.id === cr.id) {
+                showToast(`👤 المتسابق المختار الآن: ${cr.contestantName}`, "fa-user-check");
+              }
+            }
+          }
+        });
+      }
+
+      previousRoomsMap = new Map(cloudRooms.map(r => [r.id, r]));
+      isFirstRoomsSnapshot = false;
+
       activeRooms = cloudRooms;
       renderLiveRoomsList();
 
@@ -867,6 +984,7 @@ function setupRealtimeCloudListeners() {
           const wasInArena = views.liveArena && !views.liveArena.classList.contains("hidden");
           currentLiveRoom = null;
           currentContestant = null;
+          localStorage.removeItem("nour_saved_room_id");
           clearInterval(liveTimerInterval);
           clearInterval(cardsTimerInterval);
           stopOfflineCountdown();
@@ -894,6 +1012,7 @@ function setupRealtimeCloudListeners() {
         if (Array.isArray(hData.entries)) {
           honorLeaderboardCache = hData.entries;
           renderHonorLeaderboard();
+          renderHonorLeaderboardTab();
         }
       }
     }, (err) => {
@@ -1300,6 +1419,9 @@ async function handleLogout() {
   currentUser = null;
   localStorage.removeItem("active_quran_user");
   localStorage.removeItem("nour_saved_user");
+  localStorage.removeItem("nour_saved_view");
+  localStorage.removeItem("nour_saved_tab");
+  localStorage.removeItem("nour_saved_room_id");
   if (lastSavedName) {
     localStorage.setItem("nour_last_username", lastSavedName);
     if (fullNameInput) {
@@ -3481,6 +3603,11 @@ function joinLiveRoom(room) {
   arenaLobby.classList.remove("hidden");
   arenaStage.classList.add("hidden");
 
+  // حفظ الغرفة الحالية لضمان البقاء داخلها عند تحديث الصفحة
+  localStorage.setItem("nour_saved_room_id", room.id);
+  localStorage.setItem("nour_saved_view", "liveArena");
+  hideLiveBroadcastBanner();
+
   showView("liveArena");
 }
 
@@ -3494,6 +3621,7 @@ const btnTerminateContestForAll = document.getElementById("btnTerminateContestFo
 
 btnExitArena?.addEventListener("click", async () => {
   if (!currentLiveRoom) {
+    localStorage.removeItem("nour_saved_room_id");
     showView(currentUser ? (currentUser.role === 'student' ? "student" : "supervisor") : "hero");
     return;
   }
@@ -3535,6 +3663,8 @@ btnExitArena?.addEventListener("click", async () => {
         const keptRoomId = currentLiveRoom.id;
         currentLiveRoom = null;
         currentContestant = null;
+        localStorage.removeItem("nour_saved_room_id");
+        localStorage.setItem("nour_saved_view", currentUser ? (currentUser.role === 'student' ? "student" : "supervisor") : "hero");
         showView(currentUser ? (currentUser.role === 'student' ? "student" : "supervisor") : "hero");
         renderLiveRoomsList();
         showToast(`الغرفة (#${keptRoomId}) ما زالت مفتوحة ونشطة في السحابة ويمكن للجميع الدخول إليها!`, "fa-tower-broadcast");
@@ -3564,6 +3694,8 @@ btnExitArena?.addEventListener("click", async () => {
       stopOfflineCountdown();
       currentLiveRoom = null;
       currentContestant = null;
+      localStorage.removeItem("nour_saved_room_id");
+      localStorage.setItem("nour_saved_view", currentUser ? (currentUser.role === 'student' ? "student" : "supervisor") : "hero");
       showView(currentUser ? (currentUser.role === 'student' ? "student" : "supervisor") : "hero");
     }
   }
@@ -3592,6 +3724,8 @@ btnHandoverAndExit?.addEventListener("click", async () => {
   stopOfflineCountdown();
   currentLiveRoom = null;
   currentContestant = null;
+  localStorage.removeItem("nour_saved_room_id");
+  localStorage.setItem("nour_saved_view", currentUser ? (currentUser.role === 'student' ? "student" : "supervisor") : "hero");
 
   showToast(`تم تسليم قيادة المسابقة إلى (${newLeader}) بنجاح والمغادرة`, "fa-handshake");
   showView(currentUser ? (currentUser.role === 'student' ? "student" : "supervisor") : "hero");
@@ -3620,6 +3754,7 @@ btnTerminateContestForAll?.addEventListener("click", async () => {
 async function executeRoomTermination(roomId) {
   activeRooms = activeRooms.filter(r => r.id !== roomId);
   localStorage.removeItem("nour_live_rooms");
+  localStorage.removeItem("nour_saved_room_id");
   // حذف الغرفة من Firestore نهائياً وبشكل قطعي للجميع
   try {
     await deleteDoc(doc(db, "live_rooms", roomId));
@@ -3638,6 +3773,7 @@ async function executeRoomTermination(roomId) {
   stopOfflineCountdown();
   currentLiveRoom = null;
   currentContestant = null;
+  localStorage.setItem("nour_saved_view", currentUser ? (currentUser.role === 'student' ? "student" : "supervisor") : "hero");
 
   showToast("تم إنهاء وإغلاق غرفة المسابقة لجميع المشاركين بنجاح", "fa-door-closed");
   renderLiveRoomsList();
@@ -5262,18 +5398,64 @@ window.addEventListener("click", (e) => {
 });
 
 // --------------------------------------------------------
-// نقطة البداية (Initialization)
+// نقطة البداية (Initialization) مع الاستعادة الفورية للجلسة السابقة
 // --------------------------------------------------------
 async function initApp() {
-  showGlobalLoader("مسابقة نور البيان", "جاري الاتصال بقاعدة البيانات السحابية وجلب البيانات المحدثة...");
   loadInitialStorage();
 
+  // 1. استعادة الجلسة السابقة ومطابقتها فورياً وبشكل متزامن قبل أي استدعاءات شبكية
+  let restoredSession = false;
+  const savedUserJson = localStorage.getItem("active_quran_user") || localStorage.getItem("nour_saved_user");
+  const savedView = localStorage.getItem("nour_saved_view");
+  const savedTab = localStorage.getItem("nour_saved_tab");
+  const savedRoomId = localStorage.getItem("nour_saved_room_id");
+
+  if (savedUserJson) {
+    try {
+      const parsed = JSON.parse(savedUserJson);
+      if (parsed && parsed.name) {
+        currentUser = parsed;
+        restoredSession = true;
+
+        // تفعيل جلسة المستخدم وإظهار واجهته الخاصة فوراً بدون أي تأخير وبدون إظهار واجهة البداية
+        finalizeUserSession(currentUser, true);
+
+        // إذا كان هناك تبويب محفوظ في لوحة المشرف
+        if (savedTab && currentUser.role !== "student") {
+          const tabBtn = document.querySelector(`.nav-tab[data-tab='${savedTab}']`);
+          if (tabBtn) {
+            document.querySelectorAll(".nav-tab").forEach(t => t.classList.remove("active"));
+            document.querySelectorAll(".tab-content-panel").forEach(p => p.classList.remove("active"));
+            tabBtn.classList.add("active");
+            document.getElementById(savedTab)?.classList.add("active");
+          }
+        }
+
+        // إذا كانت هناك شاشة محفوظة صالحة وليست hero أو login
+        if (savedView && views[savedView] && savedView !== "hero" && savedView !== "login") {
+          showView(savedView);
+        }
+      }
+    } catch (e) {
+      console.warn("Session restore parse notice:", e);
+    }
+  }
+
+  // إذا لم يكن المستخدم مسجلاً، نظهر واجهة البداية hero وشاشة التحميل
+  if (!restoredSession && !currentUser) {
+    showGlobalLoader("مسابقة نور البيان", "جاري الاتصال بقاعدة البيانات السحابية وجلب البيانات المحدثة...");
+    showView("hero");
+  } else {
+    // إشعار خفيف غير معطل للشاشة بالمزامنة السحابية اللحظية
+    showRealtimeSyncPill("⚡ جاري مزامنة أحدث البيانات من السحابة...");
+  }
+
   try {
-    // 1. تفعيل مستمعي البيانات السحابية الحية ومزامنة السحابة أولاً وقبل أي عرض
+    // 2. تفعيل مستمعي البيانات السحابية الحية ومزامنة السحابة
     setupRealtimeCloudListeners();
     await loadCloudData();
 
-    // 2. فحص رابط الدخول المباشر (?auth=...)
+    // 3. فحص رابط الدخول المباشر (?auth=...)
     const urlParams = new URLSearchParams(window.location.search);
     const hasDirectAuth = urlParams.has("auth") || urlParams.has("token");
     if (hasDirectAuth) {
@@ -5283,48 +5465,77 @@ async function initApp() {
       }
     }
 
-    // 3. استعادة الجلسة السابقة ومطابقتها مع قاعدة البيانات السحابية الحية
-    let restoredSession = false;
-    const savedUserJson = localStorage.getItem("active_quran_user") || localStorage.getItem("nour_saved_user");
-    if (savedUserJson) {
-      try {
-        const parsed = JSON.parse(savedUserJson);
-        if (parsed && parsed.name) {
-          // نتحقق من أحدث بيانات لهذا الحساب في السحابة
-          const liveUser = participantsCache.find(p => 
-            p.id === parsed.id || 
-            p.normalizedName === parsed.normalizedName || 
-            p.name === parsed.name
-          );
-          currentUser = liveUser ? { ...parsed, ...liveUser } : parsed;
-          finalizeUserSession(currentUser, true);
-          restoredSession = true;
-        }
-      } catch (e) {
-        console.warn("Session restore parse notice:", e);
+    // 4. بعد اكتمال جلب الغرف، إذا كان المستخدم متواجداً بغرفة نشطة مسبقاً، نعيده إليها تلقائياً
+    if (savedRoomId && currentUser) {
+      const targetRoom = activeRooms.find(r => r.id === savedRoomId);
+      if (targetRoom) {
+        joinLiveRoom(targetRoom);
       }
     }
 
-    // 4. استرجاع وتعبئة آخر اسم مستخدم تلقائياً في خانة تسجيل الدخول مع تحديث العداد
+    // 5. تحديث بيانات المستخدم الحالي من أحدث نسخة في السحابة بهدوء
+    if (currentUser) {
+      const liveUser = participantsCache.find(p => 
+        p.id === currentUser.id || 
+        p.normalizedName === currentUser.normalizedName || 
+        p.name === currentUser.name
+      );
+      if (liveUser) {
+        currentUser = { ...currentUser, ...liveUser };
+        localStorage.setItem("active_quran_user", JSON.stringify(currentUser));
+        localStorage.setItem("nour_saved_user", JSON.stringify(currentUser));
+        if (currentUser.role === "student") {
+          const scoreEl = document.getElementById("studentTotalScoreDisplay");
+          if (scoreEl) {
+            const honorEntry = honorLeaderboardCache.find(x => x.name === currentUser.name);
+            const pts = currentUser.totalScore !== undefined ? currentUser.totalScore : (honorEntry ? honorEntry.score : 0);
+            scoreEl.textContent = `${pts} نقطة`;
+          }
+        }
+      }
+    }
+
+    // 6. استرجاع وتعبئة آخر اسم مستخدم تلقائياً في خانة تسجيل الدخول مع تحديث العداد
     const lastUsername = localStorage.getItem("nour_last_username");
     if (lastUsername && fullNameInput) {
       fullNameInput.value = lastUsername;
       fullNameInput.dispatchEvent(new Event("input"));
     }
 
-    // 5. إذا لم يكن هناك مستخدم مسجل مسبقاً، نظهر شاشة البداية
+    // إذا لم يكن هناك جلسة نشطة ولم يكن مسجلاً مسبقاً
     if (!restoredSession && !currentUser) {
       showView("hero");
     }
   } catch (err) {
     console.warn("Init cloud load notice:", err);
-    if (!currentUser) {
+    // صمام أمان: إذا كان هناك جلسة محفوظة لا نطرده للواجهة الرئيسية إطلاقاً!
+    if (!currentUser && !restoredSession) {
       showView("hero");
     }
   } finally {
     hideGlobalLoader();
   }
 }
+
+// مزامنة صامتة عند عودة المستخدم للتبويب لمنع أي حاجة لتحديث الصفحة يدوياً
+window.addEventListener("focus", () => {
+  if (currentUser) {
+    loadCloudData().catch(() => {});
+  }
+});
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && currentUser) {
+    loadCloudData().catch(() => {});
+  }
+});
+
+// فحص دوري خفيف كل 20 ثانية لضمان بقاء البيانات طازجة دائماً
+setInterval(() => {
+  if (currentUser && document.visibilityState === "visible") {
+    loadCloudData().catch(() => {});
+  }
+}, 20000);
 
 if (document.readyState === "loading") {
   window.addEventListener("DOMContentLoaded", initApp);

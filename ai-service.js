@@ -106,6 +106,7 @@ export async function generateTestWithAI({ promptText, mediaName = "", targetGra
   } catch (err) {
     console.warn("تنبيه: جاري استخدام المحرك التوليدي الذكي المدمج لنور البيان:", err);
   }
+}
 
   // في حال تعذر الاتصال بالخادم، يقوم المحرك الذكي المدمج بإنشاء الاختبار بدقة عالية
   return generateLocalSmartTest(promptText, targetGrade, numQuestions);

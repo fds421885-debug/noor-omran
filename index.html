@@ -17,7 +17,7 @@
   <!-- مكتبة أيقونات FontAwesome -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" integrity="sha512-SnH5WK+bZxgPHs44uWIX+LLJAJ9/2PkPKZ5QiAj6Ta86w+fsb2TkcmfRyVX3pBnMFcV7oQPJkl9QevSCWr3W6A==" crossorigin="anonymous" referrerpolicy="no-referrer" />
   
-  <!-- ملف الأنماط بثيم دولينجو -->
+  <!-- ملف الأنماط بثيم دولينجو المبهج والتصميم التفاعلي -->
   <link rel="stylesheet" href="style.css">
 </head>
 <body class="duo-theme">
@@ -1493,6 +1493,34 @@
         <span></span><span></span><span></span>
       </div>
     </div>
+  </div>
+
+  <!-- شريط تنبيه البث المباشر الفوري عند بدء غرفة مسابقة جديدة في أي وقت -->
+  <div id="liveRoomBroadcastBanner" class="live-broadcast-banner hidden" role="alert">
+    <div class="live-broadcast-content">
+      <div class="live-broadcast-badge">
+        <span class="live-pulse-dot"></span>
+        <span>بث مباشر حي</span>
+      </div>
+      <div class="live-broadcast-text">
+        <strong id="broadcastRoomTitle">بدأت غرفة مسابقة جديدة الآن!</strong>
+        <span id="broadcastRoomMeta">المشرف يقود المسابقة مباشرة</span>
+      </div>
+      <div class="live-broadcast-actions">
+        <button type="button" id="btnJoinBroadcastRoom" class="btn-duo-yellow btn-sm">
+          <i class="fa-solid fa-arrow-right-to-bracket"></i> دخول المسرح الحي الآن
+        </button>
+        <button type="button" id="btnCloseBroadcastBanner" class="btn-close-broadcast" title="إغلاق التنبيه">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- شريط مؤشر المزامنة السحابية اللحظي غير المزعج -->
+  <div id="realtimeSyncPill" class="realtime-sync-pill hidden" aria-live="polite">
+    <i class="fa-solid fa-arrows-rotate fa-spin"></i>
+    <span id="realtimeSyncText">تم استلام تحديث جديد من السحابة وتحديث البيانات فورياً ✓</span>
   </div>
 
   <!-- عنصر التوست للإشعارات السريعة (نسخ الرابط المباشر، الحفظ) -->
