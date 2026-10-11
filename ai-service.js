@@ -3,7 +3,7 @@
 // خدمة توليد الاختبارات والأسئلة بالذكاء الاصطناعي (Gemini AI Service)
 // ========================================================
 
-const AI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
+const AI_API_KEY = (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_GEMINI_API_KEY) || "";
 
 /**
  * بنك أسئلة ذكي ومولد محلي فوري لنور البيان والقرآن الكريم
@@ -35,9 +35,9 @@ const NOUR_AL_BAYAN_BANK = {
  * دالة توليد الاختبار بالذكاء الاصطناعي مع دعم النصوص والوسائط
  */
 export async function generateTestWithAI({ promptText, mediaName = "", targetGrade = "صف أول", numQuestions = 6 }) {
-  // محاولة الاتصال المباشر بنموذج Google Gemini API
-  try {
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${AI_API_KEY}`;
+  if (AI_API_KEY && AI_API_KEY.trim() !== "") {
+    try {
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${AI_API_KEY}`;
     
     const systemPrompt = `
 أنت خبير تربوي ومعلم لقواعد نور البيان والقرآن الكريم والتجويد.
