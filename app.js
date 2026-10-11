@@ -639,24 +639,18 @@ function loadInitialStorage() {
     saveParticipants();
   }
 
-  // الاختبارات: تبدأ من النسخة المحلية المحفوظة ولا تعيد الاختبارات المحذوفة نهائياً
+  // الاختبارات: تبدأ من كاش الذاكرة المحلية كعرض فوري ريثما يكتمل الاتصال السحابي مباشرة
   try {
+    localStorage.removeItem("nour_deleted_quizzes");
     const savedQuizzes = localStorage.getItem("nour_quizzes");
-    const deletedQuizzes = JSON.parse(localStorage.getItem("nour_deleted_quizzes") || "[]");
-    const hasInitDone = localStorage.getItem("nour_quizzes_init_done") === "true";
-
     if (savedQuizzes) {
       const parsed = JSON.parse(savedQuizzes);
-      quizzesCache = Array.isArray(parsed)
-        ? parsed.filter(q => !deletedQuizzes.includes(q.id)).map(normalizeQuizFromCloud)
-        : [];
-    } else if (!hasInitDone && deletedQuizzes.length === 0) {
-      quizzesCache = INITIAL_QUIZZES.map(normalizeQuizFromCloud);
+      quizzesCache = Array.isArray(parsed) ? parsed.map(normalizeQuizFromCloud) : [];
     } else {
-      quizzesCache = [];
+      quizzesCache = INITIAL_QUIZZES.map(normalizeQuizFromCloud);
     }
   } catch (e) {
-    quizzesCache = [];
+    quizzesCache = INITIAL_QUIZZES.map(normalizeQuizFromCloud);
   }
 
   // الغرف الحية: تبدأ من الذاكرة المؤقتة وتُقرأ مباشرة ولحظياً من Firestore
