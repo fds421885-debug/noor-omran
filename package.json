@@ -1,6 +1,7 @@
 {
   "name": "mosapaqat-nour-al-bayan",
   "version": "1.0.0",
+  "type": "module",
   "description": "موقع مسابقة نور البيان 1448 - 1449 هـ بواجهة إسلامية مضيئة وقاعدة بيانات فايربيس",
   "main": "index.html",
   "scripts": {

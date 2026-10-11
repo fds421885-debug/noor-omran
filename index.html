@@ -17,9 +17,19 @@
   <!-- مكتبة أيقونات FontAwesome -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" integrity="sha512-SnH5WK+bZxgPHs44uWIX+LLJAJ9/2PkPKZ5QiAj6Ta86w+fsb2TkcmfRyVX3pBnMFcV7oQPJkl9QevSCWr3W6A==" crossorigin="anonymous" referrerpolicy="no-referrer" />
   
+  <!-- خريطة استيراد وحدات فايربيس الرسمية لدعم النشر على أي استضافة مباشرة -->
+  <script type="importmap">
+  {
+    "imports": {
+      "firebase/app": "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js",
+      "firebase/firestore": "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js",
+      "firebase/analytics": "https://www.gstatic.com/firebasejs/11.0.1/firebase-analytics.js"
+    }
+  }
+  </script>
+
   <!-- ملف الأنماط بثيم دولينجو -->
   <link rel="stylesheet" href="style.css">
-
 </head>
 <body class="duo-theme">
 
@@ -113,7 +123,7 @@
         </div>
 
         <div class="hero-action">
-          <button id="btnStart" class="btn-duo-green">
+          <button id="btnStart" class="btn-duo-green" type="button" onclick="if(window.handleStartApp){window.handleStartApp();}else{document.getElementById('heroSection')?.classList.add('hidden');document.getElementById('loginSection')?.classList.remove('hidden');document.getElementById('fullNameInput')?.focus();}">
             <span class="btn-text">أبدأ</span>
             <span class="btn-icon"><i class="fa-solid fa-arrow-left"></i></span>
           </button>

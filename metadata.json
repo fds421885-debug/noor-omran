@@ -1,6 +1,6 @@
 {
-  "name": "Remix mosapqt-noor-al-byan",
-  "description": "Imported from GitHub: mashka2022m-oss/mosapqt-noor-al-byan",
+  "name": "مسابقة نور البيان 1448 - 1449 هـ",
+  "description": "منصة مسابقة نور البيان التفاعلية بثيم مبهج ونظام شامل للمشرفين والطلاب والمسابقات الحية ولوحة الشرف",
   "capabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
   ]

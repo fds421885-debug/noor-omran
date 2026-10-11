@@ -468,35 +468,42 @@ document.querySelectorAll(".nav-tab").forEach(tabBtn => {
 // تحميل وتهيئة البيانات المحلية والسحابية (خالية من أي بيانات وهمية)
 // --------------------------------------------------------
 function loadInitialStorage() {
-  // تنظيف أي بيانات وهمية كانت مخزنة في جلسات سابقة
-  const savedRoomsStr = localStorage.getItem("nour_live_rooms");
-  if (savedRoomsStr && (savedRoomsStr.includes("خالد محمود") || savedRoomsStr.includes("عثمان البشير"))) {
-    localStorage.removeItem("nour_live_rooms");
-  }
-  const savedHonorStr = localStorage.getItem("nour_honor_board");
-  if (savedHonorStr && (savedHonorStr.includes("عمر أحمد") || savedHonorStr.includes("سارة محمود") || savedHonorStr.includes("النجار"))) {
-    localStorage.removeItem("nour_honor_board");
-  }
+  // إلغاء وحذف أي كاش محلي للاختبارات والغرف ولوحة الشرف نهائياً لضمان توحيد المنصة واعتماد السحابة
+  localStorage.removeItem("nour_quizzes");
+  localStorage.removeItem("nour_live_rooms");
+  localStorage.removeItem("nour_honor_board");
 
   // المدارس المعتمدة
-  const savedSchools = localStorage.getItem("nour_schools");
-  schoolsCache = savedSchools ? JSON.parse(savedSchools) : [...DEFAULT_SCHOOLS];
+  try {
+    const savedSchools = localStorage.getItem("nour_schools");
+    schoolsCache = savedSchools ? JSON.parse(savedSchools) : [...DEFAULT_SCHOOLS];
+  } catch (e) {
+    schoolsCache = [...DEFAULT_SCHOOLS];
+  }
   if (!schoolsCache || !Array.isArray(schoolsCache) || schoolsCache.length === 0) {
     schoolsCache = [...DEFAULT_SCHOOLS];
     localStorage.setItem("nour_schools", JSON.stringify(schoolsCache));
   }
   
   // الفئات المعتمدة
-  const savedGrades = localStorage.getItem("nour_grades");
-  gradesCache = savedGrades ? JSON.parse(savedGrades) : [...DEFAULT_GRADES];
+  try {
+    const savedGrades = localStorage.getItem("nour_grades");
+    gradesCache = savedGrades ? JSON.parse(savedGrades) : [...DEFAULT_GRADES];
+  } catch (e) {
+    gradesCache = [...DEFAULT_GRADES];
+  }
   if (!gradesCache || !Array.isArray(gradesCache) || gradesCache.length === 0) {
     gradesCache = [...DEFAULT_GRADES];
     localStorage.setItem("nour_grades", JSON.stringify(gradesCache));
   }
 
   // الحسابات (المشرف العام هو المعتمد)
-  const savedUsers = localStorage.getItem("nour_participants");
-  participantsCache = savedUsers ? JSON.parse(savedUsers) : [];
+  try {
+    const savedUsers = localStorage.getItem("nour_participants");
+    participantsCache = savedUsers ? JSON.parse(savedUsers) : [];
+  } catch (e) {
+    participantsCache = [];
+  }
 
   // التأكد من وجود المشرف العام محمد منتصر محمد يونس دائماً
   const supNorm = normalizeArabic(MASTER_SUPERVISOR_NAME);
@@ -748,10 +755,10 @@ function setupRealtimeCloudListeners() {
         cloudQuizzes.push({ id: docSnap.id, ...docSnap.data() });
       });
       quizzesCache = cloudQuizzes;
-      localStorage.setItem("nour_quizzes", JSON.stringify(quizzesCache));
       renderQuizzesList();
       renderStudentPracticeQuizzes();
       updateDropdowns();
+      if (statActiveQuizzes) statActiveQuizzes.textContent = quizzesCache.length;
     }, (err) => {
       console.warn("Realtime quizzes notice:", err);
     });
@@ -759,15 +766,14 @@ function setupRealtimeCloudListeners() {
     // 4. مراقبة غرف المسابقات الحية لحظياً — Firestore هو المصدر الوحيد للحقيقة
     const roomsCol = collection(db, "live_rooms");
     onSnapshot(roomsCol, (snapshot) => {
-      // بناء قائمة الغرف الحية من Firestore مباشرة (لا نقرأ من localStorage هنا أبداً)
+      // بناء قائمة الغرف الحية من Firestore مباشرة بدون أي تخزين محلي
       const cloudRooms = [];
       snapshot.forEach(docSnap => {
         const rData = docSnap.data();
-        // نأخذ كل غرفة موجودة في Firestore بغض النظر عن عدد المستخدمين
+        // نأخذ كل غرفة موجودة في Firestore
         cloudRooms.push({ id: docSnap.id, ...rData });
       });
       activeRooms = cloudRooms;
-      localStorage.setItem("nour_live_rooms", JSON.stringify(activeRooms));
       renderLiveRoomsList();
 
       // إذا كان المستخدم الحالي متواجداً داخل غرفة مسابقة
@@ -807,7 +813,6 @@ function setupRealtimeCloudListeners() {
         const hData = snap.data();
         if (Array.isArray(hData.entries)) {
           honorLeaderboardCache = hData.entries;
-          localStorage.setItem("nour_honor_board", JSON.stringify(honorLeaderboardCache));
           renderHonorLeaderboard();
         }
       }
@@ -940,10 +945,6 @@ async function loadCloudData() {
       cloudQuizzes.push({ id: d.id, ...d.data() });
     });
     quizzesCache = cloudQuizzes;
-    localStorage.setItem("nour_quizzes", JSON.stringify(quizzesCache));
-    renderQuizzesList();
-    renderStudentPracticeQuizzes();
-    updateDropdowns();
 
     // 3. الحسابات والمشاركون (مطابقة تامة ومباشرة لما في السحابة)
     const uSnap = await getDocs(collection(db, "participants"));
@@ -967,22 +968,16 @@ async function loadCloudData() {
       });
     }
     localStorage.setItem("nour_participants", JSON.stringify(participantsCache));
-    renderAccountsTable();
-    if (currentUser && (currentUser.role === "supervisor" || currentUser.role === "teacher")) {
-      renderSupervisorDashboard();
-    }
 
-    // 4. الغرف الحية المفتوحة من فايربيس مباشرة
+    // 4. الغرف الحية المفتوحة من فايربيس مباشرة (Firestore هو المصدر الوحيد)
     const rSnap = await getDocs(collection(db, "live_rooms"));
     const cloudRooms = [];
     rSnap.forEach(d => {
       cloudRooms.push({ id: d.id, ...d.data() });
     });
     activeRooms = cloudRooms;
-    localStorage.setItem("nour_live_rooms", JSON.stringify(activeRooms));
-    renderLiveRoomsList();
 
-    // 5. لوحة الشرف
+    // 5. لوحة الشرف من السحابة مباشرة
     const hRef = doc(db, "system_settings", "honor_board");
     const hSnap = await getDoc(hRef);
     if (hSnap.exists()) {
@@ -991,8 +986,18 @@ async function loadCloudData() {
     } else {
       honorLeaderboardCache = [];
     }
-    localStorage.setItem("nour_honor_board", JSON.stringify(honorLeaderboardCache));
+
+    // 6. تحديث كافة الواجهات بعد اكتمال قراءة كافة البيانات السحابية
+    renderAccountsTable();
+    renderQuizzesList();
+    renderStudentPracticeQuizzes();
+    renderLiveRoomsList();
     renderHonorLeaderboard();
+    updateDropdowns();
+
+    if (currentUser && (currentUser.role === "supervisor" || currentUser.role === "teacher")) {
+      renderSupervisorDashboard();
+    }
   } catch (err) {
     console.warn("Cloud load notice (operating offline):", err);
   }
@@ -1139,8 +1144,7 @@ if (fullNameInput) {
 }
 
 // أزرار الانتقال المباشر
-// أزرار الانتقال المباشر
-btnStart?.addEventListener("click", () => {
+window.handleStartApp = function() {
   resetLoginSteps();
   showView("login");
   const lastUsername = localStorage.getItem("nour_last_username");
@@ -1149,7 +1153,9 @@ btnStart?.addEventListener("click", () => {
     fullNameInput.dispatchEvent(new Event("input"));
   }
   fullNameInput?.focus();
-});
+};
+
+btnStart?.addEventListener("click", window.handleStartApp);
 
 btnBackToHero?.addEventListener("click", () => {
   showView("hero");
@@ -1564,19 +1570,29 @@ function renderSupervisorDashboard() {
     if (tabOverviewBtn) tabOverviewBtn.style.display = "none";
     if (quickActionsBar) quickActionsBar.style.display = "none";
     if (tabQuizzesBtn) tabQuizzesBtn.style.display = "none";
-    if (tabLiveBtn) {
-      tabLiveBtn.style.display = "inline-flex";
-      tabLiveBtn.click();
+    if (tabLiveBtn) tabLiveBtn.style.display = "inline-flex";
+
+    const activePanel = document.querySelector(".tab-content-panel.active");
+    if (!activePanel || (activePanel.id !== "tabLive" && activePanel.id !== "tabHonorBoard")) {
+      document.querySelectorAll(".tab-content-panel").forEach(p => p.classList.remove("active"));
+      document.querySelectorAll(".nav-tab").forEach(t => t.classList.remove("active"));
+      document.getElementById("tabLive")?.classList.add("active");
+      tabLiveBtn?.classList.add("active");
     }
   } else if (!isSupervisorRole) {
-    // المعلم: يرى بنك الاختبارات والمسابقات ولوحة الشرف، ولا يرى الحسابات ولا الإحصائيات
+    // المعلم: يرى بنك الاختبارات والمسابقات الحية ولوحة الشرف
     if (tabAccountsBtn) tabAccountsBtn.style.display = "none";
     if (tabOverviewBtn) tabOverviewBtn.style.display = "none";
     if (quickActionsBar) quickActionsBar.style.display = "none";
     if (tabLiveBtn) tabLiveBtn.style.display = "inline-flex";
-    if (tabQuizzesBtn) {
-      tabQuizzesBtn.style.display = "inline-flex";
-      tabQuizzesBtn.click();
+    if (tabQuizzesBtn) tabQuizzesBtn.style.display = "inline-flex";
+
+    const activePanel = document.querySelector(".tab-content-panel.active");
+    if (!activePanel || activePanel.id === "tabAccounts" || activePanel.id === "tabOverview") {
+      document.querySelectorAll(".tab-content-panel").forEach(p => p.classList.remove("active"));
+      document.querySelectorAll(".nav-tab").forEach(t => t.classList.remove("active"));
+      document.getElementById("tabQuizzes")?.classList.add("active");
+      tabQuizzesBtn?.classList.add("active");
     }
   } else {
     // المشرف العام: يرى كافة الأقسام (الإحصائيات، الحسابات، الاختبارات، العروض، لوحة الشرف)
@@ -2152,14 +2168,15 @@ function renderQuizzesList() {
   }
 
   quizzesListGrid.innerHTML = quizzesCache.map(q => {
-    const questionsCount = q.sections.reduce((acc, s) => acc + (s.questions ? s.questions.length : 0), 0);
+    const secList = Array.isArray(q.sections) ? q.sections : [];
+    const questionsCount = secList.reduce((acc, s) => acc + (Array.isArray(s?.questions) ? s.questions.length : 0), 0);
     return `
       <div class="quiz-card-duo">
         <div class="quiz-card-top">
-          <span class="quiz-grade-badge"><i class="fa-solid fa-layer-group"></i> ${q.targetGrade}</span>
-          <h4 class="quiz-card-title">${q.title}</h4>
+          <span class="quiz-grade-badge"><i class="fa-solid fa-layer-group"></i> ${q.targetGrade || 'عام'}</span>
+          <h4 class="quiz-card-title">${q.title || 'اختبار نور البيان'}</h4>
           <div class="quiz-card-info">
-            <span><i class="fa-solid fa-list-check"></i> ${q.sections.length} أقسام</span>
+            <span><i class="fa-solid fa-list-check"></i> ${secList.length} أقسام</span>
             <span><i class="fa-solid fa-circle-question"></i> ${questionsCount} أسئلة</span>
             <span><i class="fa-solid fa-dumbbell"></i> ${q.allowPractice ? 'تدريب متاح' : 'رسمي فقط'}</span>
           </div>
@@ -2202,13 +2219,16 @@ function renderQuizzesList() {
       });
 
       if (confirmed) {
-        quizzesCache = quizzesCache.filter(x => x.id !== qId);
-        renderQuizzesList();
-        renderStudentPracticeQuizzes();
-        updateDropdowns();
         try {
+          // حذف الاختبار مباشرة وقطعياً من قاعدة البيانات السحابية Firestore
           await deleteDoc(doc(db, "quizzes", qId));
-          showToast("تم حذف الاختبار نهائياً من السحابة لجميع المستخدمين", "fa-trash");
+          quizzesCache = quizzesCache.filter(x => x.id !== qId);
+          localStorage.removeItem("nour_quizzes");
+          renderQuizzesList();
+          renderStudentPracticeQuizzes();
+          updateDropdowns();
+          if (statActiveQuizzes) statActiveQuizzes.textContent = quizzesCache.length;
+          showToast(`تم حذف الاختبار (${title}) نهائياً من قاعدة البيانات السحابية لجميع المستخدمين`, "fa-trash");
         } catch (err) {
           console.error("Firestore quiz delete error:", err);
           showToast("حدث خطأ أثناء حذف الاختبار من السحابة", "fa-triangle-exclamation");
@@ -2983,7 +3003,8 @@ function openCreateRoomModal(prefilledQuizId = null) {
     const countEl = document.getElementById("quizTotalQCount");
     const perInput = document.getElementById("questionsPerStudentInput");
     if (!quiz || !infoBox) return;
-    const total = quiz.sections.reduce((a, s) => a + (s.questions?.length || 0), 0);
+    const secList = Array.isArray(quiz.sections) ? quiz.sections : [];
+    const total = secList.reduce((a, s) => a + (Array.isArray(s?.questions) ? s.questions.length : 0), 0);
     if (countEl) countEl.textContent = total;
     if (perInput) { perInput.max = total; perInput.placeholder = `أقصى ${total} سؤال`; }
     infoBox.classList.remove("hidden");
@@ -3035,8 +3056,10 @@ createRoomForm?.addEventListener("submit", async (e) => {
     createdAt: new Date().toISOString()
   };
 
+  activeRooms = activeRooms.filter(r => r.id !== newRoom.id);
   activeRooms.unshift(newRoom);
   await saveRooms(newRoom); // حفظ ومزامنة فورية مع Firestore
+  renderLiveRoomsList();
   createRoomModal?.classList.add("hidden");
   joinLiveRoom(newRoom);
   showToast("تم فتح غرفة المسابقة بنجاح ومزامنتها سحابياً!", "fa-tv");
@@ -3239,16 +3262,25 @@ function joinLiveRoom(room) {
 
   // قانون قيادة الغرفة: أول معلم ينضم يكون مشرفاً، وتنتقل القيادة فوراً للمشرف العام محمد منتصر محمد يونس عند دخوله
   if (currentUser) {
+    let changed = false;
+    if (!Array.isArray(room.users)) {
+      room.users = [];
+    }
     if (!room.users.includes(currentUser.name)) {
       room.users.push(currentUser.name);
+      changed = true;
     }
 
-    if (isSupervisor(currentUser.name)) {
+    if (isSupervisor(currentUser.name) && room.leaderName !== currentUser.name) {
       room.leaderName = currentUser.name;
+      changed = true;
     } else if (!room.leaderName) {
       room.leaderName = currentUser.name;
+      changed = true;
     }
-    saveRooms(room); // حفظ + مزامنة الغرفة سحابياً
+    if (changed) {
+      saveRooms(room); // حفظ ومزامنة الغرفة سحابياً عند حدوث تعديل فقط
+    }
   }
 
   arenaRoomTitle.textContent = room.name;
@@ -3310,17 +3342,29 @@ btnExitArena?.addEventListener("click", async () => {
       }
       leaderExitModal?.classList.remove("hidden");
     } else {
-      // لا يوجد غيره في الغرفة: تأكيد إنهاء المسابقة مباشرة
-      const confirmed = await showInAppConfirm({
-        title: "إنهاء وإغلاق المسابقة",
-        message: "أنت الشخص الوحيد المتواجد في الغرفة! مغادرتك ستؤدي إلى إنهاء المسابقة وإغلاق الغرفة. هل ترغب بالمغادرة والإغلاق؟",
-        confirmText: "نعم، إنهاء وإغلاق الغرفة",
-        cancelText: "البقاء في الغرفة",
-        type: "danger",
-        icon: "fa-door-closed"
+      // لا يوجد غيره في الغرفة حالياً: إتاحة خيار إبقاء الغرفة مفتوحة ونشطة في السحابة أو إنهاؤها
+      const keepRoomActive = await showInAppConfirm({
+        title: "مغادرة مسرح المسابقة",
+        message: "أنت المتواجد الوحيد حالياً. هل ترغب في إبقاء الغرفة مفتوحة ونشطة في السحابة حتى يتمكن المشرف والطلاب من الدخول إليها، أم إنهاء وإغلاق الغرفة نهائياً؟",
+        confirmText: "إبقاء الغرفة مفتوحة والعودة للوحة التحكم",
+        cancelText: "إنهاء وإغلاق الغرفة نهائياً للجميع",
+        type: "info",
+        icon: "fa-tower-broadcast"
       });
 
-      if (confirmed) {
+      if (keepRoomActive) {
+        // إبقاء الغرفة مفتوحة في Firestore والعودة للوحة التحكم
+        clearInterval(liveTimerInterval);
+        clearInterval(cardsTimerInterval);
+        stopOfflineCountdown();
+        const keptRoomId = currentLiveRoom.id;
+        currentLiveRoom = null;
+        currentContestant = null;
+        showView(currentUser ? (currentUser.role === 'student' ? "student" : "supervisor") : "hero");
+        renderLiveRoomsList();
+        showToast(`الغرفة (#${keptRoomId}) ما زالت مفتوحة ونشطة في السحابة ويمكن للجميع الدخول إليها!`, "fa-tower-broadcast");
+      } else {
+        // إنهاء وإغلاق الغرفة نهائياً من Firestore
         await executeRoomTermination(currentLiveRoom.id);
       }
     }
@@ -3399,13 +3443,13 @@ btnTerminateContestForAll?.addEventListener("click", async () => {
 });
 
 async function executeRoomTermination(roomId) {
-  const roomToClose = activeRooms.find(r => r.id === roomId);
   activeRooms = activeRooms.filter(r => r.id !== roomId);
-  // احفظ القائمة المحدثة محلياً
-  localStorage.setItem("nour_live_rooms", JSON.stringify(activeRooms));
-  // احذف الغرفة من Firestore نهائياً
-  if (roomToClose) {
-    await syncRoomToCloud(roomToClose, true);
+  localStorage.removeItem("nour_live_rooms");
+  // حذف الغرفة من Firestore نهائياً وبشكل قطعي للجميع
+  try {
+    await deleteDoc(doc(db, "live_rooms", roomId));
+  } catch (err) {
+    console.error("Firestore delete room error:", err);
   }
 
   localStorage.setItem("nour_last_closed_room", JSON.stringify({
@@ -3663,15 +3707,16 @@ function enterPhaseQuestionDraw() {
   if (drawPhaseStudentLabel)
     drawPhaseStudentLabel.textContent = `المتسابق: ${currentLiveRoom.contestantName || '--'}`;
 
-  if (!currentQuizData || !currentQuizData.sections) return;
+  if (!currentQuizData) return;
 
-  const totalInQuiz = currentQuizData.sections.reduce((a, s) => a + (s.questions?.length || 0), 0);
-  const perStudent = currentLiveRoom.questionsPerStudent || totalInQuiz;
+  const secList = Array.isArray(currentQuizData.sections) ? currentQuizData.sections : [];
+  const totalInQuiz = secList.reduce((a, s) => a + (Array.isArray(s?.questions) ? s.questions.length : 0), 0);
+  const perStudent = currentLiveRoom.questionsPerStudent || (totalInQuiz || 5);
 
   // بناء عرض الأقسام
-  drawSectionsList.innerHTML = currentQuizData.sections.map((sec, idx) => {
-    const secTotal = sec.questions?.length || 0;
-    const portion = Math.max(1, Math.round((secTotal / totalInQuiz) * perStudent));
+  drawSectionsList.innerHTML = secList.map((sec, idx) => {
+    const secTotal = Array.isArray(sec.questions) ? sec.questions.length : 0;
+    const portion = Math.max(1, Math.round((secTotal / (totalInQuiz || 1)) * perStudent));
     return `
       <div class="draw-section-row" id="drawSecRow_${idx}">
         <div>
@@ -4016,7 +4061,8 @@ function loadStageQuestion(idx) {
       let sc = parseInt(document.getElementById("matchingScoreInput")?.value || "0");
       if (doublePointsActive) sc *= 2;
       sc += cardBonusPoints;
-      document.getElementById("btnMatchingAccept").disabled = true;
+      const btn = document.getElementById("btnMatchingAccept");
+      if (btn) btn.disabled = true;
       showToast(`✅ تم تسجيل درجة التوصيل: ${sc}`, "fa-check");
       activeCardEffect = null;
       advanceToNext(sc, false);
@@ -4046,7 +4092,8 @@ function loadStageQuestion(idx) {
       let sc = parseInt(document.getElementById("orderingScoreInput")?.value || "0");
       if (doublePointsActive) sc *= 2;
       sc += cardBonusPoints;
-      document.getElementById("btnOrderingAccept").disabled = true;
+      const btn = document.getElementById("btnOrderingAccept");
+      if (btn) btn.disabled = true;
       showToast(`✅ تم تسجيل درجة الترتيب: ${sc}`, "fa-check");
       activeCardEffect = null;
       advanceToNext(sc, false);
@@ -4102,7 +4149,8 @@ function loadStageQuestion(idx) {
       let pts = Math.round((rounded / 5) * (q.points || 5));
       if (doublePointsActive) pts *= 2;
       pts += cardBonusPoints;
-      document.getElementById("btnOralAccept").disabled = true;
+      const btn = document.getElementById("btnOralAccept");
+      if (btn) btn.disabled = true;
       showToast(`✅ تم تسجيل التقييم الشفهي: ${rounded.toFixed(2)} من 5 (+${pts} درجات)`, "fa-microphone");
       activeCardEffect = null;
       advanceToNext(pts, false);
@@ -4783,7 +4831,8 @@ function renderStudentPracticeQuizzes() {
   }
 
   studentPracticeQuizzesList.innerHTML = practiceQuizzes.map(q => {
-    const qCount = q.sections.reduce((a, s) => a + (s.questions ? s.questions.length : 0), 0);
+    const secList = Array.isArray(q.sections) ? q.sections : [];
+    const qCount = secList.reduce((a, s) => a + (Array.isArray(s?.questions) ? s.questions.length : 0), 0);
     return `
       <div class="quiz-card-duo">
         <div class="quiz-card-top">
@@ -4999,11 +5048,10 @@ window.addEventListener("click", (e) => {
 // --------------------------------------------------------
 // نقطة البداية (Initialization)
 // --------------------------------------------------------
-window.addEventListener("DOMContentLoaded", async () => {
+async function initApp() {
   loadInitialStorage();
 
   // 1. أولاً: فحص حاسم لرابط الدخول المباشر (?auth=...)
-  // إذا فُتح رابط مباشر لحساب طالب/معلم/مشرف، نسجل دخوله فوراً لحسابه الخاص
   const urlParams = new URLSearchParams(window.location.search);
   const hasDirectAuth = urlParams.has("auth") || urlParams.has("token");
   if (hasDirectAuth) {
@@ -5046,4 +5094,10 @@ window.addEventListener("DOMContentLoaded", async () => {
   if (!restoredSession && !currentUser) {
     showView("hero");
   }
-});
+}
+
+if (document.readyState === "loading") {
+  window.addEventListener("DOMContentLoaded", initApp);
+} else {
+  initApp();
+}
