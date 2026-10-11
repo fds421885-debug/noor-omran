@@ -614,9 +614,11 @@ function loadInitialStorage() {
 
     if (savedQuizzes) {
       const parsed = JSON.parse(savedQuizzes);
-      quizzesCache = Array.isArray(parsed) ? parsed.filter(q => !deletedQuizzes.includes(q.id)) : [];
+      quizzesCache = Array.isArray(parsed)
+        ? parsed.filter(q => !deletedQuizzes.includes(q.id)).map(normalizeQuizFromCloud)
+        : [];
     } else if (!hasInitDone && deletedQuizzes.length === 0) {
-      quizzesCache = [...INITIAL_QUIZZES];
+      quizzesCache = INITIAL_QUIZZES.map(normalizeQuizFromCloud);
     } else {
       quizzesCache = [];
     }
@@ -643,11 +645,51 @@ function loadInitialStorage() {
   updateDropdowns();
 }
 
-// دالة تطهير الكائنات قبل إرسالها لـ Firestore لحذف أي undefined نهائياً ومنع أخطاء السحابة
+// دالة توحيد وتطبيع بيانات الاختبار الواردة من السحابة أو الكاش
+function normalizeQuizFromCloud(q) {
+  if (!q) return q;
+  const normalized = { ...q };
+  if (Array.isArray(normalized.sections)) {
+    normalized.sections = normalized.sections.map(sec => {
+      if (!sec) return sec;
+      const cleanSec = { ...sec };
+      if (Array.isArray(cleanSec.questions)) {
+        cleanSec.questions = cleanSec.questions.map(question => {
+          if (!question) return question;
+          const cleanQ = { ...question };
+          if (Array.isArray(cleanQ.pairs)) {
+            cleanQ.pairs = cleanQ.pairs.map(p => {
+              if (Array.isArray(p)) return p;
+              if (p && typeof p === "object") {
+                return [p.left !== undefined ? String(p.left) : "", p.right !== undefined ? String(p.right) : ""];
+              }
+              return ["", ""];
+            });
+          }
+          return cleanQ;
+        });
+      }
+      return cleanSec;
+    });
+  }
+  return normalized;
+}
+
+// دالة تطهير الكائنات قبل إرسالها لـ Firestore لحذف أي undefined ومعالجة المصفوفات المتداخلة منعاً لرفض السحابة
 function sanitizeForFirestore(obj) {
   if (obj === null || obj === undefined) return null;
   if (Array.isArray(obj)) {
-    return obj.map(item => sanitizeForFirestore(item));
+    return obj.map(item => {
+      // فايربيس تمنع المصفوفات المتداخلة (Nested Arrays مثل pairs: [["a","b"]]).
+      // نحول كل زوج متداخل لكائن خفيف {left, right} يقبله فايربيس فوراً دون أي خطأ
+      if (Array.isArray(item)) {
+        return {
+          left: item[0] !== undefined ? String(item[0]) : "",
+          right: item[1] !== undefined ? String(item[1]) : ""
+        };
+      }
+      return sanitizeForFirestore(item);
+    });
   }
   if (typeof obj === "object" && obj.constructor === Object) {
     const clean = {};
@@ -956,24 +998,45 @@ function setupRealtimeCloudListeners() {
       const deletedIds = new Set(JSON.parse(localStorage.getItem("nour_deleted_quizzes") || "[]"));
       snapshot.forEach(docSnap => {
         if (!deletedIds.has(docSnap.id)) {
-          cloudQuizzes.push({ ...docSnap.data(), id: docSnap.id });
+          const qData = normalizeQuizFromCloud({ ...docSnap.data(), id: docSnap.id });
+          cloudQuizzes.push(qData);
+        }
+      });
+
+      // دمج ذكي مع الكاش المحلي لضمان عدم ضياع أي اختبار جديد أو تعديلات جديدة
+      const cloudMap = new Map(cloudQuizzes.map(q => [q.id, q]));
+      const mergedQuizzes = [...cloudQuizzes];
+
+      quizzesCache.forEach(localQ => {
+        if (localQ && localQ.id && !deletedIds.has(localQ.id) && !cloudMap.has(localQ.id)) {
+          mergedQuizzes.unshift(localQ);
+          syncQuizToCloud(localQ).catch(() => {});
+        } else if (localQ && localQ.id && cloudMap.has(localQ.id)) {
+          const cloudQ = cloudMap.get(localQ.id);
+          const localTime = localQ.updatedAt || 0;
+          const cloudTime = cloudQ.updatedAt || (cloudQ.lastUpdated?.toMillis ? cloudQ.lastUpdated.toMillis() : 0);
+          if (localTime > cloudTime) {
+            const idx = mergedQuizzes.findIndex(x => x.id === localQ.id);
+            if (idx >= 0) mergedQuizzes[idx] = localQ;
+            syncQuizToCloud(localQ).catch(() => {});
+          }
         }
       });
 
       // رصد أي اختبارات جديدة تم إنشاؤها سحابياً من أي جهاز آخر
       if (!isFirstQuizzesSnapshot) {
-        const newlyAdded = cloudQuizzes.filter(q => !previousQuizzesMap.has(q.id));
+        const newlyAdded = mergedQuizzes.filter(q => !previousQuizzesMap.has(q.id));
         if (newlyAdded.length > 0) {
           const firstQ = newlyAdded[0];
-          showToast(`📚 تم إضافة اختبار جديد في السحابة: «${firstQ.title}»`, "fa-book-quran");
+          showToast(`📚 تم تحديث بنك الأسئلة: «${firstQ.title}»`, "fa-book-quran");
           showRealtimeSyncPill("⚡ تم تحديث بنك الأسئلة والاختبارات تلقائياً من السحابة ✓");
         }
       }
 
-      previousQuizzesMap = new Map(cloudQuizzes.map(q => [q.id, q]));
+      previousQuizzesMap = new Map(mergedQuizzes.map(q => [q.id, q]));
       isFirstQuizzesSnapshot = false;
 
-      quizzesCache = cloudQuizzes;
+      quizzesCache = mergedQuizzes;
       localStorage.setItem("nour_quizzes", JSON.stringify(quizzesCache));
       renderQuizzesList();
       renderStudentPracticeQuizzes();
@@ -1458,7 +1521,7 @@ async function loadCloudData(forceServer = false) {
       const cloudQuizzes = [];
       quizRes.value.forEach(d => {
         if (!deletedIdsSet.has(d.id)) {
-          cloudQuizzes.push({ ...d.data(), id: d.id });
+          cloudQuizzes.push(normalizeQuizFromCloud({ ...d.data(), id: d.id }));
         }
       });
 
@@ -1466,7 +1529,7 @@ async function loadCloudData(forceServer = false) {
       if (cloudQuizzes.length === 0 && !hasInitDone && deletedIdsSet.size === 0) {
         for (const q of INITIAL_QUIZZES) {
           syncQuizToCloud(q).catch(() => {});
-          cloudQuizzes.push(q);
+          cloudQuizzes.push(normalizeQuizFromCloud(q));
         }
         localStorage.setItem("nour_quizzes_init_done", "true");
         setDoc(doc(db, "system_settings", "quizzes_config"), {
@@ -1477,9 +1540,30 @@ async function loadCloudData(forceServer = false) {
       } else {
         localStorage.setItem("nour_quizzes_init_done", "true");
       }
-      quizzesCache = cloudQuizzes;
+
+      // دمج ذكي مع الكاش المحلي لضمان عدم ضياع أي اختبار جديد أو تعديلات محلية
+      const cloudMap = new Map(cloudQuizzes.map(q => [q.id, q]));
+      const mergedQuizzes = [...cloudQuizzes];
+
+      quizzesCache.forEach(localQ => {
+        if (localQ && localQ.id && !deletedIdsSet.has(localQ.id) && !cloudMap.has(localQ.id)) {
+          mergedQuizzes.unshift(localQ);
+          syncQuizToCloud(localQ).catch(() => {});
+        } else if (localQ && localQ.id && cloudMap.has(localQ.id)) {
+          const cloudQ = cloudMap.get(localQ.id);
+          const localTime = localQ.updatedAt || 0;
+          const cloudTime = cloudQ.updatedAt || (cloudQ.lastUpdated?.toMillis ? cloudQ.lastUpdated.toMillis() : 0);
+          if (localTime > cloudTime) {
+            const idx = mergedQuizzes.findIndex(x => x.id === localQ.id);
+            if (idx >= 0) mergedQuizzes[idx] = localQ;
+            syncQuizToCloud(localQ).catch(() => {});
+          }
+        }
+      });
+
+      quizzesCache = mergedQuizzes;
       localStorage.setItem("nour_quizzes", JSON.stringify(quizzesCache));
-      counts.quizzes = cloudQuizzes.length;
+      counts.quizzes = quizzesCache.length;
     }
 
     // 3. الحسابات والمشاركون (استيراد كل الحسابات السحابية بدقة تامة)
@@ -3154,22 +3238,25 @@ function renderQuizzesList() {
 }
 
 function openQuizEditor(quiz = null) {
+  const editorTitle = document.getElementById("quizEditorTitle");
   if (quiz) {
     editQuizId.value = quiz.id;
     quizTitleInput.value = quiz.title;
     quizTargetGrade.value = quiz.targetGrade;
     quizAllowPracticeToggle.checked = !!quiz.allowPractice;
+    if (editorTitle) editorTitle.textContent = `تعديل الاختبار: ${quiz.title}`;
     renderSectionsInEditor(quiz.sections);
   } else {
     editQuizId.value = "";
     quizTitleInput.value = "";
     quizTargetGrade.value = gradesCache[0] || "صف أول";
     quizAllowPracticeToggle.checked = true;
+    if (editorTitle) editorTitle.textContent = "إنشاء اختبار قرآني جديد";
     renderSectionsInEditor([
       {
         sectionName: "القسم 1: الحروف والتلاوة",
         questions: [
-          { type: "oral", font: "quran", text: "اقرأ الكلمات الآتية بضبط الحركات:", points: 5 }
+          { type: "oral", font: "quran", text: "اقرأ الكلمات الآتية بضبط الحركات:", points: 5, targetOral: "كَتَبَ - بَلَغَ - وَجَدَ" }
         ]
       }
     ]);
@@ -3213,18 +3300,21 @@ function renderSectionsInEditor(sections) {
 }
 
 function renderQuestionCardHtml(secIdx, qIdx, q) {
+  const qUid = 'quid_' + Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-4);
   const qType = q.type || "mcq";
   const qFont = q.font || "quran";
   const qPoints = q.points || 5;
   const qText = q.text || "";
   const options = Array.isArray(q.options) && q.options.length > 0 ? q.options : ["خيار 1", "خيار 2", "خيار 3", "خيار 4"];
   const correctIdx = q.correct !== undefined ? q.correct : 0;
-  const pairs = Array.isArray(q.pairs) && q.pairs.length > 0 ? q.pairs : [["", ""]];
+  const pairs = Array.isArray(q.pairs) && q.pairs.length > 0
+    ? q.pairs.map(p => Array.isArray(p) ? p : [p.left || "", p.right || ""])
+    : [["", ""]];
   const items = Array.isArray(q.items) && q.items.length > 0 ? q.items : ["كلمة 1", "كلمة 2"];
   const targetSentence = q.targetSentence || (items.length > 0 ? items.join(" ") : "");
 
   return `
-    <div class="question-edit-card" data-sec-idx="${secIdx}" data-q-idx="${qIdx}">
+    <div class="question-edit-card" data-sec-idx="${secIdx}" data-q-idx="${qIdx}" data-card-uid="${qUid}">
       <div class="question-meta-row">
         <select class="form-control form-select q-type-select" style="flex: 1; min-width: 140px; font-size: 13px;">
           <option value="mcq" ${qType === 'mcq' ? 'selected' : ''}>خيارات متعددة (MCQ)</option>
@@ -3265,7 +3355,7 @@ function renderQuestionCardHtml(secIdx, qIdx, q) {
         <div class="mcq-options-list">
           ${options.map((opt, oIdx) => `
             <div class="mcq-option-row ${oIdx === correctIdx ? 'is-correct' : ''}">
-              <input type="radio" name="correct_radio_${secIdx}_${qIdx}" class="mcq-radio-custom" value="${oIdx}" ${oIdx === correctIdx ? 'checked' : ''} title="تعيين كإجابة صحيحة">
+              <input type="radio" name="correct_radio_${qUid}" class="mcq-radio-custom" value="${oIdx}" ${oIdx === correctIdx ? 'checked' : ''} title="تعيين كإجابة صحيحة">
               <span style="font-size: 13px; font-weight: 800; color: #64748b; min-width: 45px;">خيار ${oIdx + 1}</span>
               <input type="text" class="mcq-opt-input font-${qFont}" value="${escapeHtml(opt)}" placeholder="اكتب نص الخيار هنا...">
               <button type="button" class="btn-icon-action delete btn-remove-mcq-opt" title="حذف هذا الخيار">
@@ -3316,7 +3406,7 @@ function renderQuestionCardHtml(secIdx, qIdx, q) {
           ${items.map((itm, iIdx) => `
             <div class="ordering-item-row">
               <span class="ordering-num-badge">${iIdx + 1}</span>
-              <input type="text" class="form-control ordering-item-input font-${qFont}" value="${escapeHtml(itm)}" placeholder="الكلمة / العنصر...">
+              <input type="text" class="form-control ordering-item-input font-${fontHelper(qFont)}" value="${escapeHtml(itm)}" placeholder="الكلمة / العنصر...">
               <button type="button" class="btn-icon-action delete btn-remove-order-item" title="حذف هذا العنصر">
                 <i class="fa-solid fa-xmark"></i>
               </button>
@@ -3351,199 +3441,24 @@ function renderQuestionCardHtml(secIdx, qIdx, q) {
   `;
 }
 
+function fontHelper(f) {
+  return f || "quran";
+}
+
+let isQuestionEditorDelegated = false;
 function bindQuestionEditorEvents() {
-  if (!quizSectionsContainer) return;
+  if (!quizSectionsContainer || isQuestionEditorDelegated) return;
+  isQuestionEditorDelegated = true;
 
-  // تغيير نوع السؤال
-  quizSectionsContainer.querySelectorAll(".q-type-select").forEach(sel => {
-    sel.addEventListener("change", (e) => {
-      const card = e.target.closest(".question-edit-card");
-      const val = e.target.value;
-      const mcqBox = card.querySelector(".mcq-builder-box");
-      const matchBox = card.querySelector(".matching-builder-box");
-      const orderBox = card.querySelector(".ordering-builder-box");
-      const oralBox = card.querySelector(".oral-builder-box");
-
-      mcqBox?.classList.toggle("hidden", val !== "mcq");
-      matchBox?.classList.toggle("hidden", val !== "matching");
-      orderBox?.classList.toggle("hidden", val !== "ordering");
-      oralBox?.classList.toggle("hidden", val !== "oral");
-    });
-  });
-
-  // تغيير نوع الخط
-  quizSectionsContainer.querySelectorAll(".q-font-select").forEach(sel => {
-    sel.addEventListener("change", (e) => {
-      const card = e.target.closest(".question-edit-card");
-      const font = e.target.value;
-      const ta = card.querySelector(".q-text-input");
-      if (ta) ta.className = `form-control q-text-input font-${font}`;
-      card.querySelectorAll(".mcq-opt-input, .match-left-input, .ordering-sentence-input, .ordering-item-input, .q-oral-target-input").forEach(inp => {
-        inp.classList.remove("font-quran", "font-amiri", "font-normal");
-        inp.classList.add(`font-${font}`);
-      });
-    });
-  });
-
-  // اختيار الراديو للخيارات الصحيحة في MCQ
-  quizSectionsContainer.querySelectorAll(".mcq-options-list").forEach(list => {
-    list.addEventListener("change", (e) => {
-      if (e.target.classList.contains("mcq-radio-custom")) {
-        list.querySelectorAll(".mcq-option-row").forEach(row => row.classList.remove("is-correct"));
-        const parentRow = e.target.closest(".mcq-option-row");
-        if (parentRow) parentRow.classList.add("is-correct");
-      }
-    });
-  });
-
-  // إضافة خيار إضافي MCQ
-  quizSectionsContainer.querySelectorAll(".btn-add-mcq-opt").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const card = btn.closest(".question-edit-card");
-      const list = card.querySelector(".mcq-options-list");
-      const secIdx = card.getAttribute("data-sec-idx");
-      const qIdx = card.getAttribute("data-q-idx");
-      const font = card.querySelector(".q-font-select")?.value || "quran";
-      const count = list.querySelectorAll(".mcq-option-row").length;
-
-      const newRow = document.createElement("div");
-      newRow.className = "mcq-option-row";
-      newRow.innerHTML = `
-        <input type="radio" name="correct_radio_${secIdx}_${qIdx}" class="mcq-radio-custom" value="${count}" title="تعيين كإجابة صحيحة">
-        <span style="font-size: 13px; font-weight: 800; color: #64748b; min-width: 45px;">خيار ${count + 1}</span>
-        <input type="text" class="mcq-opt-input font-${font}" value="" placeholder="اكتب نص الخيار هنا...">
-        <button type="button" class="btn-icon-action delete btn-remove-mcq-opt" title="حذف هذا الخيار">
-          <i class="fa-solid fa-xmark"></i>
-        </button>
-      `;
-      list.appendChild(newRow);
-      newRow.querySelector(".btn-remove-mcq-opt").addEventListener("click", () => {
-        if (list.querySelectorAll(".mcq-option-row").length > 2) {
-          newRow.remove();
-        } else {
-          showToast("يجب أن يحتوي السؤال على خيارين على الأقل", "fa-circle-info");
-        }
-      });
-    });
-  });
-
-  // حذف خيار MCQ
-  quizSectionsContainer.querySelectorAll(".btn-remove-mcq-opt").forEach(btn => {
-    btn.addEventListener("click", (e) => {
-      const row = e.target.closest(".mcq-option-row");
-      const list = e.target.closest(".mcq-options-list");
-      if (list.querySelectorAll(".mcq-option-row").length > 2) {
-        row.remove();
-      } else {
-        showToast("يجب أن يحتوي السؤال على خيارين على الأقل", "fa-circle-info");
-      }
-    });
-  });
-
-  // إضافة زوج توصيل جديد
-  quizSectionsContainer.querySelectorAll(".btn-add-match-pair").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const card = btn.closest(".question-edit-card");
-      const list = card.querySelector(".matching-pairs-list");
-      const font = card.querySelector(".q-font-select")?.value || "quran";
-
-      const newRow = document.createElement("div");
-      newRow.className = "matching-pair-row";
-      newRow.innerHTML = `
-        <input type="text" class="form-control match-left-input font-${font}" value="" placeholder="الطرف الأول (الموصل)...">
-        <span class="match-arrow-badge"><i class="fa-solid fa-arrow-left-long"></i></span>
-        <input type="text" class="form-control match-right-input" value="" placeholder="الطرف المقابل (الموصل إليه)...">
-        <button type="button" class="btn-icon-action delete btn-remove-match-pair" title="حذف هذا الزوج">
-          <i class="fa-solid fa-xmark"></i>
-        </button>
-      `;
-      list.appendChild(newRow);
-      newRow.querySelector(".btn-remove-match-pair").addEventListener("click", () => newRow.remove());
-    });
-  });
-
-  // حذف زوج توصيل
-  quizSectionsContainer.querySelectorAll(".btn-remove-match-pair").forEach(btn => {
-    btn.addEventListener("click", (e) => {
-      e.target.closest(".matching-pair-row")?.remove();
-    });
-  });
-
-  // تفريق الجملة تلقائياً للترتيب
-  quizSectionsContainer.querySelectorAll(".btn-split-sentence").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const card = btn.closest(".question-edit-card");
-      const sentInput = card.querySelector(".ordering-sentence-input");
-      const list = card.querySelector(".ordering-items-list");
-      const font = card.querySelector(".q-font-select")?.value || "quran";
-      const text = sentInput ? sentInput.value.trim() : "";
-      if (!text) {
-        showToast("يرجى كتابة الجملة المطلوب ترتيبها أولاً!", "fa-circle-info");
-        return;
-      }
-      const words = text.split(/\s+/).filter(Boolean);
-      list.innerHTML = words.map((w, idx) => `
-        <div class="ordering-item-row">
-          <span class="ordering-num-badge">${idx + 1}</span>
-          <input type="text" class="form-control ordering-item-input font-${font}" value="${escapeHtml(w)}" placeholder="الكلمة / العنصر...">
-          <button type="button" class="btn-icon-action delete btn-remove-order-item" title="حذف هذا العنصر">
-            <i class="fa-solid fa-xmark"></i>
-          </button>
-        </div>
-      `).join("");
-
-      list.querySelectorAll(".btn-remove-order-item").forEach(b => {
-        b.addEventListener("click", (ev) => {
-          ev.target.closest(".ordering-item-row")?.remove();
-          updateOrderingBadges(list);
-        });
-      });
-      showToast(`تم تفريق الجملة إلى ${words.length} كلمات بنجاح!`, "fa-wand-magic-sparkles");
-    });
-  });
-
-  // إضافة عنصر للترتيب
-  quizSectionsContainer.querySelectorAll(".btn-add-order-item").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const card = btn.closest(".question-edit-card");
-      const list = card.querySelector(".ordering-items-list");
-      const font = card.querySelector(".q-font-select")?.value || "quran";
-      const count = list.querySelectorAll(".ordering-item-row").length;
-
-      const newRow = document.createElement("div");
-      newRow.className = "ordering-item-row";
-      newRow.innerHTML = `
-        <span class="ordering-num-badge">${count + 1}</span>
-        <input type="text" class="form-control ordering-item-input font-${font}" value="" placeholder="الكلمة / العنصر...">
-        <button type="button" class="btn-icon-action delete btn-remove-order-item" title="حذف هذا العنصر">
-          <i class="fa-solid fa-xmark"></i>
-        </button>
-      `;
-      list.appendChild(newRow);
-      newRow.querySelector(".btn-remove-order-item").addEventListener("click", () => {
-        newRow.remove();
-        updateOrderingBadges(list);
-      });
-    });
-  });
-
-  // حذف عنصر ترتيب
-  quizSectionsContainer.querySelectorAll(".btn-remove-order-item").forEach(btn => {
-    btn.addEventListener("click", (e) => {
-      const list = e.target.closest(".ordering-items-list");
-      e.target.closest(".ordering-item-row")?.remove();
-      if (list) updateOrderingBadges(list);
-    });
-  });
-
-  // إضافة سؤال جديد للقسم
-  quizSectionsContainer.querySelectorAll(".btn-add-q-to-sec").forEach(b => {
-    b.addEventListener("click", () => {
-      const secBox = b.closest(".section-item-box");
-      const list = secBox.querySelector(".questions-list-sec");
-      const secIdx = secBox.getAttribute("data-section-idx");
-      const qIdx = list.querySelectorAll(".question-edit-card").length;
-
+  // 1. تفويض أحداث النقر داخل الحاوية لمنع تكرار المستمعات نهائياً
+  quizSectionsContainer.addEventListener("click", (e) => {
+    // إضافة سؤال جديد لقسم
+    const addQBtn = e.target.closest(".btn-add-q-to-sec");
+    if (addQBtn) {
+      const secBox = addQBtn.closest(".section-item-box");
+      const list = secBox?.querySelector(".questions-list-sec");
+      const secIdx = secBox?.getAttribute("data-section-idx") || 0;
+      const qIdx = list?.querySelectorAll(".question-edit-card").length || 0;
       const newCardHtml = renderQuestionCardHtml(secIdx, qIdx, {
         type: "mcq",
         font: "quran",
@@ -3555,30 +3470,197 @@ function bindQuestionEditorEvents() {
       const tempDiv = document.createElement("div");
       tempDiv.innerHTML = newCardHtml;
       const newCard = tempDiv.firstElementChild;
-      list.appendChild(newCard);
-      bindQuestionEditorEvents();
-      newCard.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    });
-  });
+      if (list && newCard) {
+        list.appendChild(newCard);
+        newCard.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
+      return;
+    }
 
-  // حذف قسم
-  quizSectionsContainer.querySelectorAll(".btn-remove-sec").forEach(b => {
-    b.addEventListener("click", () => {
-      const secBox = b.closest(".section-item-box");
+    // حذف قسم
+    const removeSecBtn = e.target.closest(".btn-remove-sec");
+    if (removeSecBtn) {
+      const secBox = removeSecBtn.closest(".section-item-box");
       if (quizSectionsContainer.querySelectorAll(".section-item-box").length > 1) {
-        secBox.remove();
+        secBox?.remove();
       } else {
         showToast("يجب أن يحتوي الاختبار على قسم واحد على الأقل", "fa-triangle-exclamation");
       }
-    });
+      return;
+    }
+
+    // حذف سؤال
+    const removeQBtn = e.target.closest(".btn-remove-q");
+    if (removeQBtn) {
+      const card = removeQBtn.closest(".question-edit-card");
+      card?.remove();
+      return;
+    }
+
+    // إضافة خيار MCQ
+    const addMcqOptBtn = e.target.closest(".btn-add-mcq-opt");
+    if (addMcqOptBtn) {
+      const card = addMcqOptBtn.closest(".question-edit-card");
+      const list = card?.querySelector(".mcq-options-list");
+      const cardUid = card?.getAttribute("data-card-uid") || ('quid_' + Math.random().toString(36).slice(2, 9));
+      const font = card?.querySelector(".q-font-select")?.value || "quran";
+      const count = list ? list.querySelectorAll(".mcq-option-row").length : 0;
+
+      const newRow = document.createElement("div");
+      newRow.className = "mcq-option-row";
+      newRow.innerHTML = `
+        <input type="radio" name="correct_radio_${cardUid}" class="mcq-radio-custom" value="${count}" title="تعيين كإجابة صحيحة">
+        <span style="font-size: 13px; font-weight: 800; color: #64748b; min-width: 45px;">خيار ${count + 1}</span>
+        <input type="text" class="mcq-opt-input font-${font}" value="" placeholder="اكتب نص الخيار هنا...">
+        <button type="button" class="btn-icon-action delete btn-remove-mcq-opt" title="حذف هذا الخيار">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      `;
+      list?.appendChild(newRow);
+      return;
+    }
+
+    // حذف خيار MCQ
+    const removeMcqOptBtn = e.target.closest(".btn-remove-mcq-opt");
+    if (removeMcqOptBtn) {
+      const row = removeMcqOptBtn.closest(".mcq-option-row");
+      const list = removeMcqOptBtn.closest(".mcq-options-list");
+      if (list && list.querySelectorAll(".mcq-option-row").length > 2) {
+        row?.remove();
+      } else {
+        showToast("يجب أن يحتوي السؤال على خيارين على الأقل", "fa-circle-info");
+      }
+      return;
+    }
+
+    // إضافة زوج توصيل
+    const addMatchBtn = e.target.closest(".btn-add-match-pair");
+    if (addMatchBtn) {
+      const card = addMatchBtn.closest(".question-edit-card");
+      const list = card?.querySelector(".matching-pairs-list");
+      const font = card?.querySelector(".q-font-select")?.value || "quran";
+
+      const newRow = document.createElement("div");
+      newRow.className = "matching-pair-row";
+      newRow.innerHTML = `
+        <input type="text" class="form-control match-left-input font-${font}" value="" placeholder="الطرف الأول (الموصل)...">
+        <span class="match-arrow-badge"><i class="fa-solid fa-arrow-left-long"></i></span>
+        <input type="text" class="form-control match-right-input" value="" placeholder="الطرف المقابل (الموصل إليه)...">
+        <button type="button" class="btn-icon-action delete btn-remove-match-pair" title="حذف هذا الزوج">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      `;
+      list?.appendChild(newRow);
+      return;
+    }
+
+    // حذف زوج توصيل
+    const removeMatchBtn = e.target.closest(".btn-remove-match-pair");
+    if (removeMatchBtn) {
+      removeMatchBtn.closest(".matching-pair-row")?.remove();
+      return;
+    }
+
+    // تفريق جملة الترتيب
+    const splitSentBtn = e.target.closest(".btn-split-sentence");
+    if (splitSentBtn) {
+      const card = splitSentBtn.closest(".question-edit-card");
+      const sentInput = card?.querySelector(".ordering-sentence-input");
+      const list = card?.querySelector(".ordering-items-list");
+      const font = card?.querySelector(".q-font-select")?.value || "quran";
+      const text = sentInput ? sentInput.value.trim() : "";
+      if (!text) {
+        showToast("يرجى كتابة الجملة المطلوب ترتيبها أولاً!", "fa-circle-info");
+        return;
+      }
+      const words = text.split(/\s+/).filter(Boolean);
+      if (list) {
+        list.innerHTML = words.map((w, idx) => `
+          <div class="ordering-item-row">
+            <span class="ordering-num-badge">${idx + 1}</span>
+            <input type="text" class="form-control ordering-item-input font-${font}" value="${escapeHtml(w)}" placeholder="الكلمة / العنصر...">
+            <button type="button" class="btn-icon-action delete btn-remove-order-item" title="حذف هذا العنصر">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+        `).join("");
+      }
+      showToast(`تم تفريق الجملة إلى ${words.length} كلمات بنجاح!`, "fa-wand-magic-sparkles");
+      return;
+    }
+
+    // إضافة عنصر ترتيب
+    const addOrderBtn = e.target.closest(".btn-add-order-item");
+    if (addOrderBtn) {
+      const card = addOrderBtn.closest(".question-edit-card");
+      const list = card?.querySelector(".ordering-items-list");
+      const font = card?.querySelector(".q-font-select")?.value || "quran";
+      const count = list ? list.querySelectorAll(".ordering-item-row").length : 0;
+
+      const newRow = document.createElement("div");
+      newRow.className = "ordering-item-row";
+      newRow.innerHTML = `
+        <span class="ordering-num-badge">${count + 1}</span>
+        <input type="text" class="form-control ordering-item-input font-${font}" value="" placeholder="الكلمة / العنصر...">
+        <button type="button" class="btn-icon-action delete btn-remove-order-item" title="حذف هذا العنصر">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      `;
+      list?.appendChild(newRow);
+      return;
+    }
+
+    // حذف عنصر ترتيب
+    const removeOrderBtn = e.target.closest(".btn-remove-order-item");
+    if (removeOrderBtn) {
+      const list = removeOrderBtn.closest(".ordering-items-list");
+      removeOrderBtn.closest(".ordering-item-row")?.remove();
+      if (list) updateOrderingBadges(list);
+      return;
+    }
   });
 
-  // حذف سؤال
-  quizSectionsContainer.querySelectorAll(".btn-remove-q").forEach(b => {
-    b.addEventListener("click", (e) => {
+  // 2. تفويض أحداث التغيير داخل الحاوية
+  quizSectionsContainer.addEventListener("change", (e) => {
+    // تغيير نوع السؤال
+    if (e.target.classList.contains("q-type-select")) {
       const card = e.target.closest(".question-edit-card");
-      card?.remove();
-    });
+      const val = e.target.value;
+      const mcqBox = card?.querySelector(".mcq-builder-box");
+      const matchBox = card?.querySelector(".matching-builder-box");
+      const orderBox = card?.querySelector(".ordering-builder-box");
+      const oralBox = card?.querySelector(".oral-builder-box");
+
+      mcqBox?.classList.toggle("hidden", val !== "mcq");
+      matchBox?.classList.toggle("hidden", val !== "matching");
+      orderBox?.classList.toggle("hidden", val !== "ordering");
+      oralBox?.classList.toggle("hidden", val !== "oral");
+      return;
+    }
+
+    // تغيير نوع الخط
+    if (e.target.classList.contains("q-font-select")) {
+      const card = e.target.closest(".question-edit-card");
+      const font = e.target.value;
+      const ta = card?.querySelector(".q-text-input");
+      if (ta) ta.className = `form-control q-text-input font-${font}`;
+      card?.querySelectorAll(".mcq-opt-input, .match-left-input, .ordering-sentence-input, .ordering-item-input, .q-oral-target-input").forEach(inp => {
+        inp.classList.remove("font-quran", "font-amiri", "font-normal");
+        inp.classList.add(`font-${font}`);
+      });
+      return;
+    }
+
+    // اختيار الراديو للخيارات الصحيحة في MCQ
+    if (e.target.classList.contains("mcq-radio-custom")) {
+      const list = e.target.closest(".mcq-options-list");
+      if (list) {
+        list.querySelectorAll(".mcq-option-row").forEach(row => row.classList.remove("is-correct"));
+        const parentRow = e.target.closest(".mcq-option-row");
+        if (parentRow) parentRow.classList.add("is-correct");
+      }
+      return;
+    }
   });
 }
 
@@ -3686,20 +3768,37 @@ quizEditorForm?.addEventListener("submit", async (e) => {
   }
 
   const existingIdx = quizzesCache.findIndex(q => q.id === qId);
-  const quizObj = { id: qId, title, targetGrade, allowPractice, sections };
+  const quizObj = {
+    id: qId,
+    title,
+    targetGrade,
+    allowPractice,
+    sections,
+    updatedAt: Date.now(),
+    lastModifiedBy: currentUser ? currentUser.name : "مشرف"
+  };
 
   if (existingIdx >= 0) {
     quizzesCache[existingIdx] = quizObj;
-    showToast("تم تحديث الاختبار بنجاح");
+    showToast(`تم حفظ تعديل الاختبار «${title}» بنجاح!`, "fa-circle-check");
   } else {
     quizzesCache.unshift(quizObj);
-    showToast("تم إنشاء الاختبار بنجاح");
+    showToast(`تم إنشاء الاختبار «${title}» وحفظه بنجاح!`, "fa-circle-check");
   }
 
   await saveQuizzes(quizObj);
+  editQuizId.value = "";
   quizEditorModal.classList.add("hidden");
   renderQuizzesList();
+  renderStudentPracticeQuizzes();
   updateDropdowns();
+});
+
+// تصفير معرف الاختبار عند إغلاق النافذة المنبثقة لضمان عدم الخلط بين الإنشاء والتعديل
+document.querySelectorAll("[data-close-modal='quizEditorModal']").forEach(b => {
+  b.addEventListener("click", () => {
+    editQuizId.value = "";
+  });
 });
 
 // --------------------------------------------------------
