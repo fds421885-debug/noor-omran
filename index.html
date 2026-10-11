@@ -17,17 +17,6 @@
   <!-- مكتبة أيقونات FontAwesome -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" integrity="sha512-SnH5WK+bZxgPHs44uWIX+LLJAJ9/2PkPKZ5QiAj6Ta86w+fsb2TkcmfRyVX3pBnMFcV7oQPJkl9QevSCWr3W6A==" crossorigin="anonymous" referrerpolicy="no-referrer" />
   
-  <!-- خريطة استيراد وحدات فايربيس الرسمية لدعم النشر على أي استضافة مباشرة -->
-  <script type="importmap">
-  {
-    "imports": {
-      "firebase/app": "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js",
-      "firebase/firestore": "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js",
-      "firebase/analytics": "https://www.gstatic.com/firebasejs/11.0.1/firebase-analytics.js"
-    }
-  }
-  </script>
-
   <!-- ملف الأنماط بثيم دولينجو -->
   <link rel="stylesheet" href="style.css">
 </head>
@@ -59,18 +48,18 @@
 
       <!-- أدوات التحكم وحالة المستخدم بالهيدر -->
       <div class="header-tools">
-        <button id="btnHeaderCloudSync" class="btn-honor-header" style="background: rgba(255,255,255,0.18); border: 1.5px solid rgba(255,255,255,0.4);" title="تحديث وقراءة البيانات من السحابة فوراً">
+        <button type="button" id="btnHeaderCloudSync" class="btn-honor-header" style="background: rgba(255,255,255,0.18); border: 1.5px solid rgba(255,255,255,0.4);" title="تحديث وقراءة البيانات من السحابة فوراً">
           <i class="fa-solid fa-arrows-rotate"></i>
           <span>تحديث السحابة</span>
         </button>
-        <button id="btnHeaderHonorBoard" class="btn-honor-header" title="عرض لوحة الشرف">
+        <button type="button" id="btnHeaderHonorBoard" class="btn-honor-header" title="عرض لوحة الشرف">
           <i class="fa-solid fa-trophy"></i>
           <span>لوحة الشرف</span>
         </button>
         <div id="userQuickStatus" class="user-quick-status hidden">
           <span class="quick-role-badge" id="quickRoleBadge">مشرف</span>
           <span class="quick-user-name" id="quickUserName"></span>
-          <button id="quickLogoutBtn" class="btn-logout-small" title="تسجيل الخروج">
+          <button type="button" id="quickLogoutBtn" class="btn-logout-small" title="تسجيل الخروج">
             <i class="fa-solid fa-arrow-right-from-bracket"></i>
           </button>
         </div>
@@ -503,6 +492,9 @@
                 <p class="section-subheading-duo">إنشاء وإدارة الاختبارات الموزعة على أقسام مع إمكانية التوليد الذكي بالذكاء الاصطناعي</p>
               </div>
               <div class="header-action-buttons">
+                <button id="btnHeaderImportTemplates" class="btn-duo-outline" style="border-color: #6366f1; color: #6366f1;">
+                  <i class="fa-solid fa-cloud-arrow-up"></i> استيراد نماذج نور البيان
+                </button>
                 <button id="btnOpenManualQuizModal" class="btn-duo-green">
                   <i class="fa-solid fa-pen-to-square"></i> إنشاء اختبار يدوي
                 </button>
@@ -1077,10 +1069,10 @@
       <h3 class="confirm-dialog-title" id="confirmDialogTitle">تأكيد الإجراء</h3>
       <p class="confirm-dialog-message" id="confirmDialogMessage">هل أنت متأكد من إتمام هذا الإجراء؟</p>
       <div class="confirm-dialog-actions">
-        <button id="btnConfirmDialogYes" class="btn-duo-red">
+        <button type="button" id="btnConfirmDialogYes" class="btn-duo-red">
           <span id="confirmDialogYesText">نعم، تأكيد</span>
         </button>
-        <button id="btnConfirmDialogNo" class="btn-duo-outline">
+        <button type="button" id="btnConfirmDialogNo" class="btn-duo-outline">
           <span id="confirmDialogNoText">إلغاء وتراجع</span>
         </button>
       </div>
@@ -1482,6 +1474,23 @@
 
       <div class="practice-body" id="practiceRunnerContent">
         <!-- محتوى الأسئلة التفاعلية -->
+      </div>
+    </div>
+  </div>
+
+  <!-- شاشة التحميل الاحترافية الذكية (Professional App Global Loader) -->
+  <div id="appGlobalLoader" class="app-global-loader hidden" role="status" aria-live="polite">
+    <div class="app-loader-card">
+      <div class="app-loader-glow-ring">
+        <div class="loader-spinner-circle"></div>
+        <div class="loader-center-icon">
+          <i class="fa-solid fa-book-quran"></i>
+        </div>
+      </div>
+      <h4 id="appLoaderTitle" class="app-loader-title">جاري التحقق من قاعدة البيانات...</h4>
+      <p id="appLoaderSubtitle" class="app-loader-subtitle">يرجى الانتظار لحظات، يتم جلب البيانات السحابية فورياً</p>
+      <div class="loader-pulse-dots">
+        <span></span><span></span><span></span>
       </div>
     </div>
   </div>

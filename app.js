@@ -313,8 +313,21 @@ function getDocumentId(normalizedName) {
 
 function formatArabicDate(dateValue) {
   if (!dateValue) return "اليوم";
-  let dateObj = dateValue?.toDate ? dateValue.toDate() : new Date(dateValue);
-  if (isNaN(dateObj.getTime())) return "اليوم";
+  let dateObj = null;
+  try {
+    if (typeof dateValue?.toDate === "function") {
+      dateObj = dateValue.toDate();
+    } else if (typeof dateValue === "object" && dateValue !== null && typeof dateValue.seconds === "number") {
+      dateObj = new Date(dateValue.seconds * 1000);
+    } else if (typeof dateValue === "number") {
+      dateObj = new Date(dateValue);
+    } else {
+      dateObj = new Date(dateValue);
+    }
+  } catch (e) {
+    return "اليوم";
+  }
+  if (!dateObj || isNaN(dateObj.getTime())) return "اليوم";
   return dateObj.toLocaleDateString("ar-EG", {
     year: "numeric",
     month: "long",
@@ -338,11 +351,52 @@ function showToast(msg, icon = "fa-circle-check") {
 }
 
 // --------------------------------------------------------
-// نافذة التأكيد التفاعلية داخل المنصة (بدون أي نوافذ منبثقة من المتصفح)
+// شاشة التحميل الاحترافية الذكية (App Global Loader) مع صمام أمان تلقائي
 // --------------------------------------------------------
+let globalLoaderTimer = null;
+
+function showGlobalLoader(title = "جاري التحقق والمزامنة...", subtitle = "يرجى الانتظار لحظات، يتم جلب البيانات السحابية فورياً") {
+  const loader = document.getElementById("appGlobalLoader");
+  const titleEl = document.getElementById("appLoaderTitle");
+  const subEl = document.getElementById("appLoaderSubtitle");
+  if (!loader) return;
+  if (titleEl) titleEl.textContent = title;
+  if (subEl) subEl.textContent = subtitle;
+
+  if (globalLoaderTimer) {
+    clearTimeout(globalLoaderTimer);
+    globalLoaderTimer = null;
+  }
+
+  loader.classList.remove("hidden");
+  // إجبار إعادة الرسم لتفعيل التلاشي السلس
+  void loader.offsetWidth;
+  loader.classList.add("show");
+
+  // مؤقت أمان تلقائي ذكي لمنع أي تعليق لشاشة التحميل تحت أي ظرف
+  globalLoaderTimer = setTimeout(() => {
+    hideGlobalLoader();
+  }, 7500);
+}
+
+function hideGlobalLoader() {
+  if (globalLoaderTimer) {
+    clearTimeout(globalLoaderTimer);
+    globalLoaderTimer = null;
+  }
+  const loader = document.getElementById("appGlobalLoader");
+  if (!loader) return;
+  loader.classList.remove("show");
+  setTimeout(() => {
+    loader.classList.add("hidden");
+  }, 220);
+}
+
 // --------------------------------------------------------
-// نافذة التأكيد التفاعلية داخل المنصة (بدون أي نوافذ منبثقة من المتصفح)
+// نافذة التأكيد التفاعلية المحمية (بدون تراكم أي مستمعين وبدون أي خروج مفاجئ)
 // --------------------------------------------------------
+let activeConfirmResolve = null;
+
 function showInAppConfirm(options, legacyCallback = null) {
   let title = "تأكيد الإجراء";
   let message = "هل أنت متأكد من إتمام هذا الإجراء؟";
@@ -362,58 +416,70 @@ function showInAppConfirm(options, legacyCallback = null) {
     if (options.icon) icon = options.icon;
   }
 
+  const modal = document.getElementById("confirmDialogModal");
+  const titleEl = document.getElementById("confirmDialogTitle");
+  const msgEl = document.getElementById("confirmDialogMessage");
+  const yesBtn = document.getElementById("btnConfirmDialogYes");
+  const noBtn = document.getElementById("btnConfirmDialogNo");
+  const yesText = document.getElementById("confirmDialogYesText");
+  const noText = document.getElementById("confirmDialogNoText");
+  const iconEl = document.getElementById("confirmDialogIcon");
+
+  if (!modal || !yesBtn || !noBtn) {
+    if (typeof legacyCallback === "function") legacyCallback();
+    return Promise.resolve(true);
+  }
+
+  // إذا كان هناك تأكيد قديم معلق، نقوم بإلغائه بأمان فوري
+  if (activeConfirmResolve) {
+    activeConfirmResolve(false);
+    activeConfirmResolve = null;
+  }
+
+  if (titleEl) titleEl.textContent = title;
+  if (msgEl) msgEl.textContent = message;
+  if (yesText) yesText.textContent = confirmText;
+  if (noText) noText.textContent = cancelText;
+
+  if (iconEl) {
+    iconEl.className = `confirm-dialog-icon ${type}`;
+    iconEl.innerHTML = `<i class="fa-solid ${icon}"></i>`;
+  }
+
+  if (yesBtn) {
+    yesBtn.className = type === "danger" ? "btn-duo-red" : "btn-duo-green";
+  }
+
   return new Promise((resolve) => {
-    const modal = document.getElementById("confirmDialogModal");
-    const titleEl = document.getElementById("confirmDialogTitle");
-    const msgEl = document.getElementById("confirmDialogMessage");
-    const yesBtn = document.getElementById("btnConfirmDialogYes");
-    const noBtn = document.getElementById("btnConfirmDialogNo");
-    const yesText = document.getElementById("confirmDialogYesText");
-    const noText = document.getElementById("confirmDialogNoText");
-    const iconEl = document.getElementById("confirmDialogIcon");
+    activeConfirmResolve = resolve;
 
-    if (!modal) {
-      if (typeof legacyCallback === "function") legacyCallback();
-      resolve(true);
-      return;
-    }
+    const closeAndResolve = (result) => {
+      yesBtn.onclick = null;
+      noBtn.onclick = null;
+      modal.classList.add("hidden");
+      if (activeConfirmResolve === resolve) {
+        activeConfirmResolve = null;
+      }
+      if (result && typeof legacyCallback === "function") {
+        legacyCallback();
+      }
+      resolve(result);
+    };
 
-    if (titleEl) titleEl.textContent = title;
-    if (msgEl) msgEl.textContent = message;
-    if (yesText) yesText.textContent = confirmText;
-    if (noText) noText.textContent = cancelText;
+    // نستخدم onclick المباشر لمنع أي تراكم نهائياً لمستمعي الأحداث
+    yesBtn.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      closeAndResolve(true);
+    };
 
-    if (iconEl) {
-      iconEl.className = `confirm-dialog-icon ${type}`;
-      iconEl.innerHTML = `<i class="fa-solid ${icon}"></i>`;
-    }
-
-    if (yesBtn) {
-      yesBtn.className = type === "danger" ? "btn-duo-red" : "btn-duo-green";
-    }
+    noBtn.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      closeAndResolve(false);
+    };
 
     modal.classList.remove("hidden");
-
-    const cleanup = () => {
-      yesBtn?.removeEventListener("click", onYes);
-      noBtn?.removeEventListener("click", onNo);
-    };
-
-    const onYes = () => {
-      cleanup();
-      modal.classList.add("hidden");
-      if (typeof legacyCallback === "function") legacyCallback();
-      resolve(true);
-    };
-
-    const onNo = () => {
-      cleanup();
-      modal.classList.add("hidden");
-      resolve(false);
-    };
-
-    yesBtn?.addEventListener("click", onYes);
-    noBtn?.addEventListener("click", onNo);
   });
 }
 
@@ -721,12 +787,16 @@ function setupRealtimeCloudListeners() {
     onSnapshot(partCol, (snapshot) => {
       const cloudUsers = [];
       snapshot.forEach(docSnap => {
-        cloudUsers.push({ id: docSnap.id, ...docSnap.data() });
+        const uData = docSnap.data();
+        cloudUsers.push({
+          id: docSnap.id,
+          ...uData,
+          normalizedName: uData.normalizedName || normalizeArabic(uData.name || "")
+        });
       });
-      participantsCache = cloudUsers;
       const supNorm = normalizeArabic(MASTER_SUPERVISOR_NAME);
-      if (!participantsCache.some(p => p.normalizedName === supNorm)) {
-        participantsCache.unshift({
+      if (!cloudUsers.some(p => p.normalizedName === supNorm)) {
+        cloudUsers.unshift({
           id: getDocumentId(supNorm),
           name: MASTER_SUPERVISOR_NAME,
           normalizedName: supNorm,
@@ -738,9 +808,25 @@ function setupRealtimeCloudListeners() {
           loginCount: 1
         });
       }
+      participantsCache = cloudUsers;
       localStorage.setItem("nour_participants", JSON.stringify(participantsCache));
+
+      // الحفاظ على جلسة المستخدم الحالي وتحديث بياناته دون أي خروج
+      if (currentUser) {
+        const matchingCurrent = cloudUsers.find(p => 
+          p.id === currentUser.id || 
+          p.normalizedName === currentUser.normalizedName || 
+          p.name === currentUser.name
+        );
+        if (matchingCurrent) {
+          currentUser = { ...currentUser, ...matchingCurrent };
+          localStorage.setItem("active_quran_user", JSON.stringify(currentUser));
+          localStorage.setItem("nour_saved_user", JSON.stringify(currentUser));
+        }
+      }
+
       renderAccountsTable();
-      if (currentUser && (currentUser.role === "supervisor" || currentUser.role === "teacher")) {
+      if (currentUser && (currentUser.role === "supervisor" || currentUser.role === "teacher" || currentUser.role === "presenter")) {
         renderSupervisorDashboard();
       }
     }, (err) => {
@@ -766,11 +852,9 @@ function setupRealtimeCloudListeners() {
     // 4. مراقبة غرف المسابقات الحية لحظياً — Firestore هو المصدر الوحيد للحقيقة
     const roomsCol = collection(db, "live_rooms");
     onSnapshot(roomsCol, (snapshot) => {
-      // بناء قائمة الغرف الحية من Firestore مباشرة بدون أي تخزين محلي
       const cloudRooms = [];
       snapshot.forEach(docSnap => {
         const rData = docSnap.data();
-        // نأخذ كل غرفة موجودة في Firestore
         cloudRooms.push({ id: docSnap.id, ...rData });
       });
       activeRooms = cloudRooms;
@@ -780,26 +864,22 @@ function setupRealtimeCloudListeners() {
       if (currentLiveRoom) {
         const updatedRoom = activeRooms.find(r => r.id === currentLiveRoom.id);
         if (!updatedRoom) {
-          // تم إغلاق الغرفة أو إنهاؤها من قبل المشرف
-          if (views.liveArena && !views.liveArena.classList.contains("hidden")) {
-            clearInterval(liveTimerInterval);
-            clearInterval(cardsTimerInterval);
-            stopOfflineCountdown();
-            currentLiveRoom = null;
-            currentContestant = null;
+          const wasInArena = views.liveArena && !views.liveArena.classList.contains("hidden");
+          currentLiveRoom = null;
+          currentContestant = null;
+          clearInterval(liveTimerInterval);
+          clearInterval(cardsTimerInterval);
+          stopOfflineCountdown();
+
+          if (wasInArena) {
             showView(currentUser ? (currentUser.role === 'student' ? "student" : "supervisor") : "hero");
-            showInAppConfirm({
-              title: "تم إنهاء وإغلاق الغرفة",
-              message: "قام مشرف المسابقة بإغلاق الغرفة أو مغادرتها، وتم إنهاء المسابقة لجميع المتواجدين.",
-              confirmText: "حسناً",
-              cancelText: "إغلاق",
-              type: "danger",
-              icon: "fa-door-closed"
-            });
+            showToast("قام المشرف بإغلاق الغرفة أو إنهاء المسابقة", "fa-door-closed");
           }
         } else {
           currentLiveRoom = updatedRoom;
-          updateArenaUIRealtime(updatedRoom);
+          if (views.liveArena && !views.liveArena.classList.contains("hidden")) {
+            updateArenaUIRealtime(updatedRoom);
+          }
         }
       }
     }, (err) => {
@@ -900,20 +980,27 @@ function updateArenaUIRealtime(room) {
   }
 }
 
-// تحميل ومزامنة البيانات السحابية من فايربيس (مع التوليد التلقائي للبيانات إن كانت السحابة فارغة)
+// تحميل ومزامنة البيانات السحابية من فايربيس (اعتماد السحابة 100% كمصدر وحيد للحقيقة)
 async function loadCloudData() {
   try {
-    // 1. المدارس والصفوف
-    const sgRef = doc(db, "system_settings", "schools_and_grades");
-    const sgSnap = await getDoc(sgRef);
-    if (sgSnap.exists()) {
-      const data = sgSnap.data();
+    // جلب كافة المجموعات السحابية بالتوازي لمنع أي تأخير أو انسداد
+    const [sgRes, quizRes, partRes, roomRes, honorRes] = await Promise.allSettled([
+      getDoc(doc(db, "system_settings", "schools_and_grades")),
+      getDocs(collection(db, "quizzes")),
+      getDocs(collection(db, "participants")),
+      getDocs(collection(db, "live_rooms")),
+      getDoc(doc(db, "system_settings", "honor_board"))
+    ]);
+
+    // 1. المدارس والصفوف من السحابة
+    if (sgRes.status === "fulfilled" && sgRes.value.exists()) {
+      const data = sgRes.value.data();
       if (Array.isArray(data.schools) && data.schools.length > 0) {
         schoolsCache = [...data.schools];
         localStorage.setItem("nour_schools", JSON.stringify(schoolsCache));
       } else {
         schoolsCache = [...DEFAULT_SCHOOLS];
-        await setDoc(sgRef, { schools: schoolsCache }, { merge: true });
+        setDoc(doc(db, "system_settings", "schools_and_grades"), { schools: schoolsCache }, { merge: true }).catch(() => {});
       }
 
       if (Array.isArray(data.grades) && data.grades.length > 0) {
@@ -921,85 +1008,116 @@ async function loadCloudData() {
         localStorage.setItem("nour_grades", JSON.stringify(gradesCache));
       } else {
         gradesCache = [...DEFAULT_GRADES];
-        await setDoc(sgRef, { grades: gradesCache }, { merge: true });
+        setDoc(doc(db, "system_settings", "schools_and_grades"), { grades: gradesCache }, { merge: true }).catch(() => {});
       }
-    } else {
-      // رفع تلقائي للمدارس والصفوف إلى فايربيس
+    } else if (sgRes.status === "fulfilled" && !sgRes.value.exists()) {
+      // إنشاء التكوين الأولي للمدارس والصفوف في السحابة
       schoolsCache = [...DEFAULT_SCHOOLS];
       gradesCache = [...DEFAULT_GRADES];
-      await setDoc(sgRef, {
+      setDoc(doc(db, "system_settings", "schools_and_grades"), {
         schools: schoolsCache,
         grades: gradesCache,
         lastUpdated: serverTimestamp()
-      }, { merge: true });
+      }, { merge: true }).catch(() => {});
       localStorage.setItem("nour_schools", JSON.stringify(schoolsCache));
       localStorage.setItem("nour_grades", JSON.stringify(gradesCache));
     }
-    updateDropdowns();
-    renderSchoolsAndGradesTags();
 
-    // 2. الاختبارات (مطابقة تامة ومباشرة لما في السحابة)
-    const qSnap = await getDocs(collection(db, "quizzes"));
-    const cloudQuizzes = [];
-    qSnap.forEach(d => {
-      cloudQuizzes.push({ id: d.id, ...d.data() });
-    });
-    quizzesCache = cloudQuizzes;
-
-    // 3. الحسابات والمشاركون (مطابقة تامة ومباشرة لما في السحابة)
-    const uSnap = await getDocs(collection(db, "participants"));
-    const cloudUsers = [];
-    uSnap.forEach(d => {
-      cloudUsers.push({ id: d.id, ...d.data() });
-    });
-    participantsCache = cloudUsers;
-    const supNorm = normalizeArabic(MASTER_SUPERVISOR_NAME);
-    if (!participantsCache.some(p => p.normalizedName === supNorm)) {
-      participantsCache.unshift({
-        id: getDocumentId(supNorm),
-        name: MASTER_SUPERVISOR_NAME,
-        normalizedName: supNorm,
-        role: "supervisor",
-        school: "مدرسة نور البيان المركزية",
-        grade: "جميع الفئات",
-        firstLoginAt: new Date().toISOString(),
-        lastLoginAt: new Date().toISOString(),
-        loginCount: 1
+    // 2. الاختبارات (استيراد كل ما في السحابة فورياً)
+    if (quizRes.status === "fulfilled") {
+      const cloudQuizzes = [];
+      quizRes.value.forEach(d => {
+        cloudQuizzes.push({ id: d.id, ...d.data() });
       });
-    }
-    localStorage.setItem("nour_participants", JSON.stringify(participantsCache));
 
-    // 4. الغرف الحية المفتوحة من فايربيس مباشرة (Firestore هو المصدر الوحيد)
-    const rSnap = await getDocs(collection(db, "live_rooms"));
-    const cloudRooms = [];
-    rSnap.forEach(d => {
-      cloudRooms.push({ id: d.id, ...d.data() });
-    });
-    activeRooms = cloudRooms;
+      // إذا كانت السحابة خالية تماماً من أي اختبار، نرفع النماذج المعتمدة لأول مرة فقط
+      if (cloudQuizzes.length === 0) {
+        for (const q of INITIAL_QUIZZES) {
+          syncQuizToCloud(q).catch(() => {});
+          cloudQuizzes.push(q);
+        }
+      }
+      quizzesCache = cloudQuizzes;
+    }
+
+    // 3. الحسابات والمشاركون (استيراد كل الحسابات السحابية بدقة تامة)
+    if (partRes.status === "fulfilled") {
+      const cloudUsers = [];
+      partRes.value.forEach(d => {
+        const uData = d.data();
+        cloudUsers.push({
+          id: d.id,
+          ...uData,
+          normalizedName: uData.normalizedName || normalizeArabic(uData.name || "")
+        });
+      });
+
+      // التأكد من وجود حساب المشرف العام دائماً
+      const supNorm = normalizeArabic(MASTER_SUPERVISOR_NAME);
+      const supDocId = getDocumentId(supNorm);
+      let masterSup = cloudUsers.find(p => p.normalizedName === supNorm || p.id === supDocId || p.name === MASTER_SUPERVISOR_NAME);
+      if (!masterSup) {
+        masterSup = {
+          id: supDocId,
+          name: MASTER_SUPERVISOR_NAME,
+          normalizedName: supNorm,
+          role: "supervisor",
+          school: "مدرسة نور البيان المركزية",
+          grade: "جميع الفئات",
+          firstLoginAt: new Date().toISOString(),
+          lastLoginAt: new Date().toISOString(),
+          loginCount: 1
+        };
+        cloudUsers.unshift(masterSup);
+        syncParticipantToCloud(masterSup).catch(() => {});
+      }
+      participantsCache = cloudUsers;
+      localStorage.setItem("nour_participants", JSON.stringify(participantsCache));
+
+      // مزامنة وتحديث بيانات الجلسة الحالية لضمان بقاء المستخدم متصلاً دون خروج
+      if (currentUser) {
+        const refreshedUser = participantsCache.find(p => 
+          p.id === currentUser.id || 
+          p.normalizedName === currentUser.normalizedName || 
+          p.name === currentUser.name
+        );
+        if (refreshedUser) {
+          currentUser = { ...currentUser, ...refreshedUser };
+          localStorage.setItem("active_quran_user", JSON.stringify(currentUser));
+          localStorage.setItem("nour_saved_user", JSON.stringify(currentUser));
+        }
+      }
+    }
+
+    // 4. الغرف الحية المفتوحة من Firestore مباشرة
+    if (roomRes.status === "fulfilled") {
+      const cloudRooms = [];
+      roomRes.value.forEach(d => {
+        cloudRooms.push({ id: d.id, ...d.data() });
+      });
+      activeRooms = cloudRooms;
+    }
 
     // 5. لوحة الشرف من السحابة مباشرة
-    const hRef = doc(db, "system_settings", "honor_board");
-    const hSnap = await getDoc(hRef);
-    if (hSnap.exists()) {
-      const hData = hSnap.data();
+    if (honorRes.status === "fulfilled" && honorRes.value.exists()) {
+      const hData = honorRes.value.data();
       honorLeaderboardCache = Array.isArray(hData.entries) ? hData.entries : [];
-    } else {
-      honorLeaderboardCache = [];
     }
 
     // 6. تحديث كافة الواجهات بعد اكتمال قراءة كافة البيانات السحابية
+    updateDropdowns();
+    renderSchoolsAndGradesTags();
     renderAccountsTable();
     renderQuizzesList();
     renderStudentPracticeQuizzes();
     renderLiveRoomsList();
     renderHonorLeaderboard();
-    updateDropdowns();
 
-    if (currentUser && (currentUser.role === "supervisor" || currentUser.role === "teacher")) {
+    if (currentUser && (currentUser.role === "supervisor" || currentUser.role === "teacher" || currentUser.role === "presenter")) {
       renderSupervisorDashboard();
     }
   } catch (err) {
-    console.warn("Cloud load notice (operating offline):", err);
+    console.warn("Cloud load notice:", err);
   }
 }
 
@@ -1218,10 +1336,8 @@ loginForm?.addEventListener("submit", async (e) => {
   e.preventDefault();
 
   const rawName = fullNameInput.value.trim();
-  const validation = validateQuadrupleName(rawName);
-
-  if (!validation.isValid) {
-    validationAlert.textContent = validation.message;
+  if (!rawName) {
+    validationAlert.textContent = "يرجى كتابة الاسم للمتابعة.";
     validationAlert.classList.remove("hidden");
     fullNameInput.focus();
     return;
@@ -1230,92 +1346,124 @@ loginForm?.addEventListener("submit", async (e) => {
   validationAlert.classList.add("hidden");
   btnSubmitLogin.disabled = true;
   btnSubmitLogin.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> جاري التحقق...`;
+  showGlobalLoader("جاري التحقق من الحساب...", "يتم البحث في قاعدة البيانات السحابية لحظياً");
 
-  const norm = normalizeArabic(rawName);
-  const isSup = isSupervisor(rawName);
-  const docId = getDocumentId(norm);
+  try {
+    const norm = normalizeArabic(rawName);
+    const isSup = isSupervisor(rawName);
+    const docId = getDocumentId(norm);
 
-  // البحث في السجل المحلي أولاً
-  let foundUser = participantsCache.find(p => p.normalizedName === norm);
-
-  // إذا لم يتم العثور عليه محلياً، نبحث في فايربيس
-  if (!foundUser) {
+    // تحديث فوري مباشر من Firestore لضمان استيراد أي حساب تم إنشاؤه
     try {
-      const userDocRef = doc(db, "participants", docId);
-      const docSnap = await getDoc(userDocRef);
-      if (docSnap.exists()) {
-        foundUser = docSnap.data();
-        foundUser.id = docId;
-        participantsCache.push(foundUser);
-        saveParticipants();
-      }
+      await loadCloudData();
     } catch (err) {
-      console.warn("Firestore search error, proceeding with cache:", err);
+      console.warn("Direct cloud load notice:", err);
     }
-  }
 
-  btnSubmitLogin.disabled = false;
-  btnSubmitLogin.innerHTML = `<span class="btn-text">متابعة والدخول</span><span class="btn-icon"><i class="fa-solid fa-arrow-left"></i></span>`;
+    // البحث في المشاركين بجميع أشكال التسمية والمعرفات
+    let foundUser = participantsCache.find(p => 
+      p.normalizedName === norm || 
+      normalizeArabic(p.name || "") === norm ||
+      (p.name && p.name.trim().toLowerCase() === rawName.toLowerCase()) ||
+      p.id === docId
+    );
 
-  // 1. المشرف العام محمد منتصر محمد يونس -> دخول مباشر فوري
-  if (isSup) {
-    let supUser = foundUser;
-    if (!supUser) {
-      supUser = {
-        id: docId,
-        name: MASTER_SUPERVISOR_NAME,
-        normalizedName: norm,
-        role: "supervisor",
-        school: "مدرسة نور البيان المركزية",
-        grade: "جميع الفئات",
-        firstLoginAt: new Date().toISOString(),
-        lastLoginAt: new Date().toISOString(),
-        loginCount: 1
-      };
-      participantsCache.push(supUser);
-      saveParticipants();
-      syncParticipantToCloud(supUser);
-    } else {
-      supUser.role = "supervisor";
-      supUser.lastLoginAt = new Date().toISOString();
-      supUser.loginCount = (supUser.loginCount || 1) + 1;
-      saveParticipants();
-      syncParticipantToCloud(supUser);
+    // إذا لم يتم العثور عليه، نبحث بالمعرف المباشر في فايربيس
+    if (!foundUser) {
+      try {
+        const userDocRef = doc(db, "participants", docId);
+        const docSnap = await getDoc(userDocRef);
+        if (docSnap.exists()) {
+          foundUser = { id: docSnap.id, ...docSnap.data() };
+          participantsCache.push(foundUser);
+          saveParticipants();
+        }
+      } catch (err) {
+        console.warn("Firestore search notice:", err);
+      }
     }
-    finalizeUserSession(supUser, supUser.loginCount > 1);
-    return;
+
+    // 1. المشرف العام محمد منتصر محمد يونس -> دخول مباشر فوري
+    if (isSup) {
+      let supUser = foundUser;
+      if (!supUser) {
+        supUser = {
+          id: docId,
+          name: MASTER_SUPERVISOR_NAME,
+          normalizedName: norm,
+          role: "supervisor",
+          school: "مدرسة نور البيان المركزية",
+          grade: "جميع الفئات",
+          firstLoginAt: new Date().toISOString(),
+          lastLoginAt: new Date().toISOString(),
+          loginCount: 1
+        };
+        participantsCache.push(supUser);
+        saveParticipants();
+        await syncParticipantToCloud(supUser);
+      } else {
+        supUser.role = "supervisor";
+        supUser.lastLoginAt = new Date().toISOString();
+        supUser.loginCount = (supUser.loginCount || 1) + 1;
+        saveParticipants();
+        await syncParticipantToCloud(supUser);
+      }
+      hideGlobalLoader();
+      finalizeUserSession(supUser, supUser.loginCount > 1);
+      showToast(`مرحباً بك يا مشرف البرنامج! تم الدخول بنجاح`, "fa-crown");
+      return;
+    }
+
+    // 2. إذا كان المستخدم لديه حساب سابق في قاعدة البيانات (معلم، عارض، أو طالب مسجل) -> يفتح مباشرة
+    if (foundUser) {
+      foundUser.lastLoginAt = new Date().toISOString();
+      foundUser.loginCount = (foundUser.loginCount || 1) + 1;
+      saveParticipants();
+
+      // تحديث فايربيس بهدوء
+      try {
+        const uRef = doc(db, "participants", foundUser.id || docId);
+        await updateDoc(uRef, {
+          lastLoginAt: serverTimestamp(),
+          loginCount: foundUser.loginCount
+        });
+      } catch (e) {}
+
+      hideGlobalLoader();
+      finalizeUserSession(foundUser, true);
+      showToast(`مرحباً بعودتك يا ${foundUser.name}! تم تسجيل الدخول بنجاح`, "fa-circle-check");
+      return;
+    }
+
+    // 3. مستخدم جديد غير مسجل في قاعدة البيانات: التحقق من كتابة الاسم الرباعي
+    const validation = validateQuadrupleName(rawName);
+    if (!validation.isValid) {
+      validationAlert.textContent = validation.message;
+      validationAlert.classList.remove("hidden");
+      fullNameInput.focus();
+      hideGlobalLoader();
+      return;
+    }
+
+    // طالب جديد -> الانتقال لخطوة اختيار المدرسة والصف
+    hideGlobalLoader();
+    pendingNewStudent = {
+      rawName: rawName,
+      norm: norm,
+      docId: docId,
+      school: "",
+      grade: ""
+    };
+
+    showOnboardingSchoolStep();
+  } catch (err) {
+    console.error("Login submit error:", err);
+    showToast("حدث خطأ أثناء فحص البيانات، يرجى المحاولة مرة أخرى", "fa-triangle-exclamation");
+  } finally {
+    btnSubmitLogin.disabled = false;
+    btnSubmitLogin.innerHTML = `<span class="btn-text">متابعة والدخول</span><span class="btn-icon"><i class="fa-solid fa-arrow-left"></i></span>`;
+    hideGlobalLoader();
   }
-
-  // 2. إذا كان المستخدم لديه حساب سابق (معلم، عارض، أو طالب مسجل من قبل) -> يفتح مباشرة دون سؤاله
-  if (foundUser) {
-    foundUser.lastLoginAt = new Date().toISOString();
-    foundUser.loginCount = (foundUser.loginCount || 1) + 1;
-    saveParticipants();
-
-    // تحديث فايربيس
-    try {
-      const uRef = doc(db, "participants", foundUser.id || docId);
-      await updateDoc(uRef, {
-        lastLoginAt: serverTimestamp(),
-        loginCount: foundUser.loginCount
-      });
-    } catch (e) {}
-
-    finalizeUserSession(foundUser, true);
-    return;
-  }
-
-  // 3. مستخدم جديد (طالب جديد ليس له حساب سابق)
-  // تظهر أمامه خيارات المدارس المعتمدة بشكل جميل بأسلوب دولينجو، ثم الصفوف
-  pendingNewStudent = {
-    rawName: rawName,
-    norm: norm,
-    docId: docId,
-    school: "",
-    grade: ""
-  };
-
-  showOnboardingSchoolStep();
 });
 
 // إظهار خطوة اختيار المدرسة للطلاب الجدد
@@ -1410,41 +1558,48 @@ function showOnboardingGradeStep() {
 
 // حفظ الطالب الجديد وإتمام الدخول
 async function completeNewStudentRegistration() {
-  const nowIso = new Date().toISOString();
-  const newStudentUser = {
-    id: pendingNewStudent.docId,
-    name: pendingNewStudent.rawName,
-    normalizedName: pendingNewStudent.norm,
-    role: "student",
-    school: pendingNewStudent.school,
-    grade: pendingNewStudent.grade,
-    firstLoginAt: nowIso,
-    lastLoginAt: nowIso,
-    loginCount: 1
-  };
-
-  // حفظ في فايربيس
+  showGlobalLoader("جاري إنشاء الحساب...", "يتم حفظ بيانات الطالب في السحابة فورياً");
   try {
-    const userDocRef = doc(db, "participants", pendingNewStudent.docId);
-    await setDoc(userDocRef, {
-      ...newStudentUser,
-      firstLoginAt: serverTimestamp(),
-      lastLoginAt: serverTimestamp()
-    });
-  } catch (err) {
-    console.warn("Firebase save error for new student:", err);
+    const nowIso = new Date().toISOString();
+    const newStudentUser = {
+      id: pendingNewStudent.docId,
+      name: pendingNewStudent.rawName,
+      normalizedName: pendingNewStudent.norm,
+      role: "student",
+      school: pendingNewStudent.school,
+      grade: pendingNewStudent.grade,
+      firstLoginAt: nowIso,
+      lastLoginAt: nowIso,
+      loginCount: 1
+    };
+
+    // حفظ في فايربيس مباشرة
+    try {
+      const userDocRef = doc(db, "participants", pendingNewStudent.docId);
+      await setDoc(userDocRef, {
+        ...newStudentUser,
+        firstLoginAt: serverTimestamp(),
+        lastLoginAt: serverTimestamp()
+      });
+    } catch (err) {
+      console.warn("Firebase save error for new student:", err);
+    }
+
+    // إضافة في السجل والذاكرة
+    participantsCache.push(newStudentUser);
+    saveParticipants();
+
+    // إعادة ضبط شاشات الدخول
+    resetLoginSteps();
+
+    // إتمام الجلسة وتوجيه الطالب
+    finalizeUserSession(newStudentUser, false);
+    showToast(`أهلاً بك يا ${newStudentUser.name} في مسابقة نور البيان!`, "fa-graduation-cap");
+  } catch (e) {
+    console.error("completeNewStudentRegistration error:", e);
+  } finally {
+    hideGlobalLoader();
   }
-
-  // إضافة في الذاكرة المحلية
-  participantsCache.push(newStudentUser);
-  saveParticipants();
-
-  // إعادة ضبط شاشات الدخول
-  resetLoginSteps();
-
-  // إتمام الجلسة وتوجيه الطالب
-  finalizeUserSession(newStudentUser, false);
-  showToast(`أهلاً بك يا ${newStudentUser.name} في مسابقة نور البيان!`, "fa-graduation-cap");
 }
 
 // أزرار الرجوع بين خطوات التسجيل
@@ -1610,8 +1765,16 @@ function renderSupervisorDashboard() {
   // حساب دخول اليوم
   const today = new Date().toDateString();
   const todayLogins = participantsCache.filter(p => {
-    const d = new Date(p.lastLoginAt);
-    return d.toDateString() === today;
+    if (!p.lastLoginAt) return false;
+    let d = null;
+    try {
+      if (typeof p.lastLoginAt?.toDate === "function") d = p.lastLoginAt.toDate();
+      else if (typeof p.lastLoginAt === "object" && p.lastLoginAt !== null && typeof p.lastLoginAt.seconds === "number") d = new Date(p.lastLoginAt.seconds * 1000);
+      else d = new Date(p.lastLoginAt);
+    } catch (e) {
+      return false;
+    }
+    return d && !isNaN(d.getTime()) && d.toDateString() === today;
   }).length;
 
   if (statTotalStudents) statTotalStudents.textContent = totalStudents;
@@ -1767,6 +1930,11 @@ function renderAccountsTable() {
         return;
       }
 
+      if (currentUser && (targetUser.id === currentUser.id || targetUser.name === currentUser.name)) {
+        showToast("لا يمكن حذف حسابك الحالي وأنت مسجل الدخول به!", "fa-shield-halved");
+        return;
+      }
+
       const confirmed = await showInAppConfirm({
         title: "تأكيد حذف الحساب",
         message: `هل أنت متأكد من رغبتك في حذف حساب (${targetUser.name}) نهائياً من المنصة؟`,
@@ -1777,16 +1945,20 @@ function renderAccountsTable() {
       });
 
       if (confirmed) {
-        participantsCache = participantsCache.filter(p => p.id !== userId);
-        saveParticipants();
+        showGlobalLoader("جاري حذف الحساب...", "يتم الحذف من قاعدة البيانات السحابية فوراً");
         try {
           await deleteDoc(doc(db, "participants", userId));
+          participantsCache = participantsCache.filter(p => p.id !== userId);
+          saveParticipants();
+          renderAccountsTable();
+          renderSupervisorDashboard();
+          showToast(`تم حذف حساب (${targetUser.name}) بنجاح`, "fa-trash");
         } catch (err) {
           console.warn("Delete participant from cloud notice:", err);
+          showToast("حدث خطأ أثناء حذف الحساب من السحابة", "fa-triangle-exclamation");
+        } finally {
+          hideGlobalLoader();
         }
-        renderAccountsTable();
-        renderSupervisorDashboard();
-        showToast(`تم حذف حساب (${targetUser.name}) بنجاح`, "fa-trash");
       }
     });
   });
@@ -2219,6 +2391,7 @@ function renderQuizzesList() {
       });
 
       if (confirmed) {
+        showGlobalLoader("جاري حذف الاختبار...", "يتم الحذف من قاعدة البيانات السحابية لجميع المستخدمين");
         try {
           // حذف الاختبار مباشرة وقطعياً من قاعدة البيانات السحابية Firestore
           await deleteDoc(doc(db, "quizzes", qId));
@@ -2232,6 +2405,8 @@ function renderQuizzesList() {
         } catch (err) {
           console.error("Firestore quiz delete error:", err);
           showToast("حدث خطأ أثناء حذف الاختبار من السحابة", "fa-triangle-exclamation");
+        } finally {
+          hideGlobalLoader();
         }
       }
     });
@@ -3466,7 +3641,9 @@ async function executeRoomTermination(roomId) {
 
   showToast("تم إنهاء وإغلاق غرفة المسابقة لجميع المشاركين بنجاح", "fa-door-closed");
   renderLiveRoomsList();
-  showView(currentUser ? (currentUser.role === 'student' ? "student" : "supervisor") : "hero");
+  if (views.liveArena && !views.liveArena.classList.contains("hidden")) {
+    showView(currentUser ? (currentUser.role === 'student' ? "student" : "supervisor") : "hero");
+  }
 }
 
 // --------------------------------------------------------
@@ -4701,11 +4878,38 @@ document.getElementById("btnHeaderHonorBoard")?.addEventListener("click", async 
   showHonorBoardModal(false);
 });
 
+// زر استيراد نماذج نور البيان المعتمدة من الهيدر
+document.getElementById("btnHeaderImportTemplates")?.addEventListener("click", async () => {
+  const ok = await showInAppConfirm({
+    title: "استيراد نماذج نور البيان المعتمدة",
+    message: "هل ترغب في رفع نماذج اختبارات نور البيان المعتمدة تلقائياً إلى قاعدة البيانات السحابية؟",
+    confirmText: "نعم، استيراد وحفظ بالسحابة",
+    cancelText: "إلغاء وتراجع",
+    type: "info",
+    icon: "fa-cloud-arrow-up"
+  });
+  if (ok) {
+    showGlobalLoader("جاري استيراد النماذج...", "يتم حفظ نماذج نور البيان في قاعدة البيانات السحابية");
+    try {
+      for (const q of INITIAL_QUIZZES) {
+        await syncQuizToCloud(q);
+      }
+      await loadCloudData();
+      showToast("تم استيراد وحفظ نماذج الاختبارات في السحابة بنجاح!", "fa-circle-check");
+    } catch (err) {
+      showToast("تعذر استيراد النماذج للسحابة حالياً", "fa-triangle-exclamation");
+    } finally {
+      hideGlobalLoader();
+    }
+  }
+});
+
 // زر التحديث السحابي المباشر في الهيدر
 document.getElementById("btnHeaderCloudSync")?.addEventListener("click", async () => {
   const btn = document.getElementById("btnHeaderCloudSync");
   const icon = btn?.querySelector("i");
   if (icon) icon.classList.add("fa-spin");
+  showGlobalLoader("جاري تحديث السحابة...", "يتم قراءة ومزامنة كافة البيانات مباشرة من Firestore");
   try {
     await loadCloudData();
     showToast("✅ تم تحديث وقراءة كافة البيانات مباشرة من السحابة بنجاح!", "fa-arrows-rotate");
@@ -4713,6 +4917,7 @@ document.getElementById("btnHeaderCloudSync")?.addEventListener("click", async (
     showToast("تعذر الاتصال بالسحابة حالياً", "fa-triangle-exclamation");
   } finally {
     if (icon) icon.classList.remove("fa-spin");
+    hideGlobalLoader();
   }
 });
 
@@ -4721,6 +4926,7 @@ document.getElementById("btnSupervisorRefreshCloud")?.addEventListener("click", 
   const btn = document.getElementById("btnSupervisorRefreshCloud");
   const icon = btn?.querySelector("i");
   if (icon) icon.classList.add("fa-spin");
+  showGlobalLoader("جاري تحديث السحابة...", "يتم مزامنة جميع الحسابات والاختبارات ولوحة الشرف");
   try {
     await loadCloudData();
     showToast("✅ تم تحديث جميع الحسابات والاختبارات ولوحة الشرف من السحابة!", "fa-arrows-rotate");
@@ -4728,6 +4934,7 @@ document.getElementById("btnSupervisorRefreshCloud")?.addEventListener("click", 
     showToast("تعذر الاتصال بالسحابة حالياً", "fa-triangle-exclamation");
   } finally {
     if (icon) icon.classList.remove("fa-spin");
+    hideGlobalLoader();
   }
 });
 
@@ -5041,6 +5248,15 @@ document.querySelectorAll("[data-close-modal]").forEach(btn => {
 
 window.addEventListener("click", (e) => {
   if (e.target.classList.contains("modal-overlay")) {
+    if (e.target.id === "confirmDialogModal" && activeConfirmResolve) {
+      const r = activeConfirmResolve;
+      activeConfirmResolve = null;
+      const yesBtn = document.getElementById("btnConfirmDialogYes");
+      const noBtn = document.getElementById("btnConfirmDialogNo");
+      if (yesBtn) yesBtn.onclick = null;
+      if (noBtn) noBtn.onclick = null;
+      r(false);
+    }
     e.target.classList.add("hidden");
   }
 });
@@ -5049,50 +5265,64 @@ window.addEventListener("click", (e) => {
 // نقطة البداية (Initialization)
 // --------------------------------------------------------
 async function initApp() {
+  showGlobalLoader("مسابقة نور البيان", "جاري الاتصال بقاعدة البيانات السحابية وجلب البيانات المحدثة...");
   loadInitialStorage();
 
-  // 1. أولاً: فحص حاسم لرابط الدخول المباشر (?auth=...)
-  const urlParams = new URLSearchParams(window.location.search);
-  const hasDirectAuth = urlParams.has("auth") || urlParams.has("token");
-  if (hasDirectAuth) {
+  try {
+    // 1. تفعيل مستمعي البيانات السحابية الحية ومزامنة السحابة أولاً وقبل أي عرض
     setupRealtimeCloudListeners();
     await loadCloudData();
-    const isDirectLoggedIn = await checkDirectUrlAuthentication();
-    if (isDirectLoggedIn) return;
-  }
 
-  // 2. ثانياً: استعادة الجلسة السابقة فورياً لمنع أي وميض أو خروج عند التحديث
-  let restoredSession = false;
-  const savedUserJson = localStorage.getItem("active_quran_user") || localStorage.getItem("nour_saved_user");
-  if (savedUserJson) {
-    try {
-      const parsed = JSON.parse(savedUserJson);
-      if (parsed && parsed.name) {
-        currentUser = parsed;
-        finalizeUserSession(parsed, true);
-        restoredSession = true;
+    // 2. فحص رابط الدخول المباشر (?auth=...)
+    const urlParams = new URLSearchParams(window.location.search);
+    const hasDirectAuth = urlParams.has("auth") || urlParams.has("token");
+    if (hasDirectAuth) {
+      const isDirectLoggedIn = await checkDirectUrlAuthentication();
+      if (isDirectLoggedIn) {
+        return;
       }
-    } catch (e) {
-      console.warn("Session restore notice:", e);
-      localStorage.removeItem("active_quran_user");
-      localStorage.removeItem("nour_saved_user");
     }
-  }
 
-  // 3. استرجاع وتعبئة آخر اسم مستخدم تلقائياً في خانة تسجيل الدخول مع تحديث العداد
-  const lastUsername = localStorage.getItem("nour_last_username");
-  if (lastUsername && fullNameInput) {
-    fullNameInput.value = lastUsername;
-    fullNameInput.dispatchEvent(new Event("input"));
-  }
+    // 3. استعادة الجلسة السابقة ومطابقتها مع قاعدة البيانات السحابية الحية
+    let restoredSession = false;
+    const savedUserJson = localStorage.getItem("active_quran_user") || localStorage.getItem("nour_saved_user");
+    if (savedUserJson) {
+      try {
+        const parsed = JSON.parse(savedUserJson);
+        if (parsed && parsed.name) {
+          // نتحقق من أحدث بيانات لهذا الحساب في السحابة
+          const liveUser = participantsCache.find(p => 
+            p.id === parsed.id || 
+            p.normalizedName === parsed.normalizedName || 
+            p.name === parsed.name
+          );
+          currentUser = liveUser ? { ...parsed, ...liveUser } : parsed;
+          finalizeUserSession(currentUser, true);
+          restoredSession = true;
+        }
+      } catch (e) {
+        console.warn("Session restore parse notice:", e);
+      }
+    }
 
-  // 4. تفعيل مستمعي البيانات السحابية الحية ومزامنة السحابة
-  setupRealtimeCloudListeners();
-  await loadCloudData();
+    // 4. استرجاع وتعبئة آخر اسم مستخدم تلقائياً في خانة تسجيل الدخول مع تحديث العداد
+    const lastUsername = localStorage.getItem("nour_last_username");
+    if (lastUsername && fullNameInput) {
+      fullNameInput.value = lastUsername;
+      fullNameInput.dispatchEvent(new Event("input"));
+    }
 
-  // 5. إذا لم يكن هناك مستخدم مسجل مسبقاً، نظهر شاشة البداية
-  if (!restoredSession && !currentUser) {
-    showView("hero");
+    // 5. إذا لم يكن هناك مستخدم مسجل مسبقاً، نظهر شاشة البداية
+    if (!restoredSession && !currentUser) {
+      showView("hero");
+    }
+  } catch (err) {
+    console.warn("Init cloud load notice:", err);
+    if (!currentUser) {
+      showView("hero");
+    }
+  } finally {
+    hideGlobalLoader();
   }
 }
 

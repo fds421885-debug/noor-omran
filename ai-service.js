@@ -1,10 +1,9 @@
 // ========================================================
 // مسابقة نور البيان 1448 - 1449 هـ
 // خدمة توليد الاختبارات والأسئلة بالذكاء الاصطناعي (Gemini AI Service)
-// المفتاح المعتمد: AQ.Ab8RN6JuxVxo9OiaY_nS3US3jn3VdVHd_uBwrRmZGSTvcLQLbw
 // ========================================================
 
-const AI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "AQ.Ab8RN6JuxVxo9OiaY_nS3US3jn3VdVHd_uBwrRmZGSTvcLQLbw";
+const AI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
 
 /**
  * بنك أسئلة ذكي ومولد محلي فوري لنور البيان والقرآن الكريم
