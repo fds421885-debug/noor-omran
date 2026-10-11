@@ -1244,6 +1244,7 @@ let lastSeenAnswerTimestamp = 0;
 let lastSeenMatchingVerifyTimestamp = 0;
 let lastSeenCardsTurnTimestamp = 0;
 let isQuestionTransitionRunning = false;
+let lastKnownSolverRole = null;
 let currentUserProfileUnsubscribe = null;
 
 // الاستماع اللحظي لتغييرات وترقيات حساب المستخدم الحالي في السحابة
@@ -1539,6 +1540,11 @@ function updateArenaUIRealtime(room) {
       const ev = room.lastAnswerEvent;
       // إذا كان الحدث صادراً من مستخدم آخر، يتم تنفيذه فوراً بالتزامن
       if (!currentUser || ev.answeredBy !== currentUser.name) {
+        if (ev.contestantScore !== undefined) {
+          contestantScore = ev.contestantScore;
+          if (stageStudentScore) stageStudentScore.textContent = String(contestantScore);
+        }
+
         if (ev.chosenChoiceIdx !== null && ev.chosenChoiceIdx !== undefined) {
           const clickedBtn = stageInteractiveArea.querySelector(`[data-choice="${ev.chosenChoiceIdx}"]`);
           if (clickedBtn) clickedBtn.classList.add(ev.isCorrect ? "correct" : "wrong");
@@ -1575,7 +1581,9 @@ function updateArenaUIRealtime(room) {
 
     const newIdx = room.currentQuestionIdx || 0;
     const stageActive = arenaStage && !arenaStage.classList.contains("hidden");
-    const needReload = !currentQuizData || !stageActive || (currentQuestionIndex !== newIdx) || (currentContestant?.name !== room.contestantName);
+    const solverRoleChanged = lastKnownSolverRole !== null && lastKnownSolverRole !== (room.solverRole || "contestant_and_lead");
+    lastKnownSolverRole = room.solverRole || "contestant_and_lead";
+    const needReload = !currentQuizData || !stageActive || (currentQuestionIndex !== newIdx) || (currentContestant?.name !== room.contestantName) || solverRoleChanged;
 
     if (needReload) {
       enterPhaseStage();
@@ -5557,7 +5565,10 @@ function playQuestionTransitionSequence({ isCorrect, scoreDelta, isPenalty, next
             (nextIdx < allQuestions.length);
 
           if (isCardTurn) {
-            triggerTacticalCardsModal(() => loadStageQuestion(nextIdx));
+            if (isLeaderUser) {
+              triggerTacticalCardsModal(() => loadStageQuestion(nextIdx));
+            }
+            // ملاحظة: غير المصرح له لا يولد بطاقات منفصلة، بل يستقبل نفس البطاقات الثلاث عبر Firestore
           } else {
             loadStageQuestion(nextIdx);
           }
@@ -5572,7 +5583,7 @@ function playQuestionTransitionSequence({ isCorrect, scoreDelta, isPenalty, next
 // --------------------------------------------------------
 function checkIsSolverAllowed(room = currentLiveRoom) {
   if (!currentUser) return false;
-  if (!room) return true;
+  if (!room) return false;
   const isSup = currentUser.role === "supervisor" || isSupervisor(currentUser.name);
   const isTeacher = currentUser.role === "teacher";
   const isPresenter = currentUser.role === "presenter";
@@ -5583,19 +5594,17 @@ function checkIsSolverAllowed(room = currentLiveRoom) {
     (currentUser.normalizedName && room.contestantName && currentUser.normalizedName === normalizeArabic(room.contestantName))
   ));
 
-  // الطالب الذي يدخل ولم يتم اختياره من مشرف المسابقة لا يمكنه فعل أي شيء بتاتاً، مشاهد فقط
+  // الطالب الذي يدخل ولم يتم اختياره من مشرف المسابقة: لا يمكنه فعل أي شيء بتاتاً، مشاهد فقط
   if (currentUser.role === "student" || (!isSup && !isTeacher && !isPresenter)) {
     if (!isContestant) return false;
-    // إذا كان هو المتسابق المختار، يتحقق من عدم قفل الحل للمشرف فقط
-    return room.solverRole !== "supervisor_only";
+    const perm = room.solverRole || "contestant_and_lead";
+    return (perm === "contestant_only" || perm === "contestant_and_lead" || perm === "all" || perm === "all_participants");
   }
-
-  if (isLeader) return true;
 
   const perm = room.solverRole || "contestant_and_lead";
 
   if (perm === "contestant_only") {
-    return isContestant || isLeader;
+    return isContestant;
   }
   if (perm === "contestant_and_lead") {
     return isContestant || isLeader;
@@ -5808,28 +5817,20 @@ function loadStageQuestion(idx) {
         </div>
       </div>
     `;
-    const skipTimer = setTimeout(() => {
-      advanceToNext(0, false, true);
-    }, 2800);
+    if (checkIsSolverAllowed(currentLiveRoom)) {
+      const skipTimer = setTimeout(() => {
+        advanceToNext(0, false, true);
+      }, 2800);
 
-    document.getElementById("btnContinueSkippedQ")?.addEventListener("click", () => {
-      clearTimeout(skipTimer);
-      advanceToNext(0, false, true);
-    }, { once: true });
+      document.getElementById("btnContinueSkippedQ")?.addEventListener("click", () => {
+        clearTimeout(skipTimer);
+        advanceToNext(0, false, true);
+      }, { once: true });
+    } else {
+      const btn = document.getElementById("btnContinueSkippedQ");
+      if (btn) btn.style.display = "none";
+    }
     return;
-  }
-
-    // تشغيل دورة الانتقال السينمائية الكاملة
-    playQuestionTransitionSequence({
-      isCorrect,
-      scoreDelta,
-      isPenalty,
-      nextIdx,
-      isFinished,
-      allQuestions,
-      currentIdx: idx,
-      isLeaderUser: true
-    });
   }
 
   // تطبيق ميزة البطاقة التكتيكية إن وجدت
@@ -6073,7 +6074,7 @@ function loadStageQuestion(idx) {
 
     window.runExternalMatchingVerification = function(syncedConnections) {
       if (Array.isArray(syncedConnections)) activeConnections = [...syncedConnections];
-      startSequentialVerification();
+      startSequentialVerification(false);
     };
 
     function renderMatchingBoard() {
@@ -6084,7 +6085,7 @@ function loadStageQuestion(idx) {
         ${isSpectator ? `
           <div class="spectator-mode-banner">
             <i class="fa-solid fa-eye"></i>
-            <span>أنت تشاهد المسابقة كجمهور — المتسابق الحالي: <strong>${escapeHtml(currentLiveRoom?.contestantName || 'المتسابق')}</strong> (المشاهدة فقط متاحة لك)</span>
+            <span>أنت تشاهد المسابقة كجمهور — المتسابق الحالي: <strong>${escapeHtml(currentLiveRoom?.contestantName || 'المتسابق')}</strong> (المشاهدة والتشجيع فقط متاحة لك)</span>
           </div>
         ` : ''}
 
@@ -6103,10 +6104,10 @@ function loadStageQuestion(idx) {
               return `
                 <div class="matching-tile font-${q.font || 'quran'} ${conn ? 'connected' : ''} ${isSelected ? 'selected' : ''}" 
                      data-left-id="${item.id}" data-pair="${item.pairIdx}">
-                  <span class="matching-item-badge">${item.num}</span>
+                  <span class="matching-item-badge" style="font-family:'Cairo', sans-serif !important;">${item.num}</span>
                   <span class="matching-tile-text">${escapeHtml(item.text)}</span>
                   ${conn ? `
-                    <span class="matching-connect-pill">
+                    <span class="matching-connect-pill" style="font-family:'Cairo', sans-serif !important;">
                       <i class="fa-solid fa-link"></i> متصل بـ (${conn.rightLetter})
                     </span>
                   ` : ''}
@@ -6123,10 +6124,10 @@ function loadStageQuestion(idx) {
               return `
                 <div class="matching-tile font-${q.font || 'quran'} ${conn ? 'connected' : ''}" 
                      data-right-id="${item.id}" data-pair="${item.pairIdx}">
-                  <span class="matching-item-badge badge-right-letter">${item.letter}</span>
+                  <span class="matching-item-badge badge-right-letter" style="font-family:'Cairo', sans-serif !important;">${item.letter}</span>
                   <span class="matching-tile-text">${escapeHtml(item.text)}</span>
                   ${conn ? `
-                    <span class="matching-connect-pill">
+                    <span class="matching-connect-pill" style="font-family:'Cairo', sans-serif !important;">
                       <i class="fa-solid fa-link"></i> وصلة (${conn.leftNum})
                     </span>
                   ` : ''}
@@ -6223,7 +6224,7 @@ function loadStageQuestion(idx) {
       document.getElementById("btnSubmitMatching")?.addEventListener("click", () => {
         if (isVerifyingSequenceRunning || activeConnections.length === 0) return;
         broadcastMatchingConnectionState(true);
-        startSequentialVerification();
+        startSequentialVerification(true);
       });
 
       // قبول المشرف المباشر
@@ -6251,7 +6252,7 @@ function loadStageQuestion(idx) {
     }
 
     // تشغيل أنيميشن التصحيح المتسلسل خطوة بخطوة للأزواج واحداً تلو الآخر
-    function startSequentialVerification() {
+    function startSequentialVerification(isInitiator = true) {
       if (isVerifyingSequenceRunning) return;
       isVerifyingSequenceRunning = true;
 
@@ -6279,7 +6280,9 @@ function loadStageQuestion(idx) {
               showToast(`تم التحقق: (${correctMatchesCount} من ${cleanPairs.length}) أزواج صحيحة (+${finalEarnedScore} درجات)`, "fa-check-double", 3500);
             }
             activeCardEffect = null;
-            advanceToNext(finalEarnedScore, false, allCorrect);
+            if (isInitiator) {
+              advanceToNext(finalEarnedScore, false, allCorrect);
+            }
           }, 1200);
           return;
         }
@@ -7178,6 +7181,8 @@ function executeCardEffect(card) {
     const cb = tacticalCardsCallback;
     tacticalCardsCallback = null;
     cb();
+  } else if (currentLiveRoom && currentLiveRoom.phase === "competing") {
+    loadStageQuestion(currentLiveRoom.currentQuestionIdx || 0);
   }
 }
 

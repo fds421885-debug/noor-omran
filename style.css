@@ -5741,27 +5741,36 @@ body {
 .matching-item-badge {
   background: #2563eb !important;
   color: #ffffff !important;
+  font-family: 'Cairo', system-ui, -apple-system, sans-serif !important;
   font-weight: 900 !important;
-  font-size: 16px !important;
-  width: 34px !important;
-  height: 34px !important;
+  font-size: 17px !important;
+  line-height: 1 !important;
+  width: 36px !important;
+  height: 36px !important;
   border-radius: 50% !important;
-  min-width: 34px !important;
+  min-width: 36px !important;
   text-align: center !important;
   flex-shrink: 0;
   border: 2px solid #1d4ed8 !important;
-  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.3) !important;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.35) !important;
   transition: all 0.2s ease;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  visibility: visible !important;
+  opacity: 1 !important;
 }
 
 .matching-item-badge.badge-right-letter {
   background: #eab308 !important;
   color: #ffffff !important;
   border-color: #ca8a04 !important;
-  box-shadow: 0 2px 6px rgba(234, 179, 8, 0.3) !important;
+  box-shadow: 0 2px 8px rgba(234, 179, 8, 0.35) !important;
+  font-family: 'Cairo', system-ui, -apple-system, sans-serif !important;
+  font-size: 17px !important;
+  font-weight: 900 !important;
+  visibility: visible !important;
+  opacity: 1 !important;
 }
 
 .matching-tile-text {
@@ -5890,31 +5899,43 @@ body {
 /* صندوق إدخال رمز الغرفة للطالب - واضح ومميز وتظهر الأرقام بجلاء */
 #inputStudentRoomCode,
 .input-room-code-clean {
-  width: 190px !important;
-  min-width: 170px !important;
+  width: 220px !important;
+  min-width: 190px !important;
   padding: 10px 16px !important;
-  padding-left: 16px !important;
-  padding-right: 16px !important;
-  font-size: 19px !important;
+  font-size: 22px !important;
   font-weight: 900 !important;
-  font-family: 'Cairo', monospace, sans-serif !important;
+  font-family: 'Cairo', system-ui, -apple-system, sans-serif !important;
   color: #0f172a !important;
+  -webkit-text-fill-color: #0f172a !important;
   background: #ffffff !important;
+  background-color: #ffffff !important;
   border: 2.5px solid #ca8a04 !important;
-  border-radius: 12px !important;
+  border-bottom: 4px solid #a16207 !important;
+  border-radius: 14px !important;
   text-align: center !important;
   letter-spacing: 2px !important;
   direction: ltr !important;
-  box-shadow: 0 3px 10px rgba(202, 138, 4, 0.15) !important;
+  box-shadow: 0 4px 14px rgba(202, 138, 4, 0.18) !important;
   opacity: 1 !important;
   visibility: visible !important;
-  -webkit-text-fill-color: #0f172a !important;
+  caret-color: #2563eb !important;
+}
+
+#inputStudentRoomCode::placeholder,
+.input-room-code-clean::placeholder {
+  color: #94a3b8 !important;
+  -webkit-text-fill-color: #94a3b8 !important;
+  font-weight: 700 !important;
+  font-size: 16px !important;
+  letter-spacing: 0 !important;
+  direction: rtl !important;
 }
 
 #inputStudentRoomCode:focus,
 .input-room-code-clean:focus {
-  border-color: var(--duo-green) !important;
-  box-shadow: 0 0 0 4px rgba(88, 204, 2, 0.25) !important;
+  border-color: #2563eb !important;
+  border-bottom-color: #1d4ed8 !important;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.25) !important;
   outline: none !important;
 }
 
@@ -6098,30 +6119,34 @@ body.role-presenter .matching-tile {
   max-width: 880px !important;
   width: 100% !important;
   transform-origin: center top;
+  scroll-margin-top: 15vh !important;
 }
 
 .question-enter-anim {
-  animation: questionCardDropCenter 0.62s cubic-bezier(0.18, 1, 0.25, 1) forwards !important;
+  animation: questionCardDropCenter 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
 }
 
 @keyframes questionCardDropCenter {
   0% {
     opacity: 0;
-    transform: translateY(-130px) scale(0.92);
-    filter: blur(8px);
+    transform: translateY(-160px) scale(0.88);
+    filter: blur(10px);
+    box-shadow: 0 0 0 rgba(88, 204, 2, 0);
   }
   60% {
     opacity: 1;
-    transform: translateY(10px) scale(1.018);
+    transform: translateY(12px) scale(1.025);
     filter: blur(0px);
+    box-shadow: 0 16px 40px rgba(88, 204, 2, 0.25);
   }
-  82% {
-    transform: translateY(-4px) scale(0.995);
+  80% {
+    transform: translateY(-5px) scale(0.992);
   }
   100% {
     opacity: 1;
     transform: translateY(0) scale(1);
     filter: blur(0px);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
   }
 }
 
@@ -6486,17 +6511,42 @@ button:disabled .fa-spin,
   font-size: 16px;
 }
 
-/* تعطيل التفاعل للمشاهدين على المسرح */
-.stage-viewer-locked {
+/* تعطيل التفاعل التام للمشاهدين والطلاب غير المختارين على المسرح */
+.stage-viewer-locked,
+.stage-viewer-locked * {
   pointer-events: none !important;
   user-select: none !important;
+  cursor: not-allowed !important;
 }
 
 .stage-viewer-locked button,
 .stage-viewer-locked .matching-tile,
-.stage-viewer-locked .ordering-chip {
-  cursor: default !important;
-  opacity: 0.95 !important;
+.stage-viewer-locked .ordering-chip,
+.stage-viewer-locked .btn-choice-duo {
+  cursor: not-allowed !important;
+  opacity: 0.88 !important;
+}
+
+.spectator-mode-banner {
+  background: linear-gradient(135deg, #f0fdf4, #e0f2fe) !important;
+  border: 2px solid #38bdf8 !important;
+  border-bottom: 4px solid #0284c7 !important;
+  border-radius: var(--radius-lg) !important;
+  padding: 14px 20px !important;
+  margin-bottom: 18px !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  color: #0369a1 !important;
+  font-weight: 800 !important;
+  font-size: 14.5px !important;
+  box-shadow: 0 4px 14px rgba(2, 132, 199, 0.12) !important;
+  animation: fadeIn 0.4s ease !important;
+}
+
+.spectator-mode-banner i {
+  font-size: 24px !important;
+  color: #0284c7 !important;
 }
 
 
