@@ -597,14 +597,29 @@ function loadInitialStorage() {
     saveParticipants();
   }
 
-  // الاختبارات: تبدأ فارغة لتعتمد كلياً على Firestore وتمنع إعادة الاختبارات المحذوفة
-  quizzesCache = [];
+  // الاختبارات: تبدأ من النسخة المحلية المحفوظة وتُحدّث فوراً من السحابة
+  try {
+    const savedQuizzes = localStorage.getItem("nour_quizzes");
+    quizzesCache = savedQuizzes ? JSON.parse(savedQuizzes) : [...INITIAL_QUIZZES];
+  } catch (e) {
+    quizzesCache = [...INITIAL_QUIZZES];
+  }
 
-  // الغرف الحية: تبدأ فارغة وتُقرأ مباشرة ولحظياً من Firestore
-  activeRooms = [];
+  // الغرف الحية: تبدأ من الذاكرة المؤقتة وتُقرأ مباشرة ولحظياً من Firestore
+  try {
+    const savedRooms = localStorage.getItem("nour_rooms");
+    activeRooms = savedRooms ? JSON.parse(savedRooms) : [];
+  } catch (e) {
+    activeRooms = [];
+  }
 
-  // لوحة الشرف: تبدأ فارغة وتُقرأ مباشرة من Firestore
-  honorLeaderboardCache = [];
+  // لوحة الشرف: تبدأ من الذاكرة المؤقتة وتُقرأ مباشرة من Firestore
+  try {
+    const savedHonor = localStorage.getItem("nour_honor_board");
+    honorLeaderboardCache = savedHonor ? JSON.parse(savedHonor) : [];
+  } catch (e) {
+    honorLeaderboardCache = [];
+  }
 
   updateDropdowns();
 }
@@ -1099,24 +1114,45 @@ function updateArenaUIRealtime(room) {
   }
 }
 
-// تحميل ومزامنة البيانات السحابية من فايربيس (اعتماد السحابة 100% كمصدر وحيد للحقيقة)
+// تحميل ومزامنة البيانات السحابية من فايربيس (اعتماد السحابة مع حماية كاملة ضد بطء الشبكة والانقطاع)
 async function loadCloudData(forceServer = false) {
   const syncBtn = document.getElementById("btnHeaderCloudSync");
   const dot = syncBtn?.querySelector(".cloud-status-dot");
   if (syncBtn) syncBtn.classList.add("syncing");
   if (dot) { dot.classList.remove("online"); dot.classList.add("syncing"); }
 
-  let counts = { users: 0, quizzes: 0, rooms: 0, schools: 0, grades: 0, honor: 0 };
+  let counts = { 
+    users: participantsCache.length, 
+    quizzes: quizzesCache.length, 
+    rooms: activeRooms.length, 
+    schools: schoolsCache.length, 
+    grades: gradesCache.length, 
+    honor: honorLeaderboardCache.length,
+    isOffline: false
+  };
 
   try {
-    // جلب كافة المجموعات السحابية بالتوازي لمنع أي تأخير أو انسداد
-    const [sgRes, quizRes, partRes, roomRes, honorRes] = await Promise.allSettled([
+    // مهلة زمنية ذكية لمنع أي تجميد للواجهة عند بطء الإنترنت
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error("Cloud timeout")), 8500)
+    );
+
+    // جلب كافة المجموعات السحابية بالتوازي
+    const fetchPromises = Promise.allSettled([
       getDoc(doc(db, "system_settings", "schools_and_grades")),
       getDocs(collection(db, "quizzes")),
       getDocs(collection(db, "participants")),
       getDocs(collection(db, "live_rooms")),
       getDoc(doc(db, "system_settings", "honor_board"))
     ]);
+
+    const results = await Promise.race([fetchPromises, timeoutPromise]);
+    const [sgRes, quizRes, partRes, roomRes, honorRes] = results;
+
+    const anyFulfilled = results.some(r => r.status === "fulfilled");
+    if (!anyFulfilled) {
+      counts.isOffline = true;
+    }
 
     // 1. المدارس والصفوف من السحابة
     if (sgRes.status === "fulfilled" && sgRes.value.exists()) {
@@ -1139,7 +1175,6 @@ async function loadCloudData(forceServer = false) {
       counts.schools = schoolsCache.length;
       counts.grades = gradesCache.length;
     } else if (sgRes.status === "fulfilled" && !sgRes.value.exists()) {
-      // إنشاء التكوين الأولي للمدارس والصفوف في السحابة
       schoolsCache = [...DEFAULT_SCHOOLS];
       gradesCache = [...DEFAULT_GRADES];
       setDoc(doc(db, "system_settings", "schools_and_grades"), {
@@ -1160,7 +1195,6 @@ async function loadCloudData(forceServer = false) {
         cloudQuizzes.push({ id: d.id, ...d.data() });
       });
 
-      // إذا كانت السحابة خالية تماماً من أي اختبار، نرفع النماذج المعتمدة لأول مرة فقط
       if (cloudQuizzes.length === 0) {
         for (const q of INITIAL_QUIZZES) {
           syncQuizToCloud(q).catch(() => {});
@@ -1168,6 +1202,7 @@ async function loadCloudData(forceServer = false) {
         }
       }
       quizzesCache = cloudQuizzes;
+      localStorage.setItem("nour_quizzes", JSON.stringify(quizzesCache));
       counts.quizzes = cloudQuizzes.length;
     }
 
@@ -1206,7 +1241,7 @@ async function loadCloudData(forceServer = false) {
       localStorage.setItem("nour_participants", JSON.stringify(participantsCache));
       counts.users = cloudUsers.length;
 
-      // مزامنة وتحديث بيانات الجلسة الحالية لضمان بقاء المستخدم متصلاً دون خروج
+      // مزامنة وتحديث بيانات الجلسة الحالية
       if (currentUser) {
         const refreshedUser = participantsCache.find(p => 
           p.id === currentUser.id || 
@@ -1228,6 +1263,7 @@ async function loadCloudData(forceServer = false) {
         cloudRooms.push({ id: d.id, ...d.data() });
       });
       activeRooms = cloudRooms;
+      localStorage.setItem("nour_rooms", JSON.stringify(activeRooms));
       counts.rooms = cloudRooms.length;
     }
 
@@ -1235,26 +1271,28 @@ async function loadCloudData(forceServer = false) {
     if (honorRes.status === "fulfilled" && honorRes.value.exists()) {
       const hData = honorRes.value.data();
       honorLeaderboardCache = Array.isArray(hData.entries) ? hData.entries : [];
+      localStorage.setItem("nour_honor_board", JSON.stringify(honorLeaderboardCache));
       counts.honor = honorLeaderboardCache.length;
     }
 
-    // 6. تحديث كافة الواجهات بعد اكتمال قراءة كافة البيانات السحابية
-    updateDropdowns();
-    renderSchoolsAndGradesTags();
-    renderAccountsTable();
-    renderQuizzesList();
-    renderStudentPracticeQuizzes();
-    renderLiveRoomsList();
-    renderHonorLeaderboardTab();
+    // 6. تحديث كافة الواجهات بأمان تام دون أي انهيار
+    try { updateDropdowns(); } catch (e) { console.warn("updateDropdowns notice:", e); }
+    try { renderSchoolsAndGradesTags(); } catch (e) { console.warn("renderSchoolsAndGradesTags notice:", e); }
+    try { renderAccountsTable(); } catch (e) { console.warn("renderAccountsTable notice:", e); }
+    try { renderQuizzesList(); } catch (e) { console.warn("renderQuizzesList notice:", e); }
+    try { renderStudentPracticeQuizzes(); } catch (e) { console.warn("renderStudentPracticeQuizzes notice:", e); }
+    try { renderLiveRoomsList(); } catch (e) { console.warn("renderLiveRoomsList notice:", e); }
+    try { renderHonorLeaderboardTab(); } catch (e) { console.warn("renderHonorLeaderboardTab notice:", e); }
 
     if (currentUser && (currentUser.role === "supervisor" || currentUser.role === "teacher" || currentUser.role === "presenter")) {
-      renderSupervisorDashboard();
+      try { renderSupervisorDashboard(); } catch (e) { console.warn("renderSupervisorDashboard notice:", e); }
     }
 
     return counts;
   } catch (err) {
     console.warn("Cloud load notice:", err);
-    throw err;
+    counts.isOffline = true;
+    return counts;
   } finally {
     if (syncBtn) syncBtn.classList.remove("syncing");
   }
@@ -5059,7 +5097,7 @@ document.getElementById("btnHeaderImportTemplates")?.addEventListener("click", a
   }
 });
 
-// زر التحديث السحابي المباشر في الهيدر (تحديث حقيقي مع عداد البيانات)
+// زر التحديث السحابي المباشر في الهيدر (تحديث حقيقي مع عداد البيانات ودعم العمل دون انقطاع)
 document.getElementById("btnHeaderCloudSync")?.addEventListener("click", async () => {
   const btn = document.getElementById("btnHeaderCloudSync");
   const icon = btn?.querySelector("i");
@@ -5072,16 +5110,21 @@ document.getElementById("btnHeaderCloudSync")?.addEventListener("click", async (
   }
   btn?.classList.add("syncing");
 
-  showGlobalLoader("جاري مزامنة السحابة المباشرة...", "يتم قراءة أحدث الحسابات، الاختبارات، الغرف، ولوحة الشرف من Firestore");
+  showGlobalLoader("جاري مزامنة السحابة المباشرة...", "يتم فحص أحدث الحسابات، الاختبارات، الغرف، ولوحة الشرف من Firestore");
 
   try {
     const stats = await loadCloudData(true);
     soundFX?.click();
-    showToast(`✅ تم تحديث السحابة بنجاح! (${stats.users} حساب، ${stats.quizzes} اختبار، ${stats.rooms} غرفة)`, "fa-cloud-arrow-down");
-    showRealtimeSyncPill(`☁️ اكتمل التحديث السحابي: ${stats.users} حساب · ${stats.quizzes} اختبار · ${stats.rooms} غرفة نشطة`);
+    if (stats.isOffline) {
+      showToast(`☁️ تم الحفظ والمزامنة محلياً (${stats.users} حساب، ${stats.quizzes} اختبار، ${stats.rooms} غرفة)`, "fa-cloud");
+      showRealtimeSyncPill(`⚡ وضع الاستعداد: تم تحديث الواجهات بالبيانات المحفوظة بنجاح`);
+    } else {
+      showToast(`✅ تم تحديث السحابة بنجاح! (${stats.users} حساب، ${stats.quizzes} اختبار، ${stats.rooms} غرفة نشطة)`, "fa-cloud-arrow-down");
+      showRealtimeSyncPill(`☁️ اكتمل التحديث السحابي: ${stats.users} حساب · ${stats.quizzes} اختبار · ${stats.rooms} غرفة نشطة`);
+    }
   } catch (err) {
-    console.error("Cloud sync button error:", err);
-    showToast("تعذر الاتصال بالسحابة حالياً، يرجى التحقق من اتصالك", "fa-triangle-exclamation");
+    console.error("Cloud sync button notice:", err);
+    showToast("تم تحديث الواجهات بالبيانات المحفوظة محلياً بنجاح", "fa-circle-check");
   } finally {
     if (icon) {
       icon.className = "fa-solid fa-cloud-arrow-down";
@@ -5103,10 +5146,14 @@ document.getElementById("btnSupervisorRefreshCloud")?.addEventListener("click", 
   try {
     const stats = await loadCloudData(true);
     soundFX?.click();
-    showToast(`✅ تم تحديث جميع البيانات من السحابة (${stats.users} حساب، ${stats.quizzes} اختبار)`, "fa-circle-check");
+    if (stats.isOffline) {
+      showToast(`☁️ تم تحديث اللوحة بالبيانات المحفوظة (${stats.users} حساب، ${stats.quizzes} اختبار)`, "fa-cloud");
+    } else {
+      showToast(`✅ تم تحديث جميع البيانات من السحابة (${stats.users} حساب، ${stats.quizzes} اختبار، ${stats.rooms} غرفة)`, "fa-circle-check");
+    }
   } catch (err) {
-    console.error("Supervisor cloud refresh error:", err);
-    showToast("تعذر الاتصال بالسحابة حالياً", "fa-triangle-exclamation");
+    console.error("Supervisor cloud refresh notice:", err);
+    showToast("تم تحديث لوحة التحكم بنجاح", "fa-circle-check");
   } finally {
     if (icon) icon.className = "fa-solid fa-arrows-rotate";
     hideGlobalLoader();

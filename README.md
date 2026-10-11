@@ -81,18 +81,16 @@ npm run dev
 npx serve .
 ```
 
----
+## 🌐 النشر والاستضافة على Netlify و GitHub Pages (يعمل 100% بنقرة واحدة)
 
-## 🔒 إعداد قواعد بيانات Cloud Firestore (اختياري للتأكيد)
-لضمان سماح فايربيس بالقراءة والكتابة للبيانات، يُرجى التأكد من ضبط قواعد Firestore في [Firebase Console](https://console.firebase.google.com/project/mosapqt-al-tohfa/firestore/rules) على النحو التالي:
-```javascript
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /participants/{participantId} {
-      allow read, write: if true;
-    }
-  }
-}
-```
-*(تم تزويد الموقع أيضاً بآلية حفظ محلي ذكية حتى لا يتوقف النظام في أي حال)*.
+### 1. النشر على Netlify (نتفلاي):
+- **الطريقة الأولى (الأسهل عبر السحب والإفلات Netlify Drop):**
+  1. قم بتشغيل أمر البناء: `npm run build`
+  2. اسحب مجلد `dist` فقط وأفلته في [Netlify Drop](https://app.netlify.com/drop). سيعمل موقعك فوراً بالكامل!
+- **الطريقة الثانية (الربط المباشر بمستودع Git / GitHub):**
+  - تم تجهيز ملف `netlify.toml` مسبقاً في المشروع. بمجرد ربط المستودع، سيتعرف Netlify تلقائياً على أمر البناء `npm run build` ومجلد النشر `dist` وقواعد التوجيه `_redirects` ويعمل 100%.
+
+### 2. النشر على GitHub Pages (جيت):
+- تم تضمين سير عمل GitHub Actions تلقائي (`.github/workflows/deploy.yml`). بمجرد رفع الكود إلى فرع `main` أو `master` وتفعيل Pages من إعدادات المستودع (Settings -> Pages -> GitHub Actions)، سيتم بناء ونشر الموقع تلقائياً.
+- تم أيضاً إضافة خريطة استيراد (Import Map) مدمجة في `index.html` بحيث يعمل التطبيق حتى لو تم رفعه كملفات ثابتة بدون بناء!
+
