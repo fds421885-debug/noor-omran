@@ -1504,6 +1504,11 @@ function updateArenaUIRealtime(room) {
       stageSolverQuick.value = room.solverRole;
     }
 
+    // مزامنة المؤقت اللحظي الموحد لجميع المشاركين (عارض، مشرف، طلاب، معلمون)
+    if (room.timerState && typeof syncAndRunLiveTimer === "function") {
+      syncAndRunLiveTimer(room.timerState);
+    }
+
     // مزامنة حالة التوصيل اللحظية للجميع (Real-time Matching Sync)
     if (room.matchingState && room.matchingState.questionIdx === (room.currentQuestionIdx || 0)) {
       const conns = Array.isArray(room.matchingState.connections)
@@ -5439,11 +5444,232 @@ document.getElementById("btnStartAfterDraw")?.addEventListener("click", async ()
     showToast("يرجى سحب الأسئلة أولاً", "fa-triangle-exclamation");
     return;
   }
+  const qDuration = currentLiveRoom.questionTimer || 30;
+  const now = Date.now();
   currentLiveRoom.phase = "competing";
   currentLiveRoom.currentQuestionIdx = 0;
+  currentLiveRoom.timerState = {
+    questionIdx: 0,
+    duration: qDuration,
+    startedAt: now,
+    endsAt: now + (qDuration * 1000),
+    isFrozen: false,
+    noTimeLimit: false,
+    updatedAt: now
+  };
   await saveRooms(currentLiveRoom);
   enterPhaseStage();
 });
+
+// =========================================================
+// التمرير التلقائي الذكي لظهور السؤال بوسط الشاشة (المشرف، العارض، الطالب، المعلم)
+// =========================================================
+function bringQuestionCardIntoView(cardEl) {
+  if (!cardEl) return;
+  const doScroll = () => {
+    try {
+      const rect = cardEl.getBoundingClientRect();
+      const stickyHeader = document.querySelector(".main-header");
+      const headerHeight = stickyHeader ? stickyHeader.offsetHeight : 70;
+      const totalHeaderOffset = Math.max(80, headerHeight + 15);
+      const cardAbsoluteTop = window.pageYOffset + rect.top;
+
+      // إذا كانت البطاقة طويلة جداً، نحاذي أولها أسفل الهيدر مباشرة لترى الخيارات كاملة
+      if (rect.height > window.innerHeight * 0.72) {
+        window.scrollTo({
+          top: Math.max(0, cardAbsoluteTop - totalHeaderOffset),
+          behavior: "smooth"
+        });
+      } else {
+        // إذا كان ارتفاعها مناسباً، نمركزها تماماً في وسط الشاشة
+        const targetScrollTop = cardAbsoluteTop - ((window.innerHeight - rect.height) / 2);
+        window.scrollTo({
+          top: Math.max(0, targetScrollTop),
+          behavior: "smooth"
+        });
+      }
+    } catch (e) {
+      try {
+        cardEl.scrollIntoView({ behavior: "smooth", block: "center" });
+      } catch (err) {}
+    }
+  };
+
+  // تمرير فوري مع بداية ظهور السؤال، ثم تمرير تأكيدي ناعم بعد انقضاء أنيميشن النزول
+  requestAnimationFrame(() => {
+    doScroll();
+    setTimeout(doScroll, 350);
+    setTimeout(doScroll, 700);
+  });
+}
+
+// =========================================================
+// المؤقت اللحظي السحابي الموحد والمزامن عبر Firestore لجميع المتسابقين والعارض والمشرف
+// =========================================================
+function syncAndRunLiveTimer(timerState, onTimeout = null) {
+  if (liveTimerInterval) {
+    clearInterval(liveTimerInterval);
+    liveTimerInterval = null;
+  }
+
+  const timerDisplay = stageTimerSeconds;
+  const timerPill = document.getElementById("stageTimerPill");
+  if (!timerDisplay) return;
+
+  if (!timerState) {
+    const defaultSecs = currentLiveRoom?.questionTimer || 30;
+    liveTimeRemaining = defaultSecs;
+    timerDisplay.textContent = String(defaultSecs);
+    return;
+  }
+
+  // 1. فحص ميزة "بلا حد زمني" (بطاقة تكتيكية)
+  if (timerState.noTimeLimit) {
+    timerDisplay.textContent = "∞";
+    liveTimeRemaining = 9999;
+    if (timerPill) {
+      timerPill.classList.remove("timer-urgent", "timer-frozen");
+      timerPill.classList.add("timer-infinite");
+    }
+    return;
+  }
+
+  // 2. فحص حالة التجميد (بطاقة تجميد الوقت)
+  if (timerState.isFrozen) {
+    const frozenSecs = Math.max(0, Math.ceil(timerState.freezeRemaining || 0));
+    timerDisplay.textContent = `${frozenSecs} ❄️`;
+    liveTimeRemaining = frozenSecs;
+    if (timerPill) {
+      timerPill.classList.remove("timer-urgent", "timer-infinite");
+      timerPill.classList.add("timer-frozen");
+    }
+    return;
+  }
+
+  // 3. العد التنازلي الحقيقي المزامن سحابياً بالملي ثانية
+  if (timerPill) {
+    timerPill.classList.remove("timer-infinite", "timer-frozen");
+  }
+
+  const updateTick = () => {
+    const now = Date.now();
+    const remainingMs = Math.max(0, (timerState.endsAt || (now + 30000)) - now);
+    const remainingSecs = Math.ceil(remainingMs / 1000);
+    liveTimeRemaining = remainingSecs;
+
+    timerDisplay.textContent = String(remainingSecs);
+
+    if (timerPill) {
+      if (remainingSecs <= 5 && remainingSecs > 0) {
+        timerPill.classList.add("timer-urgent");
+      } else {
+        timerPill.classList.remove("timer-urgent");
+      }
+    }
+
+    if (remainingMs <= 0) {
+      clearInterval(liveTimerInterval);
+      liveTimerInterval = null;
+      timerDisplay.textContent = "0";
+
+      // المشرف أو قائد الغرفة فقط ينفذ انتهاء الوقت لمنع التكرار من المتسابقين
+      const isLeader = currentUser && (
+        currentUser.name === currentLiveRoom?.leaderName ||
+        currentUser.name === currentLiveRoom?.creatorName ||
+        currentUser.role === "supervisor" ||
+        isSupervisor(currentUser.name)
+      );
+
+      if (isLeader && !isQuestionTransitionRunning) {
+        if (typeof onTimeout === "function") {
+          onTimeout();
+        } else {
+          showToast("⚠️ انتهى الوقت المحدد للسؤال! خصم 3 درجات والانتقال للسؤال التالي", "fa-clock", 3500);
+          advanceToNext(-3, true);
+        }
+      }
+    }
+  };
+
+  updateTick();
+  liveTimerInterval = setInterval(updateTick, 250);
+}
+
+async function broadcastTimerModification(options = {}) {
+  if (!currentLiveRoom) return;
+  const now = Date.now();
+  const qDuration = currentLiveRoom.questionTimer || 30;
+  let currentTimer = currentLiveRoom.timerState || {
+    questionIdx: currentLiveRoom.currentQuestionIdx || 0,
+    duration: qDuration,
+    startedAt: now,
+    endsAt: now + (qDuration * 1000),
+    isFrozen: false,
+    noTimeLimit: false,
+    updatedAt: now
+  };
+
+  let updatedTimer = { ...currentTimer, updatedAt: now };
+
+  if (options.noTimeLimit !== undefined) {
+    updatedTimer.noTimeLimit = options.noTimeLimit;
+  }
+
+  if (options.deltaSeconds !== undefined && options.deltaSeconds !== 0) {
+    const curEndsAt = Math.max(now, updatedTimer.endsAt || (now + 30000));
+    updatedTimer.endsAt = Math.max(now + 3000, curEndsAt + (options.deltaSeconds * 1000));
+    liveTimeRemaining = Math.max(3, Math.ceil((updatedTimer.endsAt - now) / 1000));
+  }
+
+  if (options.reset) {
+    updatedTimer.duration = qDuration;
+    updatedTimer.endsAt = now + (qDuration * 1000);
+    updatedTimer.isFrozen = false;
+    liveTimeRemaining = qDuration;
+  }
+
+  if (options.freezeSeconds) {
+    const remainingSecs = Math.max(1, Math.ceil((updatedTimer.endsAt - now) / 1000));
+    updatedTimer.isFrozen = true;
+    updatedTimer.freezeRemaining = remainingSecs;
+    liveTimeRemaining = remainingSecs;
+
+    setTimeout(async () => {
+      if (currentLiveRoom?.id) {
+        const resumeNow = Date.now();
+        const unfreezeTimer = {
+          ...(currentLiveRoom.timerState || updatedTimer),
+          isFrozen: false,
+          endsAt: resumeNow + (remainingSecs * 1000),
+          updatedAt: resumeNow
+        };
+        currentLiveRoom.timerState = unfreezeTimer;
+        syncAndRunLiveTimer(unfreezeTimer);
+        try {
+          await updateDoc(doc(db, "live_rooms", currentLiveRoom.id), {
+            timerState: unfreezeTimer,
+            lastUpdated: serverTimestamp()
+          });
+        } catch (e) {}
+      }
+    }, options.freezeSeconds * 1000);
+  }
+
+  currentLiveRoom.timerState = updatedTimer;
+  syncAndRunLiveTimer(updatedTimer);
+
+  if (currentLiveRoom.id) {
+    try {
+      const roomRef = doc(db, "live_rooms", currentLiveRoom.id);
+      await updateDoc(roomRef, {
+        timerState: updatedTimer,
+        lastUpdated: serverTimestamp()
+      });
+    } catch (err) {
+      console.warn("broadcastTimerModification error:", err);
+    }
+  }
+}
 
 // =========================================================
 // المرحلة ج: مسرح المسابقة (مع تسجيل تلقائي للإجابات)
@@ -5745,9 +5971,7 @@ function loadStageQuestion(idx) {
     questionCardEl.classList.remove("question-enter-anim");
     void questionCardEl.offsetWidth; // إعادة تشغيل الأنيميشن
     questionCardEl.classList.add("question-enter-anim");
-    try {
-      questionCardEl.scrollIntoView({ behavior: "smooth", block: "center" });
-    } catch (e) {}
+    bringQuestionCardIntoView(questionCardEl);
   }
 
   // إزالة أي شريط تقييم إجابة سابق
@@ -5760,8 +5984,19 @@ function loadStageQuestion(idx) {
 
     const nextIdx = idx + 1;
     const isFinished = nextIdx >= allQuestions.length;
+    const qDuration = currentLiveRoom?.questionTimer || 30;
+    const now = Date.now();
+    const nextTimerState = isFinished ? null : {
+      questionIdx: nextIdx,
+      duration: qDuration,
+      startedAt: now,
+      endsAt: now + (qDuration * 1000),
+      isFrozen: false,
+      noTimeLimit: false,
+      updatedAt: now
+    };
 
-    // بث نتيجة الإجابة سحابياً للغرفة الحية وتحديث رقم السؤال والنقاط فوراً للجميع
+    // بث نتيجة الإجابة سحابياً للغرفة الحية وتحديث رقم السؤال والنقاط والمؤقت فوراً للجميع
     if (currentLiveRoom) {
       const answerPayload = {
         questionIdx: idx,
@@ -5776,15 +6011,22 @@ function loadStageQuestion(idx) {
       currentLiveRoom.lastAnswerEvent = answerPayload;
       currentLiveRoom.contestantScore = contestantScore;
       currentLiveRoom.currentQuestionIdx = nextIdx;
+      if (nextTimerState) {
+        currentLiveRoom.timerState = nextTimerState;
+      }
       if (currentLiveRoom.id) {
         try {
           const roomRef = doc(db, "live_rooms", currentLiveRoom.id);
-          updateDoc(roomRef, {
+          const updatePayload = {
             lastAnswerEvent: answerPayload,
             contestantScore: contestantScore,
             currentQuestionIdx: nextIdx,
             lastUpdated: serverTimestamp()
-          }).catch(err => console.warn("Sync lastAnswerEvent notice:", err));
+          };
+          if (nextTimerState) {
+            updatePayload.timerState = nextTimerState;
+          }
+          updateDoc(roomRef, updatePayload).catch(err => console.warn("Sync lastAnswerEvent notice:", err));
         } catch (e) {}
       }
     }
@@ -5925,67 +6167,67 @@ function loadStageQuestion(idx) {
         `).join("")}
       </div>`;
 
-    if (!isAllowedToSolve) return;
+    if (isAllowedToSolve) {
+      const btns = stageInteractiveArea.querySelectorAll(".btn-choice-duo:not([disabled])");
+      btns.forEach(btn => {
+        btn.addEventListener("click", () => {
+          // قفل جميع الخيارات فوراً
+          btns.forEach(b => { b.disabled = true; b.style.pointerEvents = "none"; });
+          const choiceIdx = parseInt(btn.getAttribute("data-choice"));
+          const elapsedSec = (Date.now() - questionStartTime) / 1000;
 
-    const btns = stageInteractiveArea.querySelectorAll(".btn-choice-duo:not([disabled])");
-    btns.forEach(btn => {
-      btn.addEventListener("click", () => {
-        // قفل جميع الخيارات فوراً
-        btns.forEach(b => { b.disabled = true; b.style.pointerEvents = "none"; });
-        const choiceIdx = parseInt(btn.getAttribute("data-choice"));
-        const elapsedSec = (Date.now() - questionStartTime) / 1000;
-
-        let earnedPoints = q.points || 5;
-        if (doublePointsActive) earnedPoints *= 2;
-        earnedPoints += cardBonusPoints;
-        // مكافأة السرعة: إن أجاب في أقل من 5 ثوانٍ
-        if (speedBonusExtra > 0 && elapsedSec < 5) {
-          earnedPoints += speedBonusExtra;
-          showToast(`⚡ سرعة البرق! +${speedBonusExtra} نقاط إضافية (${elapsedSec.toFixed(1)}ث)`, "fa-forward-fast", 2500);
-        }
-
-        if (choiceIdx === q.correct) {
-          btn.classList.add("correct");
-          showToast(`✅ إجابة صحيحة! (+${earnedPoints} درجات)`, "fa-circle-check");
-          activeCardEffect = null; // استهلاك البطاقة
-          advanceToNext(earnedPoints, false, true, choiceIdx);
-        } else {
-          // فحص بطاقة "فرصة ثانية"
-          if (activeCardEffect?.effect?.secondChance) {
-            btn.classList.add("wrong");
-            btn.disabled = true;
-            btn.style.opacity = "0.35";
-            btns.forEach(b => {
-              if (b !== btn) {
-                b.disabled = false;
-                b.style.pointerEvents = "auto";
-              }
-            });
-            showToast("🔄 فرصة ثانية: إجابتك غير دقيقة، ولديك فرصة أخرى!", "fa-arrow-rotate-left", 3500);
-            activeCardEffect = null;
-            return;
+          let earnedPoints = q.points || 5;
+          if (doublePointsActive) earnedPoints *= 2;
+          earnedPoints += cardBonusPoints;
+          // مكافأة السرعة: إن أجاب في أقل من 5 ثوانٍ
+          if (speedBonusExtra > 0 && elapsedSec < 5) {
+            earnedPoints += speedBonusExtra;
+            showToast(`⚡ سرعة البرق! +${speedBonusExtra} نقاط إضافية (${elapsedSec.toFixed(1)}ث)`, "fa-forward-fast", 2500);
           }
 
-          btn.classList.add("wrong");
-          const correctBtn = stageInteractiveArea.querySelector(`[data-choice="${q.correct}"]`);
-          if (correctBtn) correctBtn.classList.add("correct");
-
-          if (hasImmunity) {
-            showToast("🛡️ درع الأمان: تم إحباط أي خصم للدرجات!", "fa-shield-halved");
-            activeCardEffect = null;
-            advanceToNext(0, false, false, choiceIdx);
-          } else if (penaltyOnWrong > 0) {
-            showToast(`❌ إجابة خاطئة — المخاطرة الكبرى: خصم ${penaltyOnWrong} درجات!`, "fa-fire-flame-curved", 3000);
-            activeCardEffect = null;
-            advanceToNext(-penaltyOnWrong, true, false, choiceIdx);
+          if (choiceIdx === q.correct) {
+            btn.classList.add("correct");
+            showToast(`✅ إجابة صحيحة! (+${earnedPoints} درجات)`, "fa-circle-check");
+            activeCardEffect = null; // استهلاك البطاقة
+            advanceToNext(earnedPoints, false, true, choiceIdx);
           } else {
-            showToast("❌ إجابة خاطئة", "fa-xmark");
-            activeCardEffect = null;
-            advanceToNext(0, false, false, choiceIdx);
+            // فحص بطاقة "فرصة ثانية"
+            if (activeCardEffect?.effect?.secondChance) {
+              btn.classList.add("wrong");
+              btn.disabled = true;
+              btn.style.opacity = "0.35";
+              btns.forEach(b => {
+                if (b !== btn) {
+                  b.disabled = false;
+                  b.style.pointerEvents = "auto";
+                }
+              });
+              showToast("🔄 فرصة ثانية: إجابتك غير دقيقة، ولديك فرصة أخرى!", "fa-arrow-rotate-left", 3500);
+              activeCardEffect = null;
+              return;
+            }
+
+            btn.classList.add("wrong");
+            const correctBtn = stageInteractiveArea.querySelector(`[data-choice="${q.correct}"]`);
+            if (correctBtn) correctBtn.classList.add("correct");
+
+            if (hasImmunity) {
+              showToast("🛡️ درع الأمان: تم إحباط أي خصم للدرجات!", "fa-shield-halved");
+              activeCardEffect = null;
+              advanceToNext(0, false, false, choiceIdx);
+            } else if (penaltyOnWrong > 0) {
+              showToast(`❌ إجابة خاطئة — المخاطرة الكبرى: خصم ${penaltyOnWrong} درجات!`, "fa-fire-flame-curved", 3000);
+              activeCardEffect = null;
+              advanceToNext(-penaltyOnWrong, true, false, choiceIdx);
+            } else {
+              showToast("❌ إجابة خاطئة", "fa-xmark");
+              activeCardEffect = null;
+              advanceToNext(0, false, false, choiceIdx);
+            }
           }
-        }
-      }, { once: true });
-    });
+        }, { once: true });
+      });
+    }
 
   // ── Matching: توصيل تفاعلي متزامن بالكامل مع ترقيم واضح وتصحيح تسلسلي عند الاعتماد ──
   } else if (q.type === "matching" && q.pairs && q.pairs.length > 0) {
@@ -6582,19 +6824,54 @@ function loadStageQuestion(idx) {
 
   // وقت السؤال محدد من الغرفة إن وجد أو 30 ثانية
   const timeLimit = currentLiveRoom?.questionTimer || 30;
-  // بطاقة "بلا حد زمني" — إيقاف التايمر كلياً للسؤال الشفهي
+  const now = Date.now();
+  let qTimerState = currentLiveRoom?.timerState;
+
+  if (!qTimerState || qTimerState.questionIdx !== idx) {
+    qTimerState = {
+      questionIdx: idx,
+      duration: timeLimit,
+      startedAt: now,
+      endsAt: now + (timeLimit * 1000),
+      isFrozen: false,
+      noTimeLimit: !!(activeCardEffect?.effect?.noTimeLimit),
+      updatedAt: now
+    };
+    if (currentLiveRoom) {
+      currentLiveRoom.timerState = qTimerState;
+      if (currentLiveRoom.id && canCurrentUserSolveQuestion()) {
+        updateDoc(doc(db, "live_rooms", currentLiveRoom.id), {
+          timerState: qTimerState,
+          lastUpdated: serverTimestamp()
+        }).catch(e => console.warn("Init timer sync notice:", e));
+      }
+    }
+  }
+
+  // بطاقة "بلا حد زمني" — إيقاف التايمر كلياً للسؤال
   if (activeCardEffect?.effect?.noTimeLimit) {
-    clearInterval(liveTimerInterval);
-    if (stageTimerSeconds) stageTimerSeconds.textContent = "∞";
+    qTimerState.noTimeLimit = true;
     showToast("⏾ بلا حد زمني: لا يوجد عداد للسؤال الحالي!", "fa-microphone");
-  } else {
-    startQuestionTimer(timeLimit, () => {
-      // عند انتهاء الوقت: خصم 3 درجات ثم الانتقال للوحة الشرف والسؤال التالي
+  }
+
+  syncAndRunLiveTimer(qTimerState, () => {
+    // عند انتهاء الوقت: المشرف/القائد ينفذ الخصم والانتقال
+    const isLeader = currentUser && (
+      currentUser.name === currentLiveRoom?.leaderName || 
+      currentUser.name === currentLiveRoom?.creatorName ||
+      currentUser.role === "supervisor" ||
+      isSupervisor(currentUser.name)
+    );
+    if (isLeader) {
       showToast("⚠️ انتهى الوقت المحدد للسؤال! خصم 3 درجات والانتقال للسؤال التالي", "fa-clock", 3500);
       advanceToNext(-3, true);
-    });
-  }
+    }
+  });
+
   resetOralEvaluation();
+
+  // تمرير تلقائي ذكي لظهور السؤال بوسط الشاشة مباشرة للجميع دون تحريك الأصبع
+  bringQuestionCardIntoView(document.querySelector(".stage-question-card"));
 }
 
 // انتهاء مسابقة الطالب بالكامل
@@ -6640,22 +6917,20 @@ function addContestantScore(pts) {
 }
 
 function startQuestionTimer(seconds, onTimeout = null) {
-  clearInterval(liveTimerInterval);
-  liveTimeRemaining = seconds;
-  if (stageTimerSeconds) stageTimerSeconds.textContent = liveTimeRemaining;
-
-  liveTimerInterval = setInterval(() => {
-    liveTimeRemaining--;
-    if (stageTimerSeconds) stageTimerSeconds.textContent = liveTimeRemaining;
-    if (liveTimeRemaining <= 0) {
-      clearInterval(liveTimerInterval);
-      if (typeof onTimeout === "function") {
-        onTimeout();
-      } else {
-        showToast("انتهى وقت السؤال!", "fa-stopwatch");
-      }
-    }
-  }, 1000);
+  const now = Date.now();
+  const qState = {
+    questionIdx: currentQuestionIndex,
+    duration: seconds,
+    startedAt: now,
+    endsAt: now + (seconds * 1000),
+    isFrozen: false,
+    noTimeLimit: false,
+    updatedAt: now
+  };
+  if (currentLiveRoom) {
+    currentLiveRoom.timerState = qState;
+  }
+  syncAndRunLiveTimer(qState, onTimeout);
 }
 
 // --------------------------------------------------------
@@ -6987,28 +7262,20 @@ function executeCardEffect(card) {
   }
 
   // 1. تجميد الوقت: إيقاف العداد لـ N ثانية ثم إعادة تشغيله
+  // 1. تجميد الوقت: إيقاف العداد لـ N ثانية ثم إعادة تشغيله
   if (eff.freezeTime) {
-    clearInterval(liveTimerInterval);
     showFloatingCardPill(`تجميد المؤقت ${eff.freezeTime}ث ❄️`, "fa-snowflake", "blue");
     showToast(`❄️ تجميد الوقت: العداد متوقف لـ ${eff.freezeTime} ثانية!`, "fa-snowflake", 3000);
-    setTimeout(() => {
-      // إعادة تشغيل العداد من الوقت المتبقي الحالي
-      startQuestionTimer(liveTimeRemaining, () => {
-        showToast("⚠️ انتهى الوقت! خصم 3 درجات", "fa-clock", 3000);
-        advanceToNext(-3, true);
-      });
-      showToast("▶️ تم استئناف العداد!", "fa-play");
-    }, eff.freezeTime * 1000);
+    broadcastTimerModification({ freezeSeconds: eff.freezeTime });
     activeCardEffect = card; // تُحفظ لتُطبَّق على السؤال القادم
   }
 
   // 2. إضافة/إنقاص وقت: تعديل الوقت المتبقي مباشرة مع شارة عائمة
   else if (eff.timeDelta && eff.timeDelta !== 0) {
-    liveTimeRemaining = Math.max(3, liveTimeRemaining + eff.timeDelta);
-    if (stageTimerSeconds) stageTimerSeconds.textContent = liveTimeRemaining;
     const sign = eff.timeDelta > 0 ? "+" : "";
     showFloatingCardPill(`${sign}${eff.timeDelta} ثانية ⏱️`, eff.timeDelta > 0 ? "fa-hourglass-start" : "fa-bolt", eff.timeDelta > 0 ? "green" : "red");
     showToast(`⏱️ ${sign}${eff.timeDelta} ثانية على الوقت!`, eff.timeDelta > 0 ? "fa-hourglass-start" : "fa-bolt", 2500);
+    broadcastTimerModification({ deltaSeconds: eff.timeDelta });
     activeCardEffect = card;
   }
 
@@ -7053,22 +7320,19 @@ function executeCardEffect(card) {
 
   // 6. إعادة وقت السؤال: يُعيد ضبط العداد من البداية
   else if (eff.resetQuestionTimer) {
-    const timeLimit = currentLiveRoom?.questionTimer || 30;
     showFloatingCardPill(`إعادة شحن المؤقت 🔋`, "fa-battery-full", "green");
     showToast("🔋 طاقة العزيمة: تمت إعادة ضبط وقت السؤال!", "fa-battery-full", 3000);
     activeCardEffect = null;
-    startQuestionTimer(timeLimit, () => {
-      showToast("⚠️ انتهى الوقت! خصم 3 درجات", "fa-clock", 3000);
-      advanceToNext(-3, true);
-    });
+    broadcastTimerModification({ reset: true });
     if (tacticalCardsCallback) { const cb = tacticalCardsCallback; tacticalCardsCallback = null; cb(); }
     return;
   }
 
   // 7. نصف الوقت + نقاط مكافأة (مخاطرة ذكية)
   else if (eff.halfTime) {
-    liveTimeRemaining = Math.max(5, Math.floor(liveTimeRemaining / 2));
-    if (stageTimerSeconds) stageTimerSeconds.textContent = liveTimeRemaining;
+    const currentRem = Math.max(6, liveTimeRemaining);
+    const delta = -Math.floor(currentRem / 2);
+    broadcastTimerModification({ deltaSeconds: delta });
     showFloatingCardPill(`نصف الوقت مضاعف النقاط ⚡`, "fa-medal", "gold");
     showToast(`⚡ تحدي الفارس: الوقت نُصِّف! لكن الإجابة الصحيحة +${eff.pointsBonus||3} نقاط إضافية`, "fa-medal", 3500);
     activeCardEffect = card;
@@ -7076,8 +7340,7 @@ function executeCardEffect(card) {
 
   // 8. استشارة المعلم أو مساعدة الزميل: اختيار معلم عشوائياً وتنبيهه
   else if (eff.teacherHelp || eff.peerHelp || eff.adaptiveQuestion) {
-    liveTimeRemaining += 15;
-    if (stageTimerSeconds) stageTimerSeconds.textContent = liveTimeRemaining;
+    broadcastTimerModification({ deltaSeconds: 15 });
 
     const roomUsers = Array.isArray(currentLiveRoom?.users) ? currentLiveRoom.users : [];
     const teacherCandidates = roomUsers.filter(u => {
@@ -7130,8 +7393,7 @@ function executeCardEffect(card) {
 
   // 10. رصيد وقت بنكي إضافي (+15 ثانية)
   else if (eff.totalBankTime) {
-    liveTimeRemaining += eff.totalBankTime;
-    if (stageTimerSeconds) stageTimerSeconds.textContent = liveTimeRemaining;
+    broadcastTimerModification({ deltaSeconds: eff.totalBankTime });
     showFloatingCardPill(`+${eff.totalBankTime} ثانية بنكية ⏳`, "fa-clock-rotate-left", "green");
     showToast(`⏱️ التأني والسلامة: +${eff.totalBankTime} ثانية إضافية للوقت!`, "fa-clock-rotate-left", 3000);
   }
@@ -7189,8 +7451,7 @@ function executeCardEffect(card) {
 function skipTacticalCards() {
   clearInterval(cardsTimerInterval);
   tacticalCardsModal.classList.add("hidden");
-  liveTimeRemaining += 15;
-  if (stageTimerSeconds) stageTimerSeconds.textContent = liveTimeRemaining;
+  broadcastTimerModification({ deltaSeconds: 15 });
   showToast("تم تخطي البطاقات وإضافة +15 ثانية لوقت السؤال!", "fa-hourglass-start");
   if (tacticalCardsCallback) {
     const cb = tacticalCardsCallback;
@@ -7659,7 +7920,7 @@ function startStudentPractice(quiz) {
 
     const sec = quiz.sections[secIdx];
     runnerContent.innerHTML = `
-      <div class="practice-sec-box">
+      <div class="practice-sec-box question-enter-anim">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;flex-wrap:wrap;gap:10px;">
           <h3 style="font-size: 18px; margin: 0; color: var(--duo-green-dark);">
             <i class="fa-solid fa-bookmark"></i> ${sec.sectionName}
@@ -7676,7 +7937,7 @@ function startStudentPractice(quiz) {
           }).filter(p => p[0] || p[1]);
 
           return `
-          <div style="background: #f8fafc; border: 1.5px solid var(--border-duo); border-radius: var(--radius-md); padding: 18px; margin-bottom: 15px;">
+          <div class="practice-question-card question-enter-anim" style="background: #f8fafc; border: 1.5px solid var(--border-duo); border-radius: var(--radius-md); padding: 18px; margin-bottom: 15px; scroll-margin-top: 30px;">
             <p class="font-${q.font || 'quran'}" style="margin-bottom: 12px; font-weight: 700;">${idx + 1}. ${q.text}</p>
             ${q.type === 'mcq' && q.options && q.options.length > 0 ? `
               <div class="mcq-options-grid">
@@ -7952,12 +8213,30 @@ function startStudentPractice(quiz) {
       triggerSectionTransition(() => {
         currentSecIdx++;
         renderPracticeSection(currentSecIdx);
+        requestAnimationFrame(() => {
+          runnerContent.scrollTop = 0;
+          const firstQ = runnerContent.querySelector(".practice-question-card");
+          if (firstQ) {
+            setTimeout(() => {
+              try { firstQ.scrollIntoView({ behavior: "smooth", block: "center" }); } catch (e) {}
+            }, 350);
+          }
+        });
       });
     });
   }
 
   renderPracticeSection(0);
   runnerModal.classList.remove("hidden");
+  requestAnimationFrame(() => {
+    runnerContent.scrollTop = 0;
+    const firstQ = runnerContent.querySelector(".practice-question-card");
+    if (firstQ) {
+      setTimeout(() => {
+        try { firstQ.scrollIntoView({ behavior: "smooth", block: "center" }); } catch (e) {}
+      }, 350);
+    }
+  });
 }
 
 function triggerSectionTransition(onComplete) {
