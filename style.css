@@ -776,7 +776,7 @@ body {
 
 .form-control {
   width: 100%;
-  padding: 16px 20px 16px 120px;
+  padding: 13px 18px;
   font-family: 'Cairo', sans-serif;
   font-size: 16px;
   font-weight: 700;
@@ -785,6 +785,10 @@ body {
   border: 2px solid var(--border-duo);
   border-radius: var(--radius-md);
   transition: all 0.2s ease;
+}
+
+.input-wrapper .form-control {
+  padding: 16px 20px 16px 120px;
 }
 
 .form-control:focus {
@@ -5735,16 +5739,29 @@ body {
 }
 
 .matching-item-badge {
-  background: #e2e8f0;
-  color: #334155;
-  font-weight: 900;
-  font-size: 13.5px;
-  padding: 3px 10px;
-  border-radius: var(--radius-pill);
-  min-width: 32px;
-  text-align: center;
+  background: #2563eb !important;
+  color: #ffffff !important;
+  font-weight: 900 !important;
+  font-size: 16px !important;
+  width: 34px !important;
+  height: 34px !important;
+  border-radius: 50% !important;
+  min-width: 34px !important;
+  text-align: center !important;
   flex-shrink: 0;
+  border: 2px solid #1d4ed8 !important;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.3) !important;
   transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.matching-item-badge.badge-right-letter {
+  background: #eab308 !important;
+  color: #ffffff !important;
+  border-color: #ca8a04 !important;
+  box-shadow: 0 2px 6px rgba(234, 179, 8, 0.3) !important;
 }
 
 .matching-tile-text {
@@ -6369,6 +6386,117 @@ button:disabled .fa-spin,
 .btn-duo-green:disabled .fa-spin,
 .btn-duo-yellow:disabled .fa-spin {
   margin-left: 6px;
+}
+
+/* تنسيق إدخال رمز الغرفة للطالب بوضوح تام وعالي التباين */
+.input-room-code-clean {
+  width: 220px !important;
+  max-width: 100% !important;
+  padding: 10px 16px !important;
+  font-family: 'Cairo', monospace, sans-serif !important;
+  font-size: 20px !important;
+  font-weight: 900 !important;
+  color: #0f172a !important;
+  background: #ffffff !important;
+  border: 2.5px solid var(--border-duo) !important;
+  border-bottom: 4px solid var(--border-duo-dark) !important;
+  border-radius: var(--radius-md) !important;
+  text-align: center !important;
+  letter-spacing: 2px !important;
+  direction: ltr !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05) !important;
+}
+
+.input-room-code-clean:focus {
+  border-color: var(--duo-blue) !important;
+  border-bottom-color: var(--duo-blue-dark) !important;
+  box-shadow: 0 0 0 4px var(--duo-blue-subtle) !important;
+  outline: none !important;
+}
+
+/* شريط وضع المشاهدة للطلاب غير المختارين للمسابقة الحالية */
+.spectator-mode-banner {
+  background: linear-gradient(135deg, #f8fafc, #f1f5f9);
+  border: 2px solid #cbd5e1;
+  border-bottom: 4px solid #94a3b8;
+  border-radius: var(--radius-lg);
+  padding: 14px 20px;
+  margin-bottom: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: #334155;
+  font-weight: 800;
+  font-size: 14.5px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+  animation: viewSlide 0.35s ease;
+  text-align: center;
+}
+
+.spectator-mode-banner i {
+  color: var(--duo-blue);
+  font-size: 18px;
+}
+
+/* بطاقة تخطي السؤال ببطاقة التخطي التكتيكية */
+.skip-question-banner {
+  background: linear-gradient(135deg, #fef9c3, #fef08a);
+  border: 2.5px solid #eab308;
+  border-bottom: 5px solid #ca8a04;
+  border-radius: var(--radius-xl);
+  padding: 28px 24px;
+  margin: 15px auto;
+  text-align: center;
+  color: #854d0e;
+  box-shadow: 0 10px 25px rgba(234, 179, 8, 0.2);
+  animation: questionCardDropCenter 0.55s cubic-bezier(0.18, 1, 0.25, 1) forwards;
+}
+
+.skip-question-banner .skip-icon {
+  font-size: 42px;
+  color: #ca8a04;
+  margin-bottom: 12px;
+  animation: pulseRoulette 0.6s infinite alternate;
+}
+
+.skip-question-banner h3 {
+  font-size: 22px;
+  font-weight: 900;
+  margin-bottom: 8px;
+  color: #713f12;
+}
+
+.skip-question-banner p {
+  font-size: 15px;
+  font-weight: 700;
+  color: #a16207;
+  margin-bottom: 15px;
+}
+
+.skip-question-banner .skip-points-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #ca8a04;
+  color: #ffffff;
+  padding: 6px 18px;
+  border-radius: var(--radius-pill);
+  font-weight: 900;
+  font-size: 16px;
+}
+
+/* تعطيل التفاعل للمشاهدين على المسرح */
+.stage-viewer-locked {
+  pointer-events: none !important;
+  user-select: none !important;
+}
+
+.stage-viewer-locked button,
+.stage-viewer-locked .matching-tile,
+.stage-viewer-locked .ordering-chip {
+  cursor: default !important;
+  opacity: 0.95 !important;
 }
 
 

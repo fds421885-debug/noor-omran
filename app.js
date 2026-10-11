@@ -984,7 +984,7 @@ function setupRealtimeCloudListeners() {
       participantsCache = cloudUsers;
       localStorage.setItem("nour_participants", JSON.stringify(participantsCache));
 
-      // الحفاظ على جلسة المستخدم الحالي وتحديث بياناته دون أي خروج
+      // الحفاظ على جلسة المستخدم الحالي وتحديث بياناته وترقيته فورياً دون الحاجة لتحديث الصفحة
       if (currentUser) {
         const matchingCurrent = cloudUsers.find(p => 
           p.id === currentUser.id || 
@@ -992,9 +992,29 @@ function setupRealtimeCloudListeners() {
           p.name === currentUser.name
         );
         if (matchingCurrent) {
+          const oldRole = currentUser.role;
+          const newRole = matchingCurrent.role;
           currentUser = { ...currentUser, ...matchingCurrent };
           localStorage.setItem("active_quran_user", JSON.stringify(currentUser));
           localStorage.setItem("nour_saved_user", JSON.stringify(currentUser));
+
+          if (newRole && oldRole && newRole !== oldRole) {
+            const roleArabicNames = {
+              teacher: "معلم معتمد",
+              supervisor: "مشرف مسابقة",
+              presenter: "عارض المسرح الحي",
+              student: "طالب مشارك"
+            };
+            const newRoleName = roleArabicNames[newRole] || newRole;
+            showGlobalLoader("تهانينا! تم تحديث رتبتك...", `تمت ترقيتك سحابياً إلى (${newRoleName})! جاري فتح واجهتك الجديدة فورياً...`);
+            try { soundFX.celebrate(); } catch (e) {}
+
+            setTimeout(() => {
+              hideGlobalLoader();
+              finalizeUserSession(currentUser, true);
+              showToast(`🌟 مبارك! أصبحت الآن (${newRoleName}) وتم فتح الواجهة الخاصة بك فورياً دون الحاجة لتحديث الصفحة!`, "fa-award", 4500);
+            }, 900);
+          }
         }
       }
 
@@ -1221,7 +1241,59 @@ let isSectionDrawAnimating = false;
 let currentDrawInterval = null;
 let currentDrawTimeout = null;
 let lastSeenAnswerTimestamp = 0;
+let lastSeenMatchingVerifyTimestamp = 0;
+let lastSeenCardsTurnTimestamp = 0;
 let isQuestionTransitionRunning = false;
+let currentUserProfileUnsubscribe = null;
+
+// الاستماع اللحظي لتغييرات وترقيات حساب المستخدم الحالي في السحابة
+function listenToCurrentUserProfile(userId) {
+  if (currentUserProfileUnsubscribe) {
+    currentUserProfileUnsubscribe();
+    currentUserProfileUnsubscribe = null;
+  }
+  if (!userId || !db) return;
+  try {
+    currentUserProfileUnsubscribe = onSnapshot(doc(db, "participants", userId), (snap) => {
+      if (snap.exists() && currentUser) {
+        const liveUser = { id: snap.id, ...snap.data() };
+        if (liveUser.role && liveUser.role !== currentUser.role) {
+          const oldRole = currentUser.role;
+          const newRole = liveUser.role;
+          currentUser = { ...currentUser, ...liveUser };
+          localStorage.setItem("active_quran_user", JSON.stringify(currentUser));
+          localStorage.setItem("nour_saved_user", JSON.stringify(currentUser));
+
+          const roleArabicNames = {
+            teacher: "معلم معتمد",
+            supervisor: "مشرف مسابقة",
+            presenter: "عارض المسرح الحي",
+            student: "طالب مشارك"
+          };
+          const newRoleName = roleArabicNames[newRole] || newRole;
+
+          showGlobalLoader("تهانينا! تم تحديث رتبتك...", `تمت ترقيتك سحابياً إلى (${newRoleName})! جاري فتح واجهتك فورياً...`);
+          try { soundFX.celebrate(); } catch (e) {}
+
+          setTimeout(() => {
+            hideGlobalLoader();
+            finalizeUserSession(currentUser, true);
+            showToast(`🌟 مبارك! أصبحت الآن (${newRoleName}) وتم فتح الواجهة الخاصة بك فورياً دون الحاجة لتحديث الصفحة!`, "fa-award", 4500);
+          }, 1000);
+        }
+      }
+    }, (err) => {
+      console.warn("User profile live listener notice:", err);
+    });
+  } catch (e) {
+    console.warn("Could not setup profile listener:", e);
+  }
+}
+
+// فحص دقيق لمن يمكنه الحل والإجابة في المسرح الحي
+function canCurrentUserSolveQuestion() {
+  return checkIsSolverAllowed(currentLiveRoom);
+}
 
 // تحديث واجهة المسرح الحي عند وصول تحديث سحابي من Firestore
 function updateArenaUIRealtime(room) {
@@ -1425,12 +1497,48 @@ function updateArenaUIRealtime(room) {
     showArenaPhase("stage");
     currentLiveRoom = room;
 
-    // فحص ما إذا كان هناك حدث إجابة جديد تم بثه من المشرف أو المتسابق
+    // مزامنة صلاحية الحل الحالية في قائمة التحكم السريعة
+    const stageSolverQuick = document.getElementById("stageSolverRoleQuickSelect");
+    if (stageSolverQuick && room.solverRole) {
+      stageSolverQuick.value = room.solverRole;
+    }
+
+    // مزامنة حالة التوصيل اللحظية للجميع (Real-time Matching Sync)
+    if (room.matchingState && room.matchingState.questionIdx === (room.currentQuestionIdx || 0)) {
+      const conns = Array.isArray(room.matchingState.connections)
+        ? room.matchingState.connections
+        : (Array.isArray(room.matchingState.pairs) ? room.matchingState.pairs : []);
+
+      if (room.matchingState.verifying && room.matchingState.startedAt > lastSeenMatchingVerifyTimestamp) {
+        lastSeenMatchingVerifyTimestamp = room.matchingState.startedAt;
+        if (!currentUser || room.matchingState.updatedBy !== currentUser.name) {
+          if (typeof window.runExternalMatchingVerification === "function") {
+            window.runExternalMatchingVerification(conns);
+          }
+        }
+      } else if (!room.matchingState.verifying) {
+        if (typeof window.syncExternalMatchingPairsUI === "function") {
+          window.syncExternalMatchingPairsUI(conns);
+        }
+      }
+    }
+
+    // مزامنة البطاقات التكتيكية الموحدة للجميع (Real-time Tactical Cards Sync)
+    if (room.activeCardsTurn && room.activeCardsTurn.timestamp > lastSeenCardsTurnTimestamp) {
+      lastSeenCardsTurnTimestamp = room.activeCardsTurn.timestamp;
+      if (room.activeCardsTurn.isOpen && Array.isArray(room.activeCardsTurn.cards)) {
+        showSynchronizedTacticalCardsModal(room.activeCardsTurn.cards);
+      } else if (!room.activeCardsTurn.isOpen && room.activeCardsTurn.chosenCard) {
+        applySynchronizedChosenCard(room.activeCardsTurn.chosenCard, room.activeCardsTurn.chosenBy);
+      }
+    }
+
+    // فحص ما إذا كان هناك حدث إجابة جديد تم بثه من أي مصرح له بالحل (المتسابق، المعلم، العارض، المشرف)
     if (room.lastAnswerEvent && room.lastAnswerEvent.timestamp > lastSeenAnswerTimestamp) {
       lastSeenAnswerTimestamp = room.lastAnswerEvent.timestamp;
-      if (!isLead) {
-        const ev = room.lastAnswerEvent;
-        // إبراز الخيار المختار لدى المعلم والعارض
+      const ev = room.lastAnswerEvent;
+      // إذا كان الحدث صادراً من مستخدم آخر، يتم تنفيذه فوراً بالتزامن
+      if (!currentUser || ev.answeredBy !== currentUser.name) {
         if (ev.chosenChoiceIdx !== null && ev.chosenChoiceIdx !== undefined) {
           const clickedBtn = stageInteractiveArea.querySelector(`[data-choice="${ev.chosenChoiceIdx}"]`);
           if (clickedBtn) clickedBtn.classList.add(ev.isCorrect ? "correct" : "wrong");
@@ -2364,6 +2472,9 @@ function finalizeUserSession(user, isReturning) {
   localStorage.setItem("nour_saved_user", JSON.stringify(user));
   if (user && user.name) {
     localStorage.setItem("nour_last_username", user.name);
+  }
+  if (user && user.id) {
+    listenToCurrentUserProfile(user.id);
   }
 
   if (user.role === "supervisor") {
@@ -4587,6 +4698,89 @@ async function joinLiveRoom(room) {
 }
 
 // --------------------------------------------------------
+// إدارة إعدادات الغرفة وصلاحيات الحل في المسرح الحي
+// --------------------------------------------------------
+const roomSettingsModal = document.getElementById("roomSettingsModal");
+const btnOpenRoomSettingsModal = document.getElementById("btnOpenRoomSettingsModal");
+const btnSaveRoomSettings = document.getElementById("btnSaveRoomSettings");
+const stageSolverRoleQuickSelect = document.getElementById("stageSolverRoleQuickSelect");
+const settingsTacticalCardsToggle = document.getElementById("settingsTacticalCardsToggle");
+const settingsQuestionTimerInput = document.getElementById("settingsQuestionTimerInput");
+
+function openRoomSettingsModal() {
+  if (!currentLiveRoom || !roomSettingsModal) return;
+  const currentPerm = currentLiveRoom.solverRole || "contestant_and_lead";
+  const radios = document.querySelectorAll("input[name='roomAnsweringPermission']");
+  radios.forEach(r => {
+    r.checked = (r.value === currentPerm);
+  });
+  if (settingsTacticalCardsToggle) {
+    settingsTacticalCardsToggle.checked = currentLiveRoom.tacticalCardsEnabled !== false;
+  }
+  if (settingsQuestionTimerInput) {
+    settingsQuestionTimerInput.value = currentLiveRoom.questionTimer || 30;
+  }
+  roomSettingsModal.classList.remove("hidden");
+}
+
+btnOpenRoomSettingsModal?.addEventListener("click", openRoomSettingsModal);
+
+btnSaveRoomSettings?.addEventListener("click", async () => {
+  if (!currentLiveRoom) return;
+  const selectedRadio = document.querySelector("input[name='roomAnsweringPermission']:checked");
+  const newPerm = selectedRadio ? selectedRadio.value : "contestant_and_lead";
+  const newCardsToggle = settingsTacticalCardsToggle ? settingsTacticalCardsToggle.checked : true;
+  const newTimer = settingsQuestionTimerInput ? Math.max(5, parseInt(settingsQuestionTimerInput.value) || 30) : 30;
+
+  currentLiveRoom.solverRole = newPerm;
+  currentLiveRoom.tacticalCardsEnabled = newCardsToggle;
+  currentLiveRoom.questionTimer = newTimer;
+
+  if (stageSolverRoleQuickSelect) {
+    stageSolverRoleQuickSelect.value = newPerm;
+  }
+
+  if (currentLiveRoom.id) {
+    try {
+      const roomRef = doc(db, "live_rooms", currentLiveRoom.id);
+      await updateDoc(roomRef, {
+        solverRole: newPerm,
+        tacticalCardsEnabled: newCardsToggle,
+        questionTimer: newTimer,
+        lastUpdated: serverTimestamp()
+      });
+      showToast("✅ تم حفظ إعدادات الغرفة وصلاحيات الإجابة وتطبيقها عند الجميع فوراً!", "fa-circle-check", 3500);
+    } catch (e) {
+      console.warn("Save room settings error:", e);
+      await saveRooms(currentLiveRoom);
+    }
+  }
+
+  roomSettingsModal.classList.add("hidden");
+  updateArenaUIRealtime(currentLiveRoom);
+});
+
+// تغيير سريع لصلاحية الحل من شريط المسرح المباشر
+stageSolverRoleQuickSelect?.addEventListener("change", async () => {
+  if (!currentLiveRoom) return;
+  const val = stageSolverRoleQuickSelect.value;
+  currentLiveRoom.solverRole = val;
+  if (currentLiveRoom.id) {
+    try {
+      const roomRef = doc(db, "live_rooms", currentLiveRoom.id);
+      await updateDoc(roomRef, {
+        solverRole: val,
+        lastUpdated: serverTimestamp()
+      });
+      showToast(`تم تعيين صلاحية الإجابة: «${stageSolverRoleQuickSelect.options[stageSolverRoleQuickSelect.selectedIndex]?.text}» وتحديثها للجميع فوراً`, "fa-sliders");
+    } catch (e) {
+      console.warn("Update quick solver role notice:", e);
+    }
+  }
+  updateArenaUIRealtime(currentLiveRoom);
+});
+
+// --------------------------------------------------------
 // مودال إدارة مغادرة قائد الغرفة (تسليم الإشراف أو إنهاء المسابقة)
 // --------------------------------------------------------
 const leaderExitModal = document.getElementById("leaderExitModal");
@@ -5373,6 +5567,125 @@ function playQuestionTransitionSequence({ isCorrect, scoreDelta, isPenalty, next
   }, 1500);
 }
 
+// --------------------------------------------------------
+// فحص صلاحية الإجابة والحل في المسرح الحي
+// --------------------------------------------------------
+function checkIsSolverAllowed(room = currentLiveRoom) {
+  if (!currentUser) return false;
+  if (!room) return true;
+  const isSup = currentUser.role === "supervisor" || isSupervisor(currentUser.name);
+  const isTeacher = currentUser.role === "teacher";
+  const isPresenter = currentUser.role === "presenter";
+  const isLeader = room.leaderName === currentUser.name || room.creatorName === currentUser.name || isSup;
+
+  const isContestant = !!(room.contestantName && (
+    currentUser.name === room.contestantName || 
+    (currentUser.normalizedName && room.contestantName && currentUser.normalizedName === normalizeArabic(room.contestantName))
+  ));
+
+  // الطالب الذي يدخل ولم يتم اختياره من مشرف المسابقة لا يمكنه فعل أي شيء بتاتاً، مشاهد فقط
+  if (currentUser.role === "student" || (!isSup && !isTeacher && !isPresenter)) {
+    if (!isContestant) return false;
+    // إذا كان هو المتسابق المختار، يتحقق من عدم قفل الحل للمشرف فقط
+    return room.solverRole !== "supervisor_only";
+  }
+
+  if (isLeader) return true;
+
+  const perm = room.solverRole || "contestant_and_lead";
+
+  if (perm === "contestant_only") {
+    return isContestant || isLeader;
+  }
+  if (perm === "contestant_and_lead") {
+    return isContestant || isLeader;
+  }
+  if (perm === "supervisor_only") {
+    return isLeader;
+  }
+  if (perm === "teacher_and_supervisor") {
+    return isTeacher || isLeader;
+  }
+  if (perm === "presenter") {
+    return isPresenter || isLeader;
+  }
+  if (perm === "all" || perm === "all_participants") {
+    return true;
+  }
+  return isContestant || isLeader;
+}
+
+// --------------------------------------------------------
+// نافذة اختيار السؤال المسبق للتخطي الذكي (مع الحصول على 3 نقاط بدلاً منه)
+// --------------------------------------------------------
+const modalPreSkipQuestion = document.getElementById("modalPreSkipQuestion");
+const preSkipQuestionsList = document.getElementById("preSkipQuestionsList");
+
+function openPreSkipQuestionModal() {
+  if (!modalPreSkipQuestion || !preSkipQuestionsList) return;
+  const allQ = (currentLiveRoom?.drawnQuestions && currentLiveRoom.drawnQuestions.length > 0)
+    ? currentLiveRoom.drawnQuestions
+    : (currentQuizData?.sections?.flatMap(s => s.questions || []) || []);
+
+  const upcoming = [];
+  allQ.forEach((q, idx) => {
+    if (idx > currentQuestionIndex && !(currentLiveRoom?.skippedQuestionIndices || []).includes(idx)) {
+      upcoming.push({ q, idx });
+    }
+  });
+
+  if (upcoming.length === 0) {
+    showToast("لا توجد أسئلة قادمة باقية في هذه الجولة للتخطي!", "fa-info-circle");
+    return;
+  }
+
+  preSkipQuestionsList.innerHTML = upcoming.map(({ q, idx }) => `
+    <div class="pre-skip-q-card">
+      <div class="pre-skip-q-info">
+        <div class="pre-skip-q-meta"><i class="fa-solid fa-list-ol"></i> السؤال رقم (${idx + 1}) | ${escapeHtml(q.sectionName || 'المسابقة')}</div>
+        <div class="pre-skip-q-text font-${q.font || 'quran'}">${escapeHtml(q.text || 'سؤال')}</div>
+      </div>
+      <button type="button" class="btn-duo-yellow btn-sm btn-select-pre-skip" data-idx="${idx}">
+        <i class="fa-solid fa-forward-fast"></i> تخطي السؤال (+3 نقاط)
+      </button>
+    </div>
+  `).join("");
+
+  modalPreSkipQuestion.classList.remove("hidden");
+
+  preSkipQuestionsList.querySelectorAll(".btn-select-pre-skip").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const targetIdx = parseInt(btn.getAttribute("data-idx"));
+      if (isNaN(targetIdx)) return;
+
+      const currentSkipped = Array.isArray(currentLiveRoom?.skippedQuestionIndices) 
+        ? [...currentLiveRoom.skippedQuestionIndices] 
+        : [];
+      if (!currentSkipped.includes(targetIdx)) {
+        currentSkipped.push(targetIdx);
+      }
+      if (currentLiveRoom) {
+        currentLiveRoom.skippedQuestionIndices = currentSkipped;
+      }
+
+      // إضافة 3 درجات فورية للمتسابق بدلاً من نقاط السؤال
+      addContestantScore(3);
+      showFloatingCardPill("+3 نقاط تخطي ذكي 💎", "fa-forward-fast", "gold");
+
+      if (currentLiveRoom?.id) {
+        updateDoc(doc(db, "live_rooms", currentLiveRoom.id), {
+          skippedQuestionIndices: currentSkipped,
+          contestantScore: contestantScore,
+          lastUpdated: serverTimestamp()
+        }).catch(err => console.warn("Sync skipped question notice:", err));
+      }
+
+      modalPreSkipQuestion.classList.add("hidden");
+      showToast(`✨ تم اعتماد تخطي السؤال (${targetIdx + 1}) مسبقاً! واحتساب 3 نقاط ذهبية للمتسابق`, "fa-circle-check", 4000);
+    });
+  });
+}
+
 function loadStageQuestion(idx) {
   if (!currentQuizData) return;
   const allQuestions = [];
@@ -5416,13 +5729,16 @@ function loadStageQuestion(idx) {
   stageQuestionText.className = `question-text-content font-${q.font || 'quran'}`;
   stageQuestionText.textContent = q.text;
 
-  // تأثير حركة ظهور السؤال (Animation) - تنظيف كلاسات الخروج وتفعيل كلاس الدخول بسلاسة
+  // تأثير حركة ظهور السؤال (Animation) - تنظيف كلاسات الخروج وتفعيل كلاس النزول بوسط الشاشة
   const questionCardEl = document.querySelector(".stage-question-card");
   if (questionCardEl) {
     questionCardEl.classList.remove("question-exit-anim");
     questionCardEl.classList.remove("question-enter-anim");
     void questionCardEl.offsetWidth; // إعادة تشغيل الأنيميشن
     questionCardEl.classList.add("question-enter-anim");
+    try {
+      questionCardEl.scrollIntoView({ behavior: "smooth", block: "center" });
+    } catch (e) {}
   }
 
   // إزالة أي شريط تقييم إجابة سابق
@@ -5436,7 +5752,7 @@ function loadStageQuestion(idx) {
     const nextIdx = idx + 1;
     const isFinished = nextIdx >= allQuestions.length;
 
-    // بث نتيجة الإجابة سحابياً للغرفة الحية (ليشاهد المعلم والعارض نفس النتيجة والانتقال بلحظتها)
+    // بث نتيجة الإجابة سحابياً للغرفة الحية وتحديث رقم السؤال والنقاط فوراً للجميع
     if (currentLiveRoom) {
       const answerPayload = {
         questionIdx: idx,
@@ -5445,21 +5761,63 @@ function loadStageQuestion(idx) {
         scoreDelta: scoreDelta,
         isPenalty: isPenalty,
         contestantScore: contestantScore,
+        answeredBy: currentUser?.name || "المتسابق",
         timestamp: Date.now()
       };
       currentLiveRoom.lastAnswerEvent = answerPayload;
       currentLiveRoom.contestantScore = contestantScore;
+      currentLiveRoom.currentQuestionIdx = nextIdx;
       if (currentLiveRoom.id) {
         try {
           const roomRef = doc(db, "live_rooms", currentLiveRoom.id);
           updateDoc(roomRef, {
             lastAnswerEvent: answerPayload,
             contestantScore: contestantScore,
+            currentQuestionIdx: nextIdx,
             lastUpdated: serverTimestamp()
           }).catch(err => console.warn("Sync lastAnswerEvent notice:", err));
         } catch (e) {}
       }
     }
+
+    // تشغيل دورة الانتقال السينمائية الكاملة
+    playQuestionTransitionSequence({
+      isCorrect,
+      scoreDelta,
+      isPenalty,
+      nextIdx,
+      isFinished,
+      allQuestions,
+      currentIdx: idx,
+      isLeaderUser: true
+    });
+  }
+
+  // فحص ما إذا كان هذا السؤال قد تم تخطيه مسبقاً ببطاقة التخطي التكتيكية
+  if (Array.isArray(currentLiveRoom?.skippedQuestionIndices) && currentLiveRoom.skippedQuestionIndices.includes(idx)) {
+    stageInteractiveArea.innerHTML = `
+      <div class="skip-question-banner">
+        <div class="skip-icon"><i class="fa-solid fa-forward-fast"></i></div>
+        <h3>لقد تم تخطي هذا السؤال مسبقاً ببطاقة تخطي الأسئلة!</h3>
+        <p>تم تخطي السؤال والحصول على 3 نقاط بدلاً منه مسبقاً بنجاح.</p>
+        <div class="skip-points-badge"><i class="fa-solid fa-check"></i> +3 نقاط مكتسبة مسبقاً</div>
+        <div style="margin-top: 16px;">
+          <button type="button" id="btnContinueSkippedQ" class="btn-duo-green btn-md">
+            <i class="fa-solid fa-forward"></i> متابعة والانتقال للسؤال التالي
+          </button>
+        </div>
+      </div>
+    `;
+    const skipTimer = setTimeout(() => {
+      advanceToNext(0, false, true);
+    }, 2800);
+
+    document.getElementById("btnContinueSkippedQ")?.addEventListener("click", () => {
+      clearTimeout(skipTimer);
+      advanceToNext(0, false, true);
+    }, { once: true });
+    return;
+  }
 
     // تشغيل دورة الانتقال السينمائية الكاملة
     playQuestionTransitionSequence({
@@ -5535,6 +5893,7 @@ function loadStageQuestion(idx) {
 
   // ── MCQ: قفل بعد الضغط + انتقال تلقائي ──
   if (q.type === "mcq" && q.options) {
+    const isAllowedToSolve = checkIsSolverAllowed(currentLiveRoom);
     // إذا كانت بطاقة "حذف خيارين" نشطة
     let optionsToRender = q.options.map((opt, oIdx) => ({ text: opt, idx: oIdx, hidden: false }));
     if (eliminateActive > 0 && optionsToRender.length > 2) {
@@ -5549,15 +5908,23 @@ function loadStageQuestion(idx) {
 
     stageInteractiveArea.innerHTML = `
       ${cardBannerHtml}
-      <div class="mcq-options-grid">
+      ${!isAllowedToSolve ? `
+        <div class="spectator-mode-banner">
+          <i class="fa-solid fa-eye"></i>
+          <span>أنت تشاهد المسابقة كجمهور — المتسابق الحالي: <strong>${escapeHtml(currentLiveRoom?.contestantName || 'المتسابق')}</strong> (المشاهدة فقط متاحة لك)</span>
+        </div>
+      ` : ''}
+      <div class="mcq-options-grid ${!isAllowedToSolve ? 'stage-viewer-locked' : ''}">
         ${optionsToRender.map(optObj => optObj.hidden ? `
           <button class="btn-choice-duo font-${q.font || 'quran'}" style="opacity:0.25;text-decoration:line-through;pointer-events:none;" disabled>
             <i class="fa-solid fa-ban" style="color:#ef4444;margin-left:6px;"></i> ${optObj.text}
           </button>
         ` : `
-          <button class="btn-choice-duo font-${q.font || 'quran'}" data-choice="${optObj.idx}">${optObj.text}</button>
+          <button class="btn-choice-duo font-${q.font || 'quran'}" data-choice="${optObj.idx}" ${!isAllowedToSolve ? 'disabled style="pointer-events:none;cursor:default;"' : ''}>${optObj.text}</button>
         `).join("")}
       </div>`;
+
+    if (!isAllowedToSolve) return;
 
     const btns = stageInteractiveArea.querySelectorAll(".btn-choice-duo:not([disabled])");
     btns.forEach(btn => {
@@ -5619,8 +5986,9 @@ function loadStageQuestion(idx) {
       }, { once: true });
     });
 
-  // ── Matching: توصيل تفاعلي بالأزواج ومبعثر تماماً ──
+  // ── Matching: توصيل تفاعلي متزامن بالكامل مع ترقيم واضح وتصحيح تسلسلي عند الاعتماد ──
   } else if (q.type === "matching" && q.pairs && q.pairs.length > 0) {
+    const isAllowedToSolve = checkIsSolverAllowed(currentLiveRoom);
     const isSup = currentUser && (currentUser.role === "supervisor" || isSupervisor(currentUser.name));
     let earnedPoints = q.points || 5;
     if (doublePointsActive) earnedPoints *= 2;
@@ -5635,119 +6003,317 @@ function loadStageQuestion(idx) {
       return ["", ""];
     }).filter(p => p[0] || p[1]);
 
-    const leftItems = cleanPairs.map((p, idx) => ({ id: `left_${idx}`, text: p[0], pairIdx: idx, matched: false }));
-    let rightItems = shuffleArray(cleanPairs.map((p, origIdx) => ({ id: `right_${origIdx}`, text: p[1], pairIdx: origIdx, matched: false })));
-    // التأكد من أن الطرف (ب) مبهدل ومبعثر بالكامل ليجبر الطالب على التفكير وليس حفظ المواضع
-    if (rightItems.length > 1 && rightItems[0].pairIdx === 0) {
-      const first = rightItems.shift();
-      rightItems.push(first);
+    const ARABIC_LETTERS = ["أ", "ب", "ج", "د", "هـ", "و", "ز", "ح", "ط", "ي"];
+
+    const leftItems = cleanPairs.map((p, idx) => ({ 
+      id: `left_${idx}`, 
+      text: p[0], 
+      pairIdx: idx, 
+      num: idx + 1 
+    }));
+
+    // خلط مبعثر وثابت وموحد للطرف (ب) للجميع
+    let seedShuffle = cleanPairs.map((p, origIdx) => ({ 
+      id: `right_${origIdx}`, 
+      text: p[1], 
+      pairIdx: origIdx, 
+      letter: ARABIC_LETTERS[origIdx] || String(origIdx + 1) 
+    }));
+    
+    if (currentLiveRoom?.matchingOrder && currentLiveRoom.matchingOrder.questionIdx === idx && Array.isArray(currentLiveRoom.matchingOrder.order)) {
+      const order = currentLiveRoom.matchingOrder.order;
+      seedShuffle.sort((a, b) => order.indexOf(a.pairIdx) - order.indexOf(b.pairIdx));
+    } else {
+      seedShuffle = shuffleArray(seedShuffle);
+      if (seedShuffle.length > 1 && seedShuffle[0].pairIdx === 0) {
+        const first = seedShuffle.shift();
+        seedShuffle.push(first);
+      }
+      if (isAllowedToSolve && currentLiveRoom?.id) {
+        const orderArr = seedShuffle.map(s => s.pairIdx);
+        currentLiveRoom.matchingOrder = { questionIdx: idx, order: orderArr };
+        updateDoc(doc(db, "live_rooms", currentLiveRoom.id), {
+          matchingOrder: { questionIdx: idx, order: orderArr }
+        }).catch(() => {});
+      }
+    }
+    const rightItems = seedShuffle;
+
+    // مصفوفة الوصلات الحالية: [{ leftId, rightId, leftPairIdx, rightPairIdx, leftNum, rightLetter }]
+    let activeConnections = [];
+    if (currentLiveRoom?.matchingState?.questionIdx === idx && Array.isArray(currentLiveRoom.matchingState.connections)) {
+      activeConnections = [...currentLiveRoom.matchingState.connections];
     }
 
     // إذا كانت بطاقة "توصيل الحكمة" نشطة: توصيل أول زوج تلقائياً
-    if (autoMatchOneActive && leftItems.length > 0) {
-      leftItems[0].matched = true;
-      const matchingRight = rightItems.find(r => r.pairIdx === leftItems[0].pairIdx);
-      if (matchingRight) matchingRight.matched = true;
-      showToast("✨ توصيل الحكمة: تم ربط الزوج الأول بنجاح تلقائياً!", "fa-link", 3000);
+    if (autoMatchOneActive && leftItems.length > 0 && activeConnections.length === 0) {
+      const matchR = rightItems.find(r => r.pairIdx === leftItems[0].pairIdx);
+      if (matchR) {
+        activeConnections.push({
+          leftId: leftItems[0].id,
+          rightId: matchR.id,
+          leftPairIdx: leftItems[0].pairIdx,
+          rightPairIdx: matchR.pairIdx,
+          leftNum: leftItems[0].num,
+          rightLetter: matchR.letter
+        });
+        showToast("✨ توصيل الحكمة: تم ربط أول زوج تلقائياً!", "fa-link", 3000);
+      }
     }
 
     let selectedLeftId = null;
+    let isVerifyingSequenceRunning = false;
+
+    // دوال المزامنة الخارجية عند استقبال أحداث السحابة
+    window.syncExternalMatchingPairsUI = function(syncedConnections) {
+      if (isVerifyingSequenceRunning) return;
+      activeConnections = Array.isArray(syncedConnections) ? [...syncedConnections] : [];
+      renderMatchingBoard();
+    };
+
+    window.runExternalMatchingVerification = function(syncedConnections) {
+      if (Array.isArray(syncedConnections)) activeConnections = [...syncedConnections];
+      startSequentialVerification();
+    };
 
     function renderMatchingBoard() {
-      const allMatched = leftItems.every(l => l.matched);
+      const isSpectator = !isAllowedToSolve;
 
       stageInteractiveArea.innerHTML = `
         ${cardBannerHtml}
-        <div style="text-align:center;font-size:13.5px;color:#475569;font-weight:800;margin-top:10px;">
-          <i class="fa-solid fa-arrows-split-up-and-left"></i> اضغط على عنصر من الطرف (أ) ثم اضغط على ما يطابقه من الطرف (ب):
-        </div>
-        <div class="matching-play-grid">
-          <div class="matching-items-column">
-            <div class="matching-col-header"><i class="fa-solid fa-align-right"></i> الطرف (أ):</div>
-            ${leftItems.map(item => `
-              <div class="matching-tile font-${q.font || 'quran'} ${item.matched ? 'matched' : ''} ${selectedLeftId === item.id ? 'selected' : ''}" 
-                   data-left-id="${item.id}" data-pair="${item.pairIdx}">
-                ${item.text}
-              </div>
-            `).join("")}
-          </div>
-          <div class="matching-items-column">
-            <div class="matching-col-header"><i class="fa-solid fa-align-left"></i> الطرف (ب) [مبعثر]:</div>
-            ${rightItems.map(item => `
-              <div class="matching-tile font-${q.font || 'quran'} ${item.matched ? 'matched' : ''}" 
-                   data-right-id="${item.id}" data-pair="${item.pairIdx}">
-                ${item.text}
-              </div>
-            `).join("")}
-          </div>
-        </div>
-        ${isSup ? `
-          <div style="margin-top:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:center;">
-            <label style="font-weight:700;font-size:13.5px;color:#475569;">درجة التوصيل:</label>
-            <input type="number" id="matchingScoreInput" value="${earnedPoints}" min="0" max="${earnedPoints * 2}" class="form-control" style="width:80px;">
-            <button id="btnMatchingAccept" class="btn-duo-green btn-sm"><i class="fa-solid fa-check"></i> قبول المشرف والانتقال</button>
+        ${isSpectator ? `
+          <div class="spectator-mode-banner">
+            <i class="fa-solid fa-eye"></i>
+            <span>أنت تشاهد المسابقة كجمهور — المتسابق الحالي: <strong>${escapeHtml(currentLiveRoom?.contestantName || 'المتسابق')}</strong> (المشاهدة فقط متاحة لك)</span>
           </div>
         ` : ''}
+
+        <div style="text-align:center;font-size:14px;color:#334155;font-weight:800;margin-top:6px;display:flex;align-items:center;justify-content:center;gap:8px;">
+          <i class="fa-solid fa-arrows-split-up-and-left" style="color:var(--duo-blue);"></i>
+          <span>اضغط على عنصر من الطرف (أ) ثم على ما يطابقه من الطرف (ب) [يتزامن لحظياً]:</span>
+        </div>
+
+        <div class="matching-play-grid ${isSpectator ? 'stage-viewer-locked' : ''}">
+          <!-- الطرف أ -->
+          <div class="matching-items-column">
+            <div class="matching-col-header"><i class="fa-solid fa-align-right"></i> الطرف (أ) [الأصول]:</div>
+            ${leftItems.map(item => {
+              const conn = activeConnections.find(c => c.leftId === item.id);
+              const isSelected = selectedLeftId === item.id;
+              return `
+                <div class="matching-tile font-${q.font || 'quran'} ${conn ? 'connected' : ''} ${isSelected ? 'selected' : ''}" 
+                     data-left-id="${item.id}" data-pair="${item.pairIdx}">
+                  <span class="matching-item-badge">${item.num}</span>
+                  <span class="matching-tile-text">${escapeHtml(item.text)}</span>
+                  ${conn ? `
+                    <span class="matching-connect-pill">
+                      <i class="fa-solid fa-link"></i> متصل بـ (${conn.rightLetter})
+                    </span>
+                  ` : ''}
+                </div>
+              `;
+            }).join("")}
+          </div>
+
+          <!-- الطرف ب -->
+          <div class="matching-items-column">
+            <div class="matching-col-header"><i class="fa-solid fa-align-left"></i> الطرف (ب) [مبعثر]:</div>
+            ${rightItems.map(item => {
+              const conn = activeConnections.find(c => c.rightId === item.id);
+              return `
+                <div class="matching-tile font-${q.font || 'quran'} ${conn ? 'connected' : ''}" 
+                     data-right-id="${item.id}" data-pair="${item.pairIdx}">
+                  <span class="matching-item-badge badge-right-letter">${item.letter}</span>
+                  <span class="matching-tile-text">${escapeHtml(item.text)}</span>
+                  ${conn ? `
+                    <span class="matching-connect-pill">
+                      <i class="fa-solid fa-link"></i> وصلة (${conn.leftNum})
+                    </span>
+                  ` : ''}
+                </div>
+              `;
+            }).join("")}
+          </div>
+        </div>
+
+        <!-- شريط تأكيد الإجابة والمشرف -->
+        <div class="matching-submit-row" style="margin-top:18px;display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;">
+          ${isAllowedToSolve ? `
+            <button type="button" id="btnSubmitMatching" class="btn-duo-green btn-md" ${activeConnections.length === 0 ? 'disabled' : ''}>
+              <i class="fa-solid fa-circle-check"></i> تأكيد واعتماد الإجابة وبدء التصحيح المتزامن (${activeConnections.length}/${cleanPairs.length})
+            </button>
+            <button type="button" id="btnResetMatchingConnections" class="btn-duo-outline btn-sm" ${activeConnections.length === 0 ? 'disabled' : ''}>
+              <i class="fa-solid fa-rotate-left"></i> مسح الوصلات
+            </button>
+          ` : `
+            <div style="font-size:13.5px;color:#64748b;font-weight:700;">
+              <i class="fa-solid fa-lock"></i> المتسابق يوصل الأزواج حالياً... سيظهر التصحيح لحظياً فور الاعتماد
+            </div>
+          `}
+
+          ${isSup ? `
+            <div style="display:inline-flex;align-items:center;gap:8px;background:#f8fafc;padding:4px 12px;border-radius:10px;border:1.5px solid var(--border-duo);">
+              <label style="font-weight:800;font-size:13px;color:#334155;">درجة المشرف:</label>
+              <input type="number" id="matchingScoreInput" value="${earnedPoints}" min="0" max="${earnedPoints * 2}" class="form-control" style="width:80px;padding:6px 8px;text-align:center;font-weight:900;color:#0f172a;background:#fff;">
+              <button id="btnMatchingAccept" class="btn-duo-yellow btn-sm"><i class="fa-solid fa-crown"></i> قبول مباشر</button>
+            </div>
+          ` : ''}
+        </div>
       `;
 
-      if (allMatched) {
-        showToast(`✅ تم توصيل جميع الأزواج بنجاح! (+${earnedPoints} درجات)`, "fa-circle-check");
-        try { soundFX.correct(); } catch (e) {}
-        activeCardEffect = null;
-        advanceToNext(earnedPoints, false, true);
-        return;
-      }
+      if (isSpectator) return;
 
-      // أحداث الضغط على عناصر الطرف (أ)
+      // أحداث النقر للطرف (أ)
       stageInteractiveArea.querySelectorAll("[data-left-id]").forEach(el => {
         el.addEventListener("click", () => {
+          if (isVerifyingSequenceRunning) return;
           const lId = el.getAttribute("data-left-id");
-          const item = leftItems.find(x => x.id === lId);
-          if (item?.matched) return;
           selectedLeftId = (selectedLeftId === lId) ? null : lId;
+          try { soundFX.btnClick(); } catch (e) {}
           renderMatchingBoard();
         });
       });
 
-      // أحداث الضغط على عناصر الطرف (ب)
+      // أحداث النقر للطرف (ب)
       stageInteractiveArea.querySelectorAll("[data-right-id]").forEach(el => {
         el.addEventListener("click", () => {
+          if (isVerifyingSequenceRunning) return;
           const rId = el.getAttribute("data-right-id");
-          const rItem = rightItems.find(x => x.id === rId);
-          if (rItem?.matched) return;
           if (!selectedLeftId) {
             showToast("اضغط على عنصر من الطرف (أ) أولاً", "fa-hand-pointer");
             return;
           }
+
           const lItem = leftItems.find(x => x.id === selectedLeftId);
-          if (lItem.pairIdx === rItem.pairIdx) {
-            // مطابقة صحيحة!
-            lItem.matched = true;
-            rItem.matched = true;
-            selectedLeftId = null;
-            try { soundFX.btnClick(); } catch (e) {}
-            showToast("✓ زوج متطابق صحيح!", "fa-check");
-            renderMatchingBoard();
-          } else {
-            // خطأ
-            try { soundFX.wrong(); } catch (e) {}
-            el.classList.add("shake-wrong");
-            const leftEl = stageInteractiveArea.querySelector(`[data-left-id="${selectedLeftId}"]`);
-            if (leftEl) leftEl.classList.add("shake-wrong");
-            showToast("❌ غير متطابق، حاول مرة أخرى", "fa-xmark");
-            setTimeout(() => {
-              selectedLeftId = null;
-              renderMatchingBoard();
-            }, 500);
-          }
+          const rItem = rightItems.find(x => x.id === rId);
+          if (!lItem || !rItem) return;
+
+          // حذف أي توصيل سابق لأي من العنصرين
+          activeConnections = activeConnections.filter(c => c.leftId !== lItem.id && c.rightId !== rItem.id);
+
+          // إضافة التوصيل الجديد (دون فحص صحة أو خطأ في هذه المرحلة)
+          activeConnections.push({
+            leftId: lItem.id,
+            rightId: rItem.id,
+            leftPairIdx: lItem.pairIdx,
+            rightPairIdx: rItem.pairIdx,
+            leftNum: lItem.num,
+            rightLetter: rItem.letter
+          });
+
+          selectedLeftId = null;
+          try { soundFX.btnClick(); } catch (e) {}
+
+          // بث التوصيل الجديد فوراً لجميع المشاركين عبر Firestore
+          broadcastMatchingConnectionState(false);
+          renderMatchingBoard();
         });
       });
 
+      // زر مسح الوصلات
+      document.getElementById("btnResetMatchingConnections")?.addEventListener("click", () => {
+        if (isVerifyingSequenceRunning) return;
+        activeConnections = [];
+        selectedLeftId = null;
+        broadcastMatchingConnectionState(false);
+        renderMatchingBoard();
+      });
+
+      // زر اعتماد الإجابة وبدء التصحيح
+      document.getElementById("btnSubmitMatching")?.addEventListener("click", () => {
+        if (isVerifyingSequenceRunning || activeConnections.length === 0) return;
+        broadcastMatchingConnectionState(true);
+        startSequentialVerification();
+      });
+
+      // قبول المشرف المباشر
       document.getElementById("btnMatchingAccept")?.addEventListener("click", () => {
         let sc = parseInt(document.getElementById("matchingScoreInput")?.value || String(earnedPoints));
         activeCardEffect = null;
-        advanceToNext(sc, false);
+        advanceToNext(sc, false, true);
       }, { once: true });
+    }
+
+    function broadcastMatchingConnectionState(isVerifying) {
+      if (!currentLiveRoom?.id) return;
+      const payload = {
+        questionIdx: idx,
+        connections: activeConnections,
+        pairs: activeConnections,
+        verifying: !!isVerifying,
+        startedAt: Date.now(),
+        updatedBy: currentUser?.name || "المتسابق"
+      };
+      updateDoc(doc(db, "live_rooms", currentLiveRoom.id), {
+        matchingState: payload,
+        lastUpdated: serverTimestamp()
+      }).catch(err => console.warn("Broadcast matching state notice:", err));
+    }
+
+    // تشغيل أنيميشن التصحيح المتسلسل خطوة بخطوة للأزواج واحداً تلو الآخر
+    function startSequentialVerification() {
+      if (isVerifyingSequenceRunning) return;
+      isVerifyingSequenceRunning = true;
+
+      // قفل الأزرار وإظهار رسالة الفحص
+      const submitBtn = document.getElementById("btnSubmitMatching");
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> جاري التحقق من الأزواج بالتزامن...`;
+      }
+
+      let pairCheckIdx = 0;
+      let correctMatchesCount = 0;
+
+      function checkNextPair() {
+        if (pairCheckIdx >= activeConnections.length) {
+          // انتهى فحص جميع الأزواج
+          const allCorrect = (correctMatchesCount === cleanPairs.length) && (activeConnections.length === cleanPairs.length);
+          const finalEarnedScore = Math.round((correctMatchesCount / cleanPairs.length) * earnedPoints);
+
+          setTimeout(() => {
+            if (allCorrect) {
+              showToast(`🌟 ما شاء الله! جميع الأزواج صحيحة بالكامل (+${earnedPoints} درجات)`, "fa-circle-check", 3500);
+              try { soundFX.celebrate(); } catch (e) {}
+            } else {
+              showToast(`تم التحقق: (${correctMatchesCount} من ${cleanPairs.length}) أزواج صحيحة (+${finalEarnedScore} درجات)`, "fa-check-double", 3500);
+            }
+            activeCardEffect = null;
+            advanceToNext(finalEarnedScore, false, allCorrect);
+          }, 1200);
+          return;
+        }
+
+        const conn = activeConnections[pairCheckIdx];
+        const leftEl = stageInteractiveArea.querySelector(`[data-left-id="${conn.leftId}"]`);
+        const rightEl = stageInteractiveArea.querySelector(`[data-right-id="${conn.rightId}"]`);
+
+        // تمييز الزوج الخاضع للفحص بنبض ذهبي
+        if (leftEl) leftEl.classList.add("verifying-current");
+        if (rightEl) rightEl.classList.add("verifying-current");
+
+        setTimeout(() => {
+          if (leftEl) leftEl.classList.remove("verifying-current");
+          if (rightEl) rightEl.classList.remove("verifying-current");
+
+          const isPairCorrect = (conn.leftPairIdx === conn.rightPairIdx);
+          if (isPairCorrect) {
+            correctMatchesCount++;
+            if (leftEl) leftEl.classList.add("match-correct-reveal");
+            if (rightEl) rightEl.classList.add("match-correct-reveal");
+            try { soundFX.correct(); } catch (e) {}
+          } else {
+            if (leftEl) leftEl.classList.add("match-wrong-reveal");
+            if (rightEl) rightEl.classList.add("match-wrong-reveal");
+            try { soundFX.wrong(); } catch (e) {}
+          }
+
+          pairCheckIdx++;
+          setTimeout(checkNextPair, 850);
+        }, 650);
+      }
+
+      checkNextPair();
     }
 
     renderMatchingBoard();
@@ -5787,9 +6353,16 @@ function loadStageQuestion(idx) {
     }
 
     function renderOrderingBoard() {
+      const isAllowedToSolve = checkIsSolverAllowed(currentLiveRoom);
       stageInteractiveArea.innerHTML = `
         ${cardBannerHtml}
-        <div class="ordering-play-area">
+        ${!isAllowedToSolve ? `
+          <div class="spectator-mode-banner">
+            <i class="fa-solid fa-eye"></i>
+            <span>أنت تشاهد المسابقة كجمهور — المتسابق الحالي: <strong>${escapeHtml(currentLiveRoom?.contestantName || 'المتسابق')}</strong> (المشاهدة فقط متاحة لك)</span>
+          </div>
+        ` : ''}
+        <div class="ordering-play-area ${!isAllowedToSolve ? 'stage-viewer-locked' : ''}">
           <div style="text-align:center;font-size:14px;color:#475569;font-weight:800;">
             <i class="fa-solid fa-arrow-down-short-wide"></i> اضغط على الكلمات المبعثرة بالترتيب الصحيح لتكوين الجملة:
           </div>
@@ -5821,12 +6394,18 @@ function loadStageQuestion(idx) {
 
           <!-- أزرار الإجراءات -->
           <div class="ordering-actions-bar">
-            <button type="button" class="btn-duo-outline btn-sm" id="btnResetOrdering">
-              <i class="fa-solid fa-rotate-left"></i> إعادة الترتيب
-            </button>
-            <button type="button" class="btn-duo-green" id="btnSubmitOrdering">
-              <i class="fa-solid fa-circle-check"></i> اعتماد وتحقق من الترتيب
-            </button>
+            ${isAllowedToSolve ? `
+              <button type="button" class="btn-duo-outline btn-sm" id="btnResetOrdering">
+                <i class="fa-solid fa-rotate-left"></i> إعادة الترتيب
+              </button>
+              <button type="button" class="btn-duo-green" id="btnSubmitOrdering">
+                <i class="fa-solid fa-circle-check"></i> اعتماد وتحقق من الترتيب
+              </button>
+            ` : `
+              <div style="font-size:13px;color:#64748b;font-weight:700;">
+                <i class="fa-solid fa-lock"></i> المتسابق يرتب الكلمات حالياً...
+              </div>
+            `}
             ${isSup ? `
               <button type="button" class="btn-duo-yellow btn-sm" id="btnManualAcceptOrdering" title="قبول فوري من المشرف">
                 <i class="fa-solid fa-crown"></i> قبول مباشر (${earnedPoints} درجات)
@@ -5835,6 +6414,16 @@ function loadStageQuestion(idx) {
           </div>
         </div>
       `;
+
+      if (!isAllowedToSolve) {
+        if (isSup) {
+          document.getElementById("btnManualAcceptOrdering")?.addEventListener("click", () => {
+            activeCardEffect = null;
+            advanceToNext(earnedPoints, false, true);
+          }, { once: true });
+        }
+        return;
+      }
 
       // إضافة كلمة من البنك إلى خانات الترتيب
       stageInteractiveArea.querySelectorAll("[data-bank-id]").forEach(el => {
@@ -6245,7 +6834,7 @@ btnNextStudentCycle?.addEventListener("click", () => {
 });
 
 // --------------------------------------------------------
-// نظام البطاقات التكتيكية الثلاثي الأبعاد (3D Flip Animation)
+// نظام البطاقات التكتيكية الثلاثي الأبعاد الموحد والمتزامن لجميع المشاركين
 // --------------------------------------------------------
 const tacticalCardsModal = document.getElementById("tacticalCardsModal");
 const cards3DRow = document.getElementById("cards3DRow");
@@ -6263,8 +6852,31 @@ function triggerTacticalCardsModal(onComplete = null) {
   tacticalCardsCallback = typeof onComplete === 'function' ? onComplete : null;
 
   // اختيار 3 بطاقات عشوائية فريدة من بنك الـ 40 بطاقة في cards-data.js
-  const shuffled = [...TACTICAL_CARDS].sort(() => 0.5 - Math.random());
-  const selected3 = shuffled.slice(0, 3);
+  const selected3 = getRandomTacticalCards(3);
+
+  // بث الكروت الثلاثة لجميع المشاركين في الغرفة لضمان ظهور نفس البطاقات للجميع
+  if (currentLiveRoom?.id && checkIsSolverAllowed(currentLiveRoom)) {
+    updateDoc(doc(db, "live_rooms", currentLiveRoom.id), {
+      activeCardsTurn: {
+        isOpen: true,
+        cards: selected3.map(c => c.id),
+        triggeredBy: currentUser?.name || "المتسابق",
+        timestamp: Date.now()
+      },
+      lastUpdated: serverTimestamp()
+    }).catch(err => console.warn("Broadcast tactical cards notice:", err));
+  }
+
+  showSynchronizedTacticalCardsModal(selected3.map(c => c.id));
+}
+
+function showSynchronizedTacticalCardsModal(cardIds) {
+  if (!tacticalCardsModal || !cards3DRow) return;
+  const selected3 = (Array.isArray(cardIds) ? cardIds : [])
+    .map(id => TACTICAL_CARDS.find(c => c.id === id))
+    .filter(Boolean);
+
+  if (selected3.length === 0) return;
 
   cards3DRow.innerHTML = selected3.map((card, idx) => `
     <div class="card-3d-wrapper" data-card-idx="${idx}" style="animation-delay: ${idx * 0.2}s;">
@@ -6299,7 +6911,12 @@ function triggerTacticalCardsModal(onComplete = null) {
     }, 700 + (i * 350));
 
     w.addEventListener("click", () => {
-      chooseCard(selected3[i]);
+      // فقط المصرح له بالاختيار يمكنه اختيار البطاقة وتطبيقها للجميع
+      if (checkIsSolverAllowed(currentLiveRoom)) {
+        chooseCard(selected3[i], true);
+      } else {
+        showToast("المتسابق أو المشرف هو المخوّل باختيار البطاقة للجميع", "fa-lock");
+      }
     });
   });
 
@@ -6313,20 +6930,58 @@ function triggerTacticalCardsModal(onComplete = null) {
     if (cardsCountdownTimer) cardsCountdownTimer.textContent = cardsTimeLeft;
     if (cardsTimeLeft <= 0) {
       clearInterval(cardsTimerInterval);
-      skipTacticalCards();
+      if (checkIsSolverAllowed(currentLiveRoom)) {
+        skipTacticalCards(true);
+      } else {
+        tacticalCardsModal.classList.add("hidden");
+      }
     }
   }, 1000);
 }
 
+function applySynchronizedChosenCard(cardIdOrObj, chosenBy) {
+  const card = typeof cardIdOrObj === "object" ? cardIdOrObj : TACTICAL_CARDS.find(c => c.id === cardIdOrObj);
+  if (!card) return;
+  clearInterval(cardsTimerInterval);
+  tacticalCardsModal?.classList.add("hidden");
+  showToast(`✨ تم اختيار بطاقة: «${card.title}» من قبل (${chosenBy || 'المتسابق'})!`, card.icon || "fa-bolt", 3500);
+  executeCardEffect(card);
+}
+
 btnTriggerTacticalCards?.addEventListener("click", () => triggerTacticalCardsModal());
 
-function chooseCard(card) {
+function chooseCard(card, broadcast = true) {
   clearInterval(cardsTimerInterval);
   tacticalCardsModal.classList.add("hidden");
 
+  if (broadcast && currentLiveRoom?.id) {
+    updateDoc(doc(db, "live_rooms", currentLiveRoom.id), {
+      activeCardsTurn: {
+        isOpen: false,
+        chosenCard: card.id,
+        chosenBy: currentUser?.name || "المتسابق",
+        timestamp: Date.now()
+      },
+      lastUpdated: serverTimestamp()
+    }).catch(err => console.warn("Broadcast chosen card notice:", err));
+  }
+
+  executeCardEffect(card);
+}
+
+function executeCardEffect(card) {
   const eff = card.effect || {};
 
   // ── تأثيرات فورية وتوليد الشارة العائمة المبهجة ──
+
+  // بطاقة اختيار وتخطي السؤال (سهم الانطلاق والتخطي أو اختيار السؤال للتخطي مع نصف النقاط / 3 نقاط)
+  if (eff.skipRemainingQuestion || card.id === 21 || card.id === 29) {
+    showFloatingCardPill("تخطي سؤال قادم +3 نقاط ⏭️", "fa-forward-fast", "gold");
+    openPreSkipQuestionModal();
+    activeCardEffect = null;
+    if (tacticalCardsCallback) { const cb = tacticalCardsCallback; tacticalCardsCallback = null; cb(); }
+    return;
+  }
 
   // 1. تجميد الوقت: إيقاف العداد لـ N ثانية ثم إعادة تشغيله
   if (eff.freezeTime) {

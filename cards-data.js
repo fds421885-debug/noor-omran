@@ -167,11 +167,11 @@ export const TACTICAL_CARDS = [
   },
   {
     id: 21,
-    title: "سهم الانطلاق",
-    desc: "تجاوز سؤال واحد دون فقدان درجاته والانتقال للتالي مباشرة",
-    icon: "fa-forward",
+    title: "سهم الانطلاق والتخطي",
+    desc: "اختيار سؤال قادم لم نصل إليه بعد لتخطيه مسبقاً ونيل 3 نقاط إضافية",
+    icon: "fa-forward-fast",
     type: "buff",
-    effect: { passQuestion: true }
+    effect: { passQuestion: true, skipRemainingQuestion: true }
   },
   {
     id: 22,
@@ -231,11 +231,11 @@ export const TACTICAL_CARDS = [
   },
   {
     id: 29,
-    title: "السؤال المفتوح",
-    desc: "حرية اختيار رقم السؤال التالي يدوياً بدلاً من السحب العشوائي",
-    icon: "fa-list-ol",
+    title: "اختيار وتخطي السؤال",
+    desc: "استعراض الأسئلة الباقية واختيار سؤال لتخطيه مسبقاً ونيل 3 نقاط",
+    icon: "fa-list-check",
     type: "buff",
-    effect: { pickExactQuestion: true }
+    effect: { pickExactQuestion: true, skipRemainingQuestion: true }
   },
   {
     id: 30,

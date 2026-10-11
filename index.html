@@ -777,6 +777,9 @@
               <button id="btnNextStudentCycle" class="btn-duo-green btn-sm">
                 <i class="fa-solid fa-forward-step"></i> إنهاء والانتقال لمتسابق آخر
               </button>
+              <button id="btnOpenRoomSettingsModal" class="btn-duo-yellow btn-sm" title="إعدادات الغرفة وصلاحيات الحل">
+                <i class="fa-solid fa-gear"></i> إعدادات المسابقة
+              </button>
               <div class="quick-solver-setting-pill" style="display:inline-flex;align-items:center;gap:8px;background:#ffffff;border:1.5px solid var(--border-duo);padding:4px 12px;border-radius:var(--radius-pill);font-size:12.5px;font-weight:800;color:#334155;box-shadow:0 2px 6px rgba(0,0,0,0.04);">
                 <i class="fa-solid fa-sliders" style="color:var(--duo-blue);"></i>
                 <span>صلاحية الحل:</span>
@@ -784,6 +787,7 @@
                   <option value="contestant_and_lead" selected>المتسابق والمشرف معاً</option>
                   <option value="contestant_only">المتسابق فقط</option>
                   <option value="supervisor_only">المشرف فقط</option>
+                  <option value="teacher_and_supervisor">المعلم والمشرف معاً</option>
                   <option value="presenter">العارض وشاشة المسرح والمشرف</option>
                   <option value="all">الجميع (المتسابق، المعلم، العارض، المشرف)</option>
                 </select>
@@ -928,7 +932,7 @@
             <!-- دخول مباشر برمز الغرفة -->
             <div class="student-quick-join-bar" style="margin-top: 15px; padding-top: 15px; border-top: 1.5px dashed #fde047; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
               <span style="font-weight: 700; font-size: 13.5px; color: #713f12;"><i class="fa-solid fa-hashtag"></i> أو أدخل رمز الغرفة مباشرة:</span>
-              <input type="text" id="inputStudentRoomCode" placeholder="مثال: 123456" class="form-control input-room-code-clean" maxlength="20" autocomplete="off" spellcheck="false">
+              <input type="text" id="inputStudentRoomCode" placeholder="مثال: 123456" class="input-room-code-clean" maxlength="20" autocomplete="off" spellcheck="false" style="color: #0f172a !important; background: #ffffff !important; font-size: 20px !important; font-weight: 900 !important; text-align: center !important; direction: ltr !important; min-width: 180px;">
               <button id="btnStudentJoinByCode" class="btn-duo-green btn-sm"><i class="fa-solid fa-arrow-right-to-bracket"></i> دخول الغرفة</button>
             </div>
           </div>
@@ -1558,16 +1562,23 @@
           </label>
           <div class="permission-options-grid" style="display: flex; flex-direction: column; gap: 8px;">
             <label class="permission-option-card">
-              <input type="radio" name="roomAnsweringPermission" value="contestant_only" checked>
+              <input type="radio" name="roomAnsweringPermission" value="contestant_and_lead" checked>
               <div class="perm-card-content">
-                <strong><i class="fa-solid fa-user-check"></i> المتسابق المختار فقط (افتراضي وتوصية)</strong>
+                <strong><i class="fa-solid fa-user-shield"></i> المتسابق والمشرف معاً (الأشمل والأنسب)</strong>
+                <p>يحل المتسابق بنفسه، ويمكن للمشرف أو قائد الغرفة المساعدة والحل بدلاً عنه والتزامن للجميع.</p>
+              </div>
+            </label>
+            <label class="permission-option-card">
+              <input type="radio" name="roomAnsweringPermission" value="contestant_only">
+              <div class="perm-card-content">
+                <strong><i class="fa-solid fa-user-check"></i> المتسابق المختار فقط</strong>
                 <p>الطلاب الآخرون يشاهدون كجمهور فقط ولا يمكنهم الضغط على أي خيار بتاتاً.</p>
               </div>
             </label>
             <label class="permission-option-card">
               <input type="radio" name="roomAnsweringPermission" value="supervisor_only">
               <div class="perm-card-content">
-                <strong><i class="fa-solid fa-user-shield"></i> مشرف الغرفة فقط</strong>
+                <strong><i class="fa-solid fa-shield-halved"></i> مشرف الغرفة فقط</strong>
                 <p>فقط المشرف يقود الإجابات ويختار، والمتسابقون والجمهور للمشاهدة.</p>
               </div>
             </label>
@@ -1576,6 +1587,13 @@
               <div class="perm-card-content">
                 <strong><i class="fa-solid fa-chalkboard-user"></i> المعلم والمشرف معاً</strong>
                 <p>يحق للمعلم والمشرف الضغط والإجابة والتحكم بالتزامن الكامل.</p>
+              </div>
+            </label>
+            <label class="permission-option-card">
+              <input type="radio" name="roomAnsweringPermission" value="presenter">
+              <div class="perm-card-content">
+                <strong><i class="fa-solid fa-display"></i> العارض وشاشة المسرح والمشرف</strong>
+                <p>مخصص لشاشات العرض الكبيرة والمسرح ليتحكم العارض والمشرف بالحل.</p>
               </div>
             </label>
             <label class="permission-option-card">
