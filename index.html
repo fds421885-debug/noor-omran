@@ -588,6 +588,9 @@
               <span>المتواجدون: <strong id="arenaConnectedCount">1</strong></span>
             </div>
             <span class="role-pill-live" id="arenaUserRolePill">مشرف الغرفة</span>
+            <button id="btnOpenRoomSettingsModal" class="btn-duo-yellow btn-sm" title="إعدادات الغرفة وصلاحيات الحل">
+              <i class="fa-solid fa-sliders"></i> إعدادات المسابقة
+            </button>
             <button id="btnExitArena" class="btn-duo-outline btn-sm" style="border-color: #ff4b4b; color: #ff4b4b;">
               <i class="fa-solid fa-person-walking-arrow-right"></i> مغادرة الغرفة
             </button>
@@ -774,6 +777,17 @@
               <button id="btnNextStudentCycle" class="btn-duo-green btn-sm">
                 <i class="fa-solid fa-forward-step"></i> إنهاء والانتقال لمتسابق آخر
               </button>
+              <div class="quick-solver-setting-pill" style="display:inline-flex;align-items:center;gap:8px;background:#ffffff;border:1.5px solid var(--border-duo);padding:4px 12px;border-radius:var(--radius-pill);font-size:12.5px;font-weight:800;color:#334155;box-shadow:0 2px 6px rgba(0,0,0,0.04);">
+                <i class="fa-solid fa-sliders" style="color:var(--duo-blue);"></i>
+                <span>صلاحية الحل:</span>
+                <select id="stageSolverRoleQuickSelect" style="border:none;background:transparent;font-weight:800;color:#1e293b;cursor:pointer;outline:none;font-size:12.5px;">
+                  <option value="contestant_and_lead" selected>المتسابق والمشرف معاً</option>
+                  <option value="contestant_only">المتسابق فقط</option>
+                  <option value="supervisor_only">المشرف فقط</option>
+                  <option value="presenter">العارض وشاشة المسرح والمشرف</option>
+                  <option value="all">الجميع (المتسابق، المعلم، العارض، المشرف)</option>
+                </select>
+              </div>
             </div>
           </div>
 
@@ -914,7 +928,7 @@
             <!-- دخول مباشر برمز الغرفة -->
             <div class="student-quick-join-bar" style="margin-top: 15px; padding-top: 15px; border-top: 1.5px dashed #fde047; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
               <span style="font-weight: 700; font-size: 13.5px; color: #713f12;"><i class="fa-solid fa-hashtag"></i> أو أدخل رمز الغرفة مباشرة:</span>
-              <input type="text" id="inputStudentRoomCode" placeholder="مثال: 123456" class="form-control" style="width: 140px; font-weight: 800; text-align: center;">
+              <input type="text" id="inputStudentRoomCode" placeholder="مثال: 123456" class="form-control input-room-code-clean" maxlength="20" autocomplete="off" spellcheck="false">
               <button id="btnStudentJoinByCode" class="btn-duo-green btn-sm"><i class="fa-solid fa-arrow-right-to-bracket"></i> دخول الغرفة</button>
             </div>
           </div>
@@ -1518,6 +1532,114 @@
       <button id="btnCloseTeacherHelpModal" class="btn-duo-green" style="width: 100%;">
         <i class="fa-solid fa-check"></i> تم التوجيه ومتابعة المسابقة
       </button>
+    </div>
+  </div>
+
+  <!-- مودال إعدادات الغرفة وصلاحيات الحل المباشر -->
+  <div id="roomSettingsModal" class="modal-overlay hidden" style="z-index: 10008;">
+    <div class="duo-modal-box" style="max-width: 560px;">
+      <div class="modal-header">
+        <div class="modal-title-with-icon">
+          <div class="modal-icon-bubble gold">
+            <i class="fa-solid fa-sliders"></i>
+          </div>
+          <div>
+            <h3>إعدادات المسابقة وصلاحيات الحل</h3>
+            <span class="modal-subtitle">التحكم اللحظي بصلاحية الإجابة والبطاقات والمؤقت لجميع الحاضرين</span>
+          </div>
+        </div>
+        <button class="btn-modal-close" data-close-modal="roomSettingsModal" title="إغلاق">&times;</button>
+      </div>
+
+      <div class="modal-body-form" style="padding: 20px;">
+        <div class="input-group">
+          <label class="input-label" style="font-weight: 800; color: #1e293b; margin-bottom: 8px;">
+            <i class="fa-solid fa-hand-pointer" style="color: #eab308;"></i> من يمكنه الحل والإجابة في المسرح الحي؟
+          </label>
+          <div class="permission-options-grid" style="display: flex; flex-direction: column; gap: 8px;">
+            <label class="permission-option-card">
+              <input type="radio" name="roomAnsweringPermission" value="contestant_only" checked>
+              <div class="perm-card-content">
+                <strong><i class="fa-solid fa-user-check"></i> المتسابق المختار فقط (افتراضي وتوصية)</strong>
+                <p>الطلاب الآخرون يشاهدون كجمهور فقط ولا يمكنهم الضغط على أي خيار بتاتاً.</p>
+              </div>
+            </label>
+            <label class="permission-option-card">
+              <input type="radio" name="roomAnsweringPermission" value="supervisor_only">
+              <div class="perm-card-content">
+                <strong><i class="fa-solid fa-user-shield"></i> مشرف الغرفة فقط</strong>
+                <p>فقط المشرف يقود الإجابات ويختار، والمتسابقون والجمهور للمشاهدة.</p>
+              </div>
+            </label>
+            <label class="permission-option-card">
+              <input type="radio" name="roomAnsweringPermission" value="teacher_and_supervisor">
+              <div class="perm-card-content">
+                <strong><i class="fa-solid fa-chalkboard-user"></i> المعلم والمشرف معاً</strong>
+                <p>يحق للمعلم والمشرف الضغط والإجابة والتحكم بالتزامن الكامل.</p>
+              </div>
+            </label>
+            <label class="permission-option-card">
+              <input type="radio" name="roomAnsweringPermission" value="all_participants">
+              <div class="perm-card-content">
+                <strong><i class="fa-solid fa-users"></i> المتسابق والعارض والمعلم والمشرف</strong>
+                <p>صلاحية تفاعلية مفتوحة لأي مشارك مصرح له بالحل فوراً.</p>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <div class="tactical-cards-feature-card" style="margin-top: 15px;">
+          <div class="tactical-icon-box">
+            <i class="fa-solid fa-bolt"></i>
+          </div>
+          <div class="tactical-info-box">
+            <strong>نظام البطاقات التكتيكية</strong>
+            <p>مزامنة كروت المساعدة المباشرة بين الجميع فورياً</p>
+          </div>
+          <label class="duo-checkbox-container">
+            <input type="checkbox" id="settingsTacticalCardsToggle" checked>
+            <span class="duo-checkbox-checkmark"></span>
+          </label>
+        </div>
+
+        <div class="input-group" style="margin-top: 15px;">
+          <label class="input-label"><i class="fa-solid fa-stopwatch"></i> وقت كل سؤال (بالثواني)</label>
+          <input type="number" id="settingsQuestionTimerInput" class="form-control" min="5" max="180" value="30" style="padding: 10px 14px; text-align: center; font-weight: 800;">
+        </div>
+
+        <div class="modal-actions-flex" style="margin-top: 20px;">
+          <button type="button" class="btn-duo-outline" data-close-modal="roomSettingsModal">إلغاء</button>
+          <button type="button" id="btnSaveRoomSettings" class="btn-duo-green">
+            <i class="fa-solid fa-cloud-arrow-up"></i> حفظ وتطبيق عند الجميع لحظياً
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- مودال بطاقة التخطي المسبق لسؤال قادم -->
+  <div id="modalPreSkipQuestion" class="modal-overlay hidden" style="z-index: 10009;">
+    <div class="duo-modal-box" style="max-width: 620px;">
+      <div class="modal-header">
+        <div class="modal-title-with-icon">
+          <div class="modal-icon-bubble gold">
+            <i class="fa-solid fa-forward-fast"></i>
+          </div>
+          <div>
+            <h3>بطاقة التخطي الذكي لسؤال قادم</h3>
+            <span class="modal-subtitle">اختر سؤالاً قادماً لم نصل إليه بعد لتخطيه مسبقاً والحصول على 3 نقاط بدلاً منه!</span>
+          </div>
+        </div>
+        <button class="btn-modal-close" data-close-modal="modalPreSkipQuestion" title="إغلاق">&times;</button>
+      </div>
+      <div class="modal-body-form" style="padding: 20px;">
+        <p style="font-size: 13.5px; color: #64748b; font-weight: 700; margin-bottom: 12px;">
+          الأسئلة الباقية في المسابقة التي لم نصل إليها بعد:
+        </p>
+        <div id="preSkipQuestionsList" style="display: flex; flex-direction: column; gap: 10px; max-height: 340px; overflow-y: auto;">
+          <!-- قائمة الأسئلة القادمة -->
+        </div>
+      </div>
     </div>
   </div>
 

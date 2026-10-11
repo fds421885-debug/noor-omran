@@ -2980,12 +2980,15 @@ body {
   gap: 10px;
 }
 
-/* بطاقة عرض السؤال */
+/* بطاقة عرض السؤال - متمركزة في وسط الشاشة */
 .stage-question-card {
   background: #fff;
   border: 2px solid var(--border-duo);
-  border-radius: var(--radius-lg);
-  padding: 24px;
+  border-radius: var(--radius-xl);
+  padding: 26px 30px;
+  max-width: 960px;
+  margin: 0 auto;
+  box-shadow: 0 16px 40px -10px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(0, 0, 0, 0.03);
 }
 
 .question-header-bar {
@@ -5712,19 +5715,56 @@ body {
   border: 2.5px solid var(--border-duo);
   border-bottom: 5px solid var(--border-duo-dark);
   border-radius: var(--radius-md);
-  padding: 14px 16px;
-  font-size: 17px;
+  padding: 12px 14px;
+  font-size: 16.5px;
   font-weight: 800;
-  text-align: center;
   cursor: pointer;
   user-select: none;
-  transition: all 0.15s ease;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
 }
 
-.matching-tile:hover:not(.matched):not(.disabled) {
+.matching-tile:hover:not(.match-correct-reveal):not(.match-wrong-reveal):not(.disabled) {
   background: #f8fafc;
   transform: translateY(-2px);
+  border-color: var(--duo-blue);
+}
+
+.matching-item-badge {
+  background: #e2e8f0;
+  color: #334155;
+  font-weight: 900;
+  font-size: 13.5px;
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  min-width: 32px;
+  text-align: center;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.matching-tile-text {
+  flex: 1;
+  text-align: right;
+  line-height: 1.4;
+}
+
+.matching-connect-pill {
+  font-size: 11.5px;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 8px;
+  background: #ede9fe;
+  color: #6b21a8;
+  border: 1px solid #c4b5fd;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
 }
 
 .matching-tile.selected {
@@ -5732,41 +5772,227 @@ body {
   border-color: #3b82f6 !important;
   border-bottom-color: #1d4ed8 !important;
   color: #1d4ed8 !important;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3) !important;
+  transform: scale(1.02);
 }
 
-.matching-tile.matched {
-  background: #f0fdf4 !important;
-  border-color: #86efac !important;
-  border-bottom-color: #22c55e !important;
-  color: #166534 !important;
-  cursor: default;
-  opacity: 0.95;
+.matching-tile.selected .matching-item-badge {
+  background: #3b82f6 !important;
+  color: #ffffff !important;
 }
 
-.matching-tile.matched::after {
-  content: '✓';
-  position: absolute;
-  top: 6px;
-  left: 8px;
+.matching-tile.connected {
+  background: #faf5ff !important;
+  border-color: #a855f7 !important;
+  border-bottom-color: #7e22ce !important;
+  box-shadow: 0 3px 10px rgba(168, 85, 247, 0.15) !important;
+}
+
+.matching-tile.connected .matching-item-badge {
+  background: #9333ea !important;
+  color: #ffffff !important;
+}
+
+/* أثناء فحص الزوج حالياً (Golden Pulse) */
+.matching-tile.verifying-current {
+  border-color: #eab308 !important;
+  border-bottom-color: #ca8a04 !important;
+  background: #fefce8 !important;
+  box-shadow: 0 0 0 4px rgba(234, 179, 8, 0.4) !important;
+  transform: scale(1.03);
+  animation: verifyingPulse 0.5s infinite alternate;
+}
+
+@keyframes verifyingPulse {
+  0% { transform: scale(1.02); }
+  100% { transform: scale(1.04); }
+}
+
+/* نتيجة الفحص: صحيح أخضر مبهج */
+.matching-tile.match-correct-reveal {
+  background: linear-gradient(135deg, #22c55e, #16a34a) !important;
+  color: #ffffff !important;
+  border-color: #15803d !important;
+  border-bottom-color: #14532d !important;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.35), 0 8px 20px rgba(22, 163, 74, 0.25) !important;
+  animation: correctChoicePulse 0.5s ease !important;
+  cursor: default !important;
+}
+
+.matching-tile.match-correct-reveal .matching-item-badge {
+  background: #14532d !important;
+  color: #ffffff !important;
+}
+
+.matching-tile.match-correct-reveal .matching-connect-pill {
+  background: rgba(255, 255, 255, 0.25) !important;
+  color: #ffffff !important;
+  border-color: transparent !important;
+}
+
+/* نتيجة الفحص: خطأ أحمر */
+.matching-tile.match-wrong-reveal {
+  background: linear-gradient(135deg, #ef4444, #dc2626) !important;
+  color: #ffffff !important;
+  border-color: #b91c1c !important;
+  border-bottom-color: #7f1d1d !important;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.35) !important;
+  animation: wrongChoiceShake 0.45s ease !important;
+  cursor: default !important;
+}
+
+.matching-tile.match-wrong-reveal .matching-item-badge {
+  background: #7f1d1d !important;
+  color: #ffffff !important;
+}
+
+.matching-tile.match-wrong-reveal .matching-connect-pill {
+  background: rgba(255, 255, 255, 0.25) !important;
+  color: #ffffff !important;
+  border-color: transparent !important;
+}
+
+/* شريط وضع المشاهدة للطلاب غير المختارين */
+.spectator-mode-banner {
+  background: #fefce8;
+  border: 2px dashed #facc15;
+  border-radius: var(--radius-lg);
+  padding: 12px 18px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: #854d0e;
+  font-weight: 800;
+  font-size: 14px;
+  box-shadow: 0 4px 12px rgba(234, 179, 8, 0.12);
+  text-align: center;
+}
+
+/* صندوق إدخال رمز الغرفة للطالب - واضح ومميز وتظهر الأرقام بجلاء */
+#inputStudentRoomCode,
+.input-room-code-clean {
+  width: 190px !important;
+  min-width: 170px !important;
+  padding: 10px 16px !important;
+  padding-left: 16px !important;
+  padding-right: 16px !important;
+  font-size: 19px !important;
+  font-weight: 900 !important;
+  font-family: 'Cairo', monospace, sans-serif !important;
+  color: #0f172a !important;
+  background: #ffffff !important;
+  border: 2.5px solid #ca8a04 !important;
+  border-radius: 12px !important;
+  text-align: center !important;
+  letter-spacing: 2px !important;
+  direction: ltr !important;
+  box-shadow: 0 3px 10px rgba(202, 138, 4, 0.15) !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  -webkit-text-fill-color: #0f172a !important;
+}
+
+#inputStudentRoomCode:focus,
+.input-room-code-clean:focus {
+  border-color: var(--duo-green) !important;
+  box-shadow: 0 0 0 4px rgba(88, 204, 2, 0.25) !important;
+  outline: none !important;
+}
+
+/* إصلاح ظهور الأرقام في حقول الدرجات والإدخالات المدمجة في سؤال التوصيل */
+#matchingScoreInput,
+input[type="number"].form-control,
+.form-control.input-compact {
+  padding: 8px 12px !important;
+  padding-left: 12px !important;
+  padding-right: 12px !important;
+  text-align: center !important;
+  direction: ltr !important;
+  color: #0f172a !important;
+  background: #ffffff !important;
+  font-weight: 800 !important;
+  width: auto !important;
+}
+
+/* بطاقات خيارات صلاحية الإجابة في إعدادات الغرفة */
+.permission-option-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: #f8fafc;
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.permission-option-card:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  transform: translateX(-2px);
+}
+
+.permission-option-card:has(input[type="radio"]:checked) {
+  background: #fefce8 !important;
+  border-color: #eab308 !important;
+  border-bottom: 4px solid #ca8a04 !important;
+  box-shadow: 0 4px 14px rgba(234, 179, 8, 0.2) !important;
+}
+
+.perm-card-content strong {
+  display: block;
+  font-size: 14px;
+  color: #0f172a;
+  margin-bottom: 2px;
+}
+
+.perm-card-content p {
   font-size: 12px;
-  font-weight: 900;
-  color: #16a34a;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.4;
 }
 
-.matching-tile.shake-wrong {
-  animation: tileShake 0.4s ease;
-  background: #fef2f2 !important;
-  border-color: #fca5a5 !important;
-  border-bottom-color: #ef4444 !important;
-  color: #b91c1c !important;
+/* بطاقات الأسئلة القادمة للتخطي الذكي */
+.pre-skip-q-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: #f8fafc;
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 12px 16px;
+  transition: all 0.2s ease;
 }
 
-@keyframes tileShake {
-  0%, 100% { transform: translateX(0); }
-  20%, 60% { transform: translateX(-6px); }
-  40%, 80% { transform: translateX(6px); }
+.pre-skip-q-card:hover {
+  background: #eff6ff;
+  border-color: #3b82f6;
 }
+
+.pre-skip-q-info {
+  flex: 1;
+  text-align: right;
+}
+
+.pre-skip-q-meta {
+  font-size: 11.5px;
+  color: #64748b;
+  font-weight: 700;
+  margin-bottom: 3px;
+}
+
+.pre-skip-q-text {
+  font-size: 14px;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.4;
+}
+
 
 /* ======================================================== */
 /* تنبيهات البطاقات التكتيكية ومساعدة المعلم */
@@ -5848,20 +6074,32 @@ body.role-presenter .matching-tile {
 /* أنيميشن انتقال الأسئلة ولوحة الشرف والبطاقات التكتيكية */
 /* ======================================================== */
 
-/* أنيميشن دخول وخروج السؤال السينمائي */
-.question-enter-anim {
-  animation: questionCardEnter 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+/* أنيميشن نزول السؤال السينمائي في وسط الشاشة */
+.stage-question-card {
+  margin-left: auto !important;
+  margin-right: auto !important;
+  max-width: 880px !important;
+  width: 100% !important;
+  transform-origin: center top;
 }
 
-@keyframes questionCardEnter {
+.question-enter-anim {
+  animation: questionCardDropCenter 0.62s cubic-bezier(0.18, 1, 0.25, 1) forwards !important;
+}
+
+@keyframes questionCardDropCenter {
   0% {
     opacity: 0;
-    transform: translateY(28px) scale(0.96);
-    filter: blur(5px);
+    transform: translateY(-130px) scale(0.92);
+    filter: blur(8px);
   }
   60% {
-    transform: translateY(-4px) scale(1.01);
+    opacity: 1;
+    transform: translateY(10px) scale(1.018);
     filter: blur(0px);
+  }
+  82% {
+    transform: translateY(-4px) scale(0.995);
   }
   100% {
     opacity: 1;
