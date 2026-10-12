@@ -1630,7 +1630,7 @@ function updateArenaUIRealtime(room) {
       };
       if (!currentUser || sel.chosenBy !== currentUser.name) {
         if (typeof trigger2SecondCardSelectionShowcase === "function") {
-          trigger2SecondCardSelectionShowcase(card, sel.chosenBy, false);
+          trigger2SecondCardSelectionShowcase(card, sel.chosenBy, false, sel.remainingSecs);
         }
       }
     }
@@ -5964,6 +5964,52 @@ function pauseLiveTimerForCorrection(remainingSecs = null) {
   updateSupervisorTimerButtonUI(true);
 }
 
+// إيقاف التايمر فوراً للجميع بالتزامن أثناء اختيار بطاقة من محفظة البطاقات التكتيكية
+function pauseLiveTimerForWalletSelection(remainingSecs = null) {
+  if (liveTimerInterval) {
+    clearInterval(liveTimerInterval);
+    liveTimerInterval = null;
+  }
+  lastTimerConfigKey = "wallet_selection_paused";
+  const timerDisplay = stageTimerSeconds;
+  const timerPill = document.getElementById("stageTimerPill");
+  if (timerDisplay) {
+    timerDisplay.innerHTML = `<span style="font-size: 13.5px; color: #6366f1; font-weight: 800;"><i class="fa-solid fa-layer-group"></i> اختيار بطاقة</span>`;
+  }
+  if (timerPill) {
+    timerPill.classList.remove("timer-urgent", "timer-infinite");
+    timerPill.classList.add("timer-frozen");
+  }
+  updateSupervisorTimerButtonUI(true);
+}
+
+// استئناف التايمر بعد انتهاء اختيار البطاقة واستعراضها
+function resumeLiveTimerAfterWalletSelection(remainingSecs = null) {
+  const secs = Math.max(1, Math.ceil(remainingSecs || currentLiveRoom?.timerState?.freezeRemaining || currentLiveRoom?.timerState?.remainingSeconds || liveTimeRemaining || 15));
+  const now = Date.now();
+  const unfreezeTimer = {
+    ...(currentLiveRoom?.timerState || {}),
+    isFrozen: false,
+    isCorrectionPaused: false,
+    isWalletSelectionPaused: false,
+    endsAt: now + (secs * 1000),
+    remainingSeconds: secs,
+    freezeRemaining: secs,
+    updatedAt: now
+  };
+  if (currentLiveRoom) {
+    currentLiveRoom.timerState = unfreezeTimer;
+  }
+  syncAndRunLiveTimer(unfreezeTimer);
+  if (currentLiveRoom?.id) {
+    updateDoc(doc(db, "live_rooms", currentLiveRoom.id), {
+      timerState: unfreezeTimer,
+      lastUpdated: serverTimestamp()
+    }).catch(e => console.warn("Resume timer notice after wallet selection:", e));
+  }
+  updateSupervisorTimerButtonUI(false);
+}
+
 // استئناف التايمر بعد انتهاء التصحيح (في حال وجود فرصة ثانية)
 function resumeLiveTimerAfterCorrection(remainingSecs) {
   const secs = Math.max(1, Math.ceil(remainingSecs || liveTimeRemaining || 15));
@@ -5972,6 +6018,7 @@ function resumeLiveTimerAfterCorrection(remainingSecs) {
     ...(currentLiveRoom?.timerState || {}),
     isFrozen: false,
     isCorrectionPaused: false,
+    isWalletSelectionPaused: false,
     endsAt: now + (secs * 1000),
     remainingSeconds: secs,
     updatedAt: now
@@ -6002,7 +6049,7 @@ function syncAndRunLiveTimer(timerState, onTimeout = null) {
   }
 
   // تحديث حالة زر الإيقاف/الاستئناف للمشرف
-  updateSupervisorTimerButtonUI(!!(timerState.isFrozen || timerState.isCorrectionPaused));
+  updateSupervisorTimerButtonUI(!!(timerState.isFrozen || timerState.isCorrectionPaused || timerState.isWalletSelectionPaused));
 
   // 1. فحص ميزة "بلا حد زمني" (بطاقة تكتيكية)
   if (timerState.noTimeLimit) {
@@ -6017,15 +6064,17 @@ function syncAndRunLiveTimer(timerState, onTimeout = null) {
     return;
   }
 
-  // 2. فحص حالة التجميد أو إيقاف المؤقت (بسبب التصحيح أو إيقاف المشرف أو بطاقة التجميد)
-  if (timerState.isFrozen || timerState.isCorrectionPaused) {
+  // 2. فحص حالة التجميد أو إيقاف المؤقت (بسبب التصحيح أو إيقاف المشرف أو بطاقة التجميد أو اختيار بطاقة من المحفظة)
+  if (timerState.isFrozen || timerState.isCorrectionPaused || timerState.isWalletSelectionPaused) {
     if (liveTimerInterval) { clearInterval(liveTimerInterval); liveTimerInterval = null; }
     const frozenSecs = Math.max(0, Math.ceil(timerState.freezeRemaining || timerState.remainingSeconds || 0));
     liveTimeRemaining = frozenSecs;
-    lastTimerConfigKey = `frozen_${frozenSecs}_${timerState.isCorrectionPaused ? 'corr' : 'pause'}`;
+    lastTimerConfigKey = `frozen_${frozenSecs}_${timerState.isCorrectionPaused ? 'corr' : (timerState.isWalletSelectionPaused ? 'wallet' : 'pause')}`;
     
     if (timerState.isCorrectionPaused) {
       timerDisplay.innerHTML = `<span style="font-size: 13.5px; color: #d97706; font-weight: 800;"><i class="fa-solid fa-pause"></i> جاري التصحيح</span>`;
+    } else if (timerState.isWalletSelectionPaused) {
+      timerDisplay.innerHTML = `<span style="font-size: 13.5px; color: #6366f1; font-weight: 800;"><i class="fa-solid fa-layer-group"></i> اختيار بطاقة</span>`;
     } else {
       timerDisplay.textContent = `${frozenSecs} ⏸️`;
     }
@@ -6418,8 +6467,8 @@ function enterPhaseStage() {
 
   currentQuizData = { sections: [{ sectionName: "أسئلة المسابقة", questions: questionsToUse }] };
   currentQuestionIndex = room.currentQuestionIdx || 0;
-  // استعادة النقاط من بيانات الغرفة السحابية (لمنع فقدان النقاط عند التحديث أو إعادة الدخول)
-  contestantScore = room.contestantScore || 0;
+  // استعادة النقاط من بيانات الغرفة السحابية كمرجع موحد وأساسي لجميع الأجهزة والشاشات
+  contestantScore = typeof room.contestantScore === "number" ? room.contestantScore : 0;
   const pFound = participantsCache.find(x => x.name === currentContestant.name || x.id === currentContestant.id);
   contestantBaseScore = (pFound && typeof pFound.totalScore === "number") ? pFound.totalScore : (currentContestant.totalScore || 0);
 
@@ -8212,7 +8261,7 @@ function closeSynchronizedWallet(broadcast = true, closedBy = null) {
   }
 }
 
-// اختيار بطاقة من المحفظة مع بث فوري وأنيميشن جميل لمدة ثانيتين للجميع
+// اختيار بطاقة من المحفظة مع بث فوري وإيقاف جماعي للمؤقت للجميع بالتزامن وأنيميشن جميل لمدة ثانيتين
 function selectCardFromWallet(cardId) {
   if (!currentLiveRoom || !currentLiveRoom.id) {
     showToast("لا توجد غرفة مسابقة حية نشطة حالياً", "fa-circle-exclamation");
@@ -8230,7 +8279,22 @@ function selectCardFromWallet(cardId) {
   const nowTs = Date.now();
   lastSeenCardChosenTimestamp = nowTs;
 
-  // بث اختيار البطاقة فوراً لجميع المشاركين في الغرفة
+  // إيقاف التايمر جماعياً وفورياً عند الجميع بالتزامن أثناء اختيار البطاقة وتفعيلها
+  const curTimer = currentLiveRoom.timerState || {};
+  const currentRemSecs = Math.max(1, Math.ceil(curTimer.remainingSeconds || (curTimer.endsAt ? (curTimer.endsAt - nowTs) / 1000 : liveTimeRemaining) || 15));
+  pauseLiveTimerForWalletSelection(currentRemSecs);
+
+  const pausedTimerState = {
+    ...curTimer,
+    isFrozen: true,
+    isWalletSelectionPaused: true,
+    freezeRemaining: currentRemSecs,
+    remainingSeconds: currentRemSecs,
+    updatedAt: nowTs
+  };
+  currentLiveRoom.timerState = pausedTimerState;
+
+  // بث اختيار البطاقة وإيقاف المؤقت فوراً لجميع المشاركين في الغرفة
   updateDoc(doc(db, "live_rooms", currentLiveRoom.id), {
     activeCardSelection: {
       cardId: card.id,
@@ -8240,17 +8304,23 @@ function selectCardFromWallet(cardId) {
       cardType: card.type,
       chosenBy: chosenByName,
       contestantName: contestantName,
+      remainingSecs: currentRemSecs,
       timestamp: nowTs
     },
+    timerState: pausedTimerState,
     lastUpdated: serverTimestamp()
   }).catch(err => console.warn("Broadcast card selection:", err));
 
   // تشغيل أنيميشن الاختيار الجميل لمدة ثانيتين محلياً ثم تفعيل البطاقة
-  trigger2SecondCardSelectionShowcase(card, chosenByName, true);
+  trigger2SecondCardSelectionShowcase(card, chosenByName, true, currentRemSecs);
 }
 
 // أنيميشن تسليط الضوء والـ 2 ثانية على البطاقة المختارة ثم تفعيلها
-function trigger2SecondCardSelectionShowcase(card, chosenBy, isInitiator) {
+function trigger2SecondCardSelectionShowcase(card, chosenBy, isInitiator, preservedRemainingSecs = null) {
+  // إيقاف التايمر محلياً للجميع بالتزامن أثناء استعراض وتفعيل البطاقة
+  const remSecs = preservedRemainingSecs || (currentLiveRoom?.timerState?.freezeRemaining) || liveTimeRemaining || 15;
+  pauseLiveTimerForWalletSelection(remSecs);
+
   // 1. تسليط الضوء على البطاقة المختارة داخل مودال المحفظة إن كان مفتوحاً
   const walletList = document.getElementById("walletCardsList");
   if (walletList) {
@@ -8311,6 +8381,13 @@ function trigger2SecondCardSelectionShowcase(card, chosenBy, isInitiator) {
         },
         lastUpdated: serverTimestamp()
       }).catch(err => console.warn(err));
+    }
+
+    // استئناف المؤقت بعد انتهاء فترة الـ 2 ثانية إن لم تكن البطاقة نفسها تغير الوقت أو تلغيه
+    const eff = card.effect || {};
+    const modifiesTimerDirectly = eff.freezeTime || eff.timeDelta || eff.resetQuestionTimer || eff.noTimeLimit || eff.passQuestion;
+    if (!modifiesTimerDirectly) {
+      resumeLiveTimerAfterWalletSelection(remSecs);
     }
 
     // تفعيل التأثيرات الحقيقية للبطاقة الآن
