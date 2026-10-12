@@ -7776,7 +7776,7 @@ function renderContestantWalletCards() {
 
   if (cards.length === 0) {
     container.innerHTML = `
-      <div class="wallet-empty-state">
+      <div class="wallet-empty-state" style="animation: walletModalPopIn 0.3s ease-out;">
         <i class="fa-solid fa-wallet"></i>
         <h4>محفظة البطاقات فارغة حالياً</h4>
         <p>تحصل على بطاقات تكتيكية كل 4 أسئلة (أو عند تفعيل المشرف للبطاقات)، وتُحفظ هنا لتستخدمها في أي سؤال تريده بالضغط عليها!</p>
@@ -7787,8 +7787,9 @@ function renderContestantWalletCards() {
 
   const isAllowedToUse = checkIsSolverAllowed(currentLiveRoom);
 
-  container.innerHTML = cards.map(c => `
-    <div class="wallet-card-item ${c.type}" data-card-id="${c.id}">
+  // عرض البطاقات بأنيميشن انقلاب ثلاثي الأبعاد جميل ومتزامن للجميع (3D Card Flip-in Reveal)
+  container.innerHTML = cards.map((c, index) => `
+    <div class="wallet-card-item card-flip-reveal ${c.type}" data-card-id="${c.id}" style="animation-delay: ${(index * 0.08).toFixed(2)}s;">
       <div style="display:flex;justify-content:space-between;align-items:center;">
         <div class="wallet-card-icon-bubble">
           <i class="fa-solid ${c.icon}"></i>
@@ -7812,8 +7813,16 @@ function renderContestantWalletCards() {
   });
 }
 
-// فتح محفظة البطاقات متزامنة للجميع
+let walletModalClosingTimer = null;
+
+// فتح محفظة البطاقات متزامنة للجميع مع أنيميشن انفتاح وانقلاب البطاقات
 function openSynchronizedWallet(broadcast = true, openedBy = null) {
+  if (!walletModal) return;
+  if (walletModalClosingTimer) {
+    clearTimeout(walletModalClosingTimer);
+    walletModalClosingTimer = null;
+  }
+
   const openerName = openedBy || currentUser?.name || currentContestant?.name || "المشرف";
   renderContestantWalletCards();
 
@@ -7824,7 +7833,9 @@ function openSynchronizedWallet(broadcast = true, openedBy = null) {
     syncText.innerHTML = `مزامنة حية: قام <strong>${openerName}</strong> بفتح محفظة البطاقات التكتيكية 🎴`;
   }
 
-  walletModal?.classList.remove("hidden");
+  // تفعيل أنيميشن الانفتاح السلس
+  walletModal.classList.remove("hidden", "wallet-modal-closing");
+  walletModal.classList.add("wallet-modal-opening");
   try { soundFX.btnClick(); } catch (e) {}
 
   if (broadcast && currentLiveRoom?.id) {
@@ -7839,9 +7850,22 @@ function openSynchronizedWallet(broadcast = true, openedBy = null) {
   }
 }
 
-// إغلاق محفظة البطاقات متزامنة للجميع
+// إغلاق محفظة البطاقات متزامنة للجميع مع أنيميشن إغلاق سلس
 function closeSynchronizedWallet(broadcast = true, closedBy = null) {
-  walletModal?.classList.add("hidden");
+  if (!walletModal) return;
+
+  if (!walletModal.classList.contains("hidden")) {
+    walletModal.classList.remove("wallet-modal-opening");
+    walletModal.classList.add("wallet-modal-closing");
+    if (walletModalClosingTimer) clearTimeout(walletModalClosingTimer);
+    walletModalClosingTimer = setTimeout(() => {
+      walletModal.classList.add("hidden");
+      walletModal.classList.remove("wallet-modal-closing");
+    }, 220);
+  } else {
+    walletModal.classList.add("hidden");
+    walletModal.classList.remove("wallet-modal-closing", "wallet-modal-opening");
+  }
 
   if (broadcast && currentLiveRoom?.id) {
     updateDoc(doc(db, "live_rooms", currentLiveRoom.id), {
@@ -7926,6 +7950,7 @@ function trigger2SecondCardSelectionShowcase(card, chosenBy, isInitiator) {
     // إخفاء غطاء الأنميشن وإغلاق مودال المحفظة
     const overlay = document.getElementById("activeCardAnnouncementOverlay");
     overlay?.classList.add("hidden");
+    walletModal?.classList.remove("wallet-modal-opening", "wallet-modal-closing");
     walletModal?.classList.add("hidden");
     if (walletList) {
       walletList.classList.remove("has-selection");
@@ -8456,6 +8481,12 @@ btnCloseWalletModal?.addEventListener("click", () => {
 
 btnDismissWalletModal?.addEventListener("click", () => {
   closeSynchronizedWallet(true);
+});
+
+walletModal?.addEventListener("click", (e) => {
+  if (e.target === walletModal) {
+    closeSynchronizedWallet(true);
+  }
 });
 
 // ========================================================

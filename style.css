@@ -7256,6 +7256,77 @@ button:disabled .fa-spin,
 /* ========================================================
    مودال محفظة البطاقات التكتيكية بثيم المنصة (Duolingo Style System)
    ======================================================== */
+#contestantCardsWalletModal {
+  transition: opacity 0.25s ease, backdrop-filter 0.25s ease;
+}
+
+/* حركة انفتاح المودال (Open Animation) */
+#contestantCardsWalletModal.wallet-modal-opening {
+  animation: walletModalBackdropFadeIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+#contestantCardsWalletModal.wallet-modal-opening .wallet-modal-box {
+  animation: walletModalPopIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+/* حركة إغلاق المودال (Close Animation) */
+#contestantCardsWalletModal.wallet-modal-closing {
+  animation: walletModalBackdropFadeOut 0.22s ease-in forwards;
+  pointer-events: none;
+}
+
+#contestantCardsWalletModal.wallet-modal-closing .wallet-modal-box {
+  animation: walletModalPopOut 0.22s cubic-bezier(0.4, 0, 0.8, 1) forwards;
+}
+
+@keyframes walletModalBackdropFadeIn {
+  0% {
+    opacity: 0;
+    backdrop-filter: blur(0px);
+  }
+  100% {
+    opacity: 1;
+    backdrop-filter: blur(8px);
+  }
+}
+
+@keyframes walletModalBackdropFadeOut {
+  0% {
+    opacity: 1;
+    backdrop-filter: blur(8px);
+  }
+  100% {
+    opacity: 0;
+    backdrop-filter: blur(0px);
+  }
+}
+
+@keyframes walletModalPopIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.72) translateY(35px);
+  }
+  70% {
+    opacity: 1;
+    transform: scale(1.03) translateY(-4px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes walletModalPopOut {
+  0% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.75) translateY(30px);
+  }
+}
+
 .wallet-modal-box {
   max-width: 780px !important;
   width: 95% !important;
@@ -7265,6 +7336,7 @@ button:disabled .fa-spin,
   border-radius: 24px !important;
   overflow: hidden !important;
   box-shadow: 0 25px 60px rgba(0, 0, 0, 0.14) !important;
+  transform-origin: center center;
 }
 
 .wallet-modal-header {
@@ -7275,6 +7347,70 @@ button:disabled .fa-spin,
   background: linear-gradient(135deg, var(--duo-green) 0%, var(--duo-green-dark) 100%);
   color: #ffffff;
   border-bottom: 4px solid #3d8f02;
+  position: relative;
+}
+
+/* زر إغلاق المحفظة التكتيكية - إكس أحمر فخم وجميل بثيم المنصة (Duolingo 3D Red Theme) */
+.wallet-close-btn-red,
+#btnCloseWalletModal {
+  width: 44px !important;
+  height: 44px !important;
+  min-width: 44px !important;
+  min-height: 44px !important;
+  border-radius: 14px !important;
+  background: linear-gradient(180deg, #ff4d4d 0%, #e62020 100%) !important;
+  border: 2px solid #ff7b7b !important;
+  border-bottom: 4.5px solid #a81313 !important;
+  color: #ffffff !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  box-shadow: 0 4px 14px rgba(230, 32, 32, 0.35) !important;
+  transition: all 0.18s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+  padding: 0 !important;
+  margin-right: auto !important;
+  position: relative !important;
+  overflow: hidden !important;
+  z-index: 2;
+}
+
+#btnCloseWalletModal::before {
+  content: '' !important;
+  position: absolute !important;
+  top: 2px !important;
+  left: 3px !important;
+  right: 3px !important;
+  height: 40% !important;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.45) 0%, rgba(255, 255, 255, 0.05) 100%) !important;
+  border-radius: 10px 10px 6px 6px !important;
+  pointer-events: none !important;
+}
+
+#btnCloseWalletModal:hover {
+  transform: translateY(-2px) scale(1.08) !important;
+  background: linear-gradient(180deg, #ff6161 0%, #f02828 100%) !important;
+  border-color: #ffa3a3 !important;
+  border-bottom-color: #8c0c0c !important;
+  box-shadow: 0 8px 20px rgba(230, 32, 32, 0.5), 0 0 14px rgba(255, 77, 77, 0.45) !important;
+}
+
+#btnCloseWalletModal:active {
+  transform: translateY(2px) scale(0.96) !important;
+  border-bottom-width: 2px !important;
+  box-shadow: 0 2px 6px rgba(230, 32, 32, 0.35) !important;
+}
+
+#btnCloseWalletModal i {
+  color: #ffffff !important;
+  font-size: 20px !important;
+  font-weight: 900 !important;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+}
+
+#btnCloseWalletModal:hover i {
+  transform: rotate(90deg) scale(1.15) !important;
 }
 
 .wallet-header-icon {
@@ -7306,6 +7442,7 @@ button:disabled .fa-spin,
   opacity: 0.95;
 }
 
+/* حاوية البطاقات ذات منظور ثلاثي الأبعاد لدعم انقلاب البطاقات */
 .wallet-cards-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
@@ -7314,6 +7451,37 @@ button:disabled .fa-spin,
   max-height: 60vh;
   overflow-y: auto;
   background: var(--bg-page);
+  perspective: 1400px;
+  transform-style: preserve-3d;
+}
+
+/* حركة انقلاب البطاقات عند فتح المحفظة (3D Card Flip-in Reveal) */
+.wallet-card-item.card-flip-reveal {
+  backface-visibility: hidden;
+  transform-style: preserve-3d;
+  animation: cardFlipRevealAnim 0.6s cubic-bezier(0.22, 1, 0.36, 1.15) backwards;
+  transform-origin: center center;
+}
+
+@keyframes cardFlipRevealAnim {
+  0% {
+    opacity: 0;
+    transform: rotateY(105deg) scale(0.6) translateY(30px);
+    box-shadow: 0 0 0 rgba(0, 0, 0, 0);
+  }
+  55% {
+    opacity: 0.95;
+    transform: rotateY(-16deg) scale(1.05) translateY(-6px);
+    box-shadow: 0 16px 32px rgba(88, 204, 2, 0.22);
+  }
+  80% {
+    transform: rotateY(5deg) scale(0.99) translateY(0);
+  }
+  100% {
+    opacity: 1;
+    transform: rotateY(0deg) scale(1) translateY(0);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+  }
 }
 
 .wallet-card-item {
