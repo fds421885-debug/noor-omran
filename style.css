@@ -3318,15 +3318,17 @@ body {
   box-sizing: border-box;
 }
 
-/* ظهر البطاقة قبل القلب */
+/* ظهر البطاقة قبل القلب بثيم المنصة المبهج */
 .card-3d-back {
-  background: linear-gradient(135deg, #1e293b, #0f172a);
-  border: 4px solid #38bdf8;
+  background: linear-gradient(135deg, var(--duo-blue) 0%, var(--duo-blue-dark) 100%);
+  border: 3.5px solid #ffffff;
+  border-bottom: 7px solid #1482b8;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #38bdf8;
-  font-size: 45px;
+  color: #ffffff;
+  font-size: 46px;
+  box-shadow: 0 12px 32px rgba(28, 176, 246, 0.35);
 }
 
 .card-back-pattern {
@@ -3338,23 +3340,28 @@ body {
 
 .card-back-pattern span {
   font-size: 16px;
-  font-weight: 800;
-  color: #cbd5e1;
+  font-weight: 900;
+  color: #ffffff;
+  letter-spacing: 0.5px;
+  text-shadow: 0 2px 6px rgba(0,0,0,0.15);
 }
 
-/* وجه البطاقة بعد القلب */
+/* وجه البطاقة بعد القلب بثيم المنصة */
 .card-3d-front {
   background: #ffffff;
-  border: 4px solid #f59e0b;
+  border: 3px solid var(--duo-yellow);
+  border-bottom: 7px solid var(--duo-yellow-dark);
   transform: rotateY(180deg);
   text-align: center;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.1);
 }
 
 .card-front-icon {
   width: 65px;
   height: 65px;
-  background: #fef3c7;
-  color: #d97706;
+  background: var(--duo-yellow-subtle);
+  color: #b45309;
+  border: 2px solid var(--duo-yellow);
   border-radius: 50%;
   font-size: 28px;
   display: flex;
@@ -3378,18 +3385,20 @@ body {
 }
 
 .card-front-badge {
-  background: #dbeafe;
-  color: #1d4ed8;
-  font-size: 11px;
-  font-weight: 800;
-  padding: 4px 10px;
+  background: var(--duo-green-subtle);
+  color: var(--duo-green-dark);
+  border: 1.5px solid var(--duo-green);
+  font-size: 11.5px;
+  font-weight: 900;
+  padding: 4px 12px;
   border-radius: var(--radius-pill);
 }
 
 .btn-skip-cards {
-  background: rgba(255, 255, 255, 0.15);
-  border: 2px solid rgba(255, 255, 255, 0.4);
-  color: #fff;
+  background: #ffffff;
+  border: 2.5px solid var(--border-duo);
+  border-bottom: 5px solid var(--border-duo-dark);
+  color: #475569;
   padding: 12px 24px;
   border-radius: var(--radius-pill);
   font-family: 'Cairo', sans-serif;
@@ -3397,11 +3406,20 @@ body {
   font-weight: 800;
   cursor: pointer;
   transition: all 0.2s;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
 }
 
 .btn-skip-cards:hover {
-  background: rgba(255, 255, 255, 0.25);
+  background: #f8fafc;
+  border-color: var(--duo-blue);
+  border-bottom-color: var(--duo-blue-dark);
+  color: #0284c7;
   transform: translateY(-2px);
+}
+
+.btn-skip-cards:active {
+  transform: translateY(2px);
+  border-bottom-width: 2px;
 }
 
 /* ========================================================
@@ -7043,10 +7061,10 @@ button:disabled .fa-spin,
   top: 52%;
   transform: translateY(-50%);
   z-index: 1050;
-  width: 98px;
+  width: 102px;
   cursor: pointer;
   user-select: none;
-  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
   display: block;
 }
 
@@ -7056,53 +7074,50 @@ button:disabled .fa-spin,
 
 .contestant-cards-wallet-trigger .wallet-card-inner {
   position: relative;
-  background: linear-gradient(145deg, #1e1b4b 0%, #312e81 50%, #4338ca 100%);
-  border: 2.5px solid #facc15;
-  border-radius: 16px;
-  padding: 14px 8px 12px;
+  background: #ffffff;
+  border: 2.5px solid #ffc800;
+  border-bottom: 6px solid #e5b400;
+  border-radius: 20px;
+  padding: 14px 8px 11px;
   text-align: center;
-  box-shadow: 0 10px 25px rgba(30, 27, 75, 0.4), 0 0 16px rgba(250, 204, 21, 0.35);
-  color: #ffffff;
-  transition: all 0.25s ease;
-  overflow: hidden;
-}
-
-.contestant-cards-wallet-trigger .wallet-card-inner::before {
-  content: '';
-  position: absolute;
-  top: -50%;
-  left: -50%;
-  width: 200%;
-  height: 200%;
-  background: radial-gradient(circle, rgba(250, 204, 21, 0.2) 0%, transparent 65%);
-  pointer-events: none;
+  box-shadow: 0 8px 24px rgba(229, 180, 0, 0.28), 0 2px 6px rgba(0, 0, 0, 0.05);
+  color: var(--text-main);
+  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  overflow: visible;
 }
 
 .contestant-cards-wallet-trigger:hover {
-  transform: translateY(-50%) scale(1.08);
+  transform: translateY(-50%) scale(1.06);
 }
 
 .contestant-cards-wallet-trigger:hover .wallet-card-inner {
-  border-color: #fef08a;
-  box-shadow: 0 14px 32px rgba(30, 27, 75, 0.5), 0 0 28px rgba(250, 204, 21, 0.6);
+  border-color: #ff9600;
+  border-bottom-color: #e58800;
+  box-shadow: 0 12px 28px rgba(255, 150, 0, 0.35);
 }
 
-/* إشعار أحمر مكتوب عليه باللون الأبيض عدد البطاقات */
+.contestant-cards-wallet-trigger:active .wallet-card-inner {
+  transform: translateY(2px);
+  border-bottom-width: 3px;
+}
+
+/* إشعار أحمر مكتوب عليه باللون الأبيض عدد البطاقات بثيم دولينجو */
 .contestant-cards-wallet-trigger .wallet-badge-red {
   position: absolute;
   top: -8px;
   right: -6px;
-  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  background: var(--duo-red);
   color: #ffffff;
   font-size: 13.5px;
   font-weight: 900;
   min-width: 28px;
   height: 28px;
-  line-height: 24px;
+  line-height: 22px;
   padding: 0 6px;
   border-radius: 9999px;
   border: 2.5px solid #ffffff;
-  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.7);
+  border-bottom: 3.5px solid var(--duo-red-dark);
+  box-shadow: 0 4px 12px rgba(255, 75, 75, 0.45);
   z-index: 10;
   display: flex;
   align-items: center;
@@ -7120,10 +7135,10 @@ button:disabled .fa-spin,
 
 @keyframes walletGlowPulse {
   0%, 100% {
-    filter: drop-shadow(0 0 4px rgba(250, 204, 21, 0.4));
+    filter: drop-shadow(0 0 4px rgba(255, 200, 0, 0.4));
   }
   50% {
-    filter: drop-shadow(0 0 16px rgba(250, 204, 21, 0.9));
+    filter: drop-shadow(0 0 14px rgba(255, 200, 0, 0.85));
   }
 }
 
@@ -7133,25 +7148,35 @@ button:disabled .fa-spin,
 }
 
 .wallet-card-icon {
-  font-size: 26px;
-  color: #facc15;
-  margin-bottom: 6px;
-  filter: drop-shadow(0 2px 5px rgba(0,0,0,0.4));
+  width: 44px;
+  height: 44px;
+  margin: 0 auto 6px;
+  background: var(--duo-yellow-subtle);
+  border: 2px solid var(--duo-yellow);
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  color: #b45309;
 }
 
 .wallet-card-text {
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 900;
-  color: #f8fafc;
+  color: #1e293b;
   line-height: 1.3;
-  margin-bottom: 4px;
+  margin-bottom: 3px;
 }
 
 .wallet-card-hint {
-  font-size: 9.5px;
-  font-weight: 700;
-  color: #cbd5e1;
-  opacity: 0.9;
+  font-size: 10px;
+  font-weight: 800;
+  color: #0284c7;
+  background: #e0f2fe;
+  padding: 2px 6px;
+  border-radius: 9999px;
+  display: inline-block;
 }
 
 @media (max-width: 768px) {
@@ -7160,24 +7185,25 @@ button:disabled .fa-spin,
     top: auto;
     bottom: 24px;
     transform: none;
-    width: 84px;
+    width: 86px;
   }
   .contestant-cards-wallet-trigger:hover {
-    transform: scale(1.05);
+    transform: scale(1.04);
   }
 }
 
 /* ========================================================
-   مودال محفظة البطاقات التكتيكية
+   مودال محفظة البطاقات التكتيكية بثيم المنصة (Duolingo Style System)
    ======================================================== */
 .wallet-modal-box {
   max-width: 780px !important;
   width: 95% !important;
-  border: 3px solid #facc15 !important;
+  border: 3px solid #e5e5e5 !important;
+  border-bottom: 7px solid #cecece !important;
   background: #ffffff !important;
-  border-radius: 20px !important;
+  border-radius: 24px !important;
   overflow: hidden !important;
-  box-shadow: 0 25px 50px -12px rgba(30, 27, 75, 0.35) !important;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.14) !important;
 }
 
 .wallet-modal-header {
@@ -7185,36 +7211,38 @@ button:disabled .fa-spin,
   align-items: center;
   gap: 14px;
   padding: 18px 24px;
-  background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
+  background: linear-gradient(135deg, var(--duo-green) 0%, var(--duo-green-dark) 100%);
   color: #ffffff;
-  border-bottom: 2px solid #facc15;
+  border-bottom: 4px solid #3d8f02;
 }
 
 .wallet-header-icon {
   width: 48px;
   height: 48px;
-  border-radius: 14px;
-  background: rgba(250, 204, 21, 0.2);
-  border: 2px solid #facc15;
-  color: #facc15;
+  border-radius: 16px;
+  background: #ffffff;
+  border: 2.5px solid #d7ffb8;
+  color: var(--duo-green-dark);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 24px;
   flex-shrink: 0;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
 }
 
 .wallet-modal-title {
   font-size: 20px;
   font-weight: 900;
   color: #ffffff;
-  margin: 0 0 4px;
+  margin: 0 0 3px;
 }
 
 .wallet-modal-subtitle {
   font-size: 13px;
-  color: #cbd5e1;
+  color: #f0fdf4;
   margin: 0;
+  opacity: 0.95;
 }
 
 .wallet-cards-grid {
@@ -7224,41 +7252,43 @@ button:disabled .fa-spin,
   padding: 20px 24px;
   max-height: 60vh;
   overflow-y: auto;
-  background: #f8fafc;
+  background: var(--bg-page);
 }
 
 .wallet-card-item {
   background: #ffffff;
   border: 2px solid var(--border-duo);
-  border-radius: 16px;
+  border-bottom: 5px solid var(--border-duo-dark);
+  border-radius: 18px;
   padding: 16px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
-  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
   position: relative;
   overflow: hidden;
 }
 
 .wallet-card-item:hover {
   transform: translateY(-4px);
-  border-color: #facc15;
-  box-shadow: 0 10px 24px rgba(250, 204, 21, 0.2);
+  border-color: var(--duo-green);
+  border-bottom-color: var(--duo-green-dark);
+  box-shadow: 0 10px 24px rgba(88, 204, 2, 0.15);
 }
 
 .wallet-card-item.buff {
-  border-top: 4px solid #22c55e;
+  border-top: 4px solid var(--duo-green);
 }
 
 .wallet-card-item.risk {
-  border-top: 4px solid #f97316;
+  border-top: 4px solid var(--duo-orange);
 }
 
 .wallet-card-icon-bubble {
   width: 44px;
   height: 44px;
-  border-radius: 12px;
+  border-radius: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -7267,13 +7297,15 @@ button:disabled .fa-spin,
 }
 
 .wallet-card-item.buff .wallet-card-icon-bubble {
-  background: #dcfce7;
-  color: #16a34a;
+  background: var(--duo-green-subtle);
+  color: var(--duo-green-dark);
+  border: 1.5px solid var(--duo-green);
 }
 
 .wallet-card-item.risk .wallet-card-icon-bubble {
   background: #ffedd5;
-  color: #ea580c;
+  color: var(--duo-orange-dark);
+  border: 1.5px solid var(--duo-orange);
 }
 
 .wallet-card-title {
@@ -7293,8 +7325,8 @@ button:disabled .fa-spin,
 }
 
 .wallet-card-item.buff .wallet-card-tag {
-  background: #dcfce7;
-  color: #15803d;
+  background: var(--duo-green-subtle);
+  color: var(--duo-green-dark);
 }
 
 .wallet-card-item.risk .wallet-card-tag {
@@ -7316,12 +7348,13 @@ button:disabled .fa-spin,
   font-size: 14px;
   font-weight: 900;
   border: none;
-  border-radius: 12px;
+  border-radius: 14px;
   cursor: pointer;
-  background: linear-gradient(135deg, #facc15 0%, #eab308 100%);
-  color: #713f12;
-  box-shadow: 0 4px 10px rgba(234, 179, 8, 0.3);
-  transition: all 0.2s ease;
+  background: var(--duo-green);
+  border-bottom: 4px solid var(--duo-green-dark);
+  color: #ffffff;
+  box-shadow: 0 4px 10px rgba(88, 204, 2, 0.22);
+  transition: all 0.15s ease;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -7329,9 +7362,14 @@ button:disabled .fa-spin,
 }
 
 .btn-use-card:hover {
-  transform: scale(1.03);
-  box-shadow: 0 6px 16px rgba(234, 179, 8, 0.45);
-  background: linear-gradient(135deg, #fde047 0%, #facc15 100%);
+  background: var(--duo-green-light);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 14px rgba(88, 204, 2, 0.35);
+}
+
+.btn-use-card:active {
+  transform: translateY(2px);
+  border-bottom-width: 2px;
 }
 
 .wallet-empty-state {
@@ -7360,8 +7398,8 @@ button:disabled .fa-spin,
   justify-content: space-between;
   gap: 14px;
   padding: 14px 24px;
-  background: #f1f5f9;
-  border-top: 1.5px solid var(--border-duo);
+  background: #f8fafc;
+  border-top: 2px solid var(--border-duo);
   flex-wrap: wrap;
 }
 
@@ -7376,18 +7414,19 @@ button:disabled .fa-spin,
 }
 
 /* ========================================================
-   غطاء وبنر تفعيل البطاقة المتزامن للجميع
+   غطاء وبنر تفعيل البطاقة المتزامن للجميع بثيم المنصة
    ======================================================== */
 .card-announcement-card-box {
-  background: linear-gradient(145deg, #1e1b4b 0%, #312e81 60%, #4338ca 100%);
-  border: 3.5px solid #facc15;
-  border-radius: 24px;
-  padding: 32px 28px;
+  background: #ffffff;
+  border: 4px solid var(--duo-green);
+  border-bottom: 8px solid var(--duo-green-dark);
+  border-radius: 28px;
+  padding: 30px 26px;
   text-align: center;
-  max-width: 500px;
+  max-width: 480px;
   width: 90%;
-  color: #ffffff;
-  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.6), 0 0 35px rgba(250, 204, 21, 0.5);
+  color: var(--text-main);
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.22), 0 0 35px rgba(88, 204, 2, 0.2);
   animation: cardAnnouncementPop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
   position: relative;
   overflow: hidden;
@@ -7413,59 +7452,59 @@ button:disabled .fa-spin,
   height: 72px;
   margin: 0 auto;
   border-radius: 20px;
-  background: rgba(250, 204, 21, 0.25);
-  border: 2.5px solid #facc15;
-  color: #facc15;
+  background: var(--duo-green-subtle);
+  border: 3px solid var(--duo-green);
+  color: var(--duo-green-dark);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 36px;
-  box-shadow: 0 0 25px rgba(250, 204, 21, 0.5);
+  font-size: 34px;
+  box-shadow: 0 4px 15px rgba(88, 204, 2, 0.25);
   animation: iconPulseAnim 2s infinite ease-in-out;
 }
 
 @keyframes iconPulseAnim {
   0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.1); }
+  50% { transform: scale(1.08); }
 }
 
 .announcement-card-tag {
   display: inline-block;
-  background: #facc15;
+  background: var(--duo-yellow);
+  border: 1.5px solid var(--duo-yellow-dark);
   color: #713f12;
   font-size: 13px;
   font-weight: 900;
   padding: 4px 14px;
   border-radius: 9999px;
   margin-bottom: 10px;
-  box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.06);
 }
 
 .announcement-card-title {
-  font-size: 24px;
+  font-size: 23px;
   font-weight: 900;
-  color: #ffffff;
+  color: #1e293b;
   margin: 0 0 10px;
-  text-shadow: 0 2px 10px rgba(0,0,0,0.4);
 }
 
 .announcement-user-pill {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: rgba(255, 255, 255, 0.15);
-  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: #f1f5f9;
+  border: 1.5px solid #cbd5e1;
   padding: 6px 14px;
   border-radius: 9999px;
   font-size: 13.5px;
   font-weight: 800;
-  color: #fef08a;
+  color: #0369a1;
   margin-bottom: 14px;
 }
 
 .announcement-card-desc {
   font-size: 15px;
-  color: #e2e8f0;
+  color: #475569;
   line-height: 1.6;
   margin: 0;
 }

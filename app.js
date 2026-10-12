@@ -5805,8 +5805,8 @@ function syncAndRunLiveTimer(timerState, onTimeout = null) {
       );
       const isAllowedSolver = checkIsSolverAllowed(currentLiveRoom);
 
-      // أي شخص مخول بالحل أو قائد الغرفة ينفذ انتهاء الوقت فوراً بدون أي تعليق
-      if ((isAllowedSolver || isLeader) && !isQuestionTransitionRunning) {
+      // تشغيل انتهاء الوقت فوراً عند نفاد الوقت دون توقف أو قيود
+      if (!isQuestionTransitionRunning) {
         if (typeof onTimeout === "function") {
           onTimeout();
         } else {
@@ -5894,14 +5894,14 @@ function showBigQuestionResultOverlay({ isCorrect, isTimeout = false, scoreDelta
     overlay.classList.add("wrong", "timeout");
     iconEl.innerHTML = `<i class="fa-solid fa-circle-xmark"></i>`;
     titleEl.textContent = "انتهى الوقت! ❌";
-    pointsEl.textContent = scoreDelta !== 0 ? `${scoreDelta} درجات` : "انتهى الوقت المحدد للسؤال ⏰";
+    pointsEl.textContent = scoreDelta !== 0 ? `${scoreDelta} درجات (خصم)` : "انتهى الوقت المحدد للسؤال ⏰";
     if (questionCardEl) questionCardEl.classList.add("question-wrong-shake");
     try { soundFX.wrong(); } catch (e) {}
   } else {
     overlay.classList.add("wrong");
     iconEl.innerHTML = `<i class="fa-solid fa-circle-xmark"></i>`;
     titleEl.textContent = "إجابة غير صحيحة! ❌";
-    pointsEl.textContent = scoreDelta !== 0 ? `${scoreDelta} درجات` : "ركّز في السؤال القادم 💪";
+    pointsEl.textContent = scoreDelta !== 0 ? `${scoreDelta} درجات (خصم)` : "ركّز في السؤال القادم 💪";
     if (questionCardEl) questionCardEl.classList.add("question-wrong-shake");
     try { soundFX.wrong(); } catch (e) {}
   }
@@ -5960,8 +5960,8 @@ function playQuestionTransitionSequence({ isCorrect, scoreDelta, isPenalty, next
         <div style="display:flex;align-items:center;gap:12px;">
           <i class="fa-solid fa-circle-xmark" style="font-size:30px;color:#dc2626;"></i>
           <div>
-            <div style="font-weight:900;font-size:16.5px;color:#7f1d1d;">${isTimeout ? "انتهى الوقت المحدد للسؤال! ⏰" : "إجابة غير صحيحة! ركّز في السؤال القادم 💪"}</div>
-            <div style="font-size:13px;color:#991b1b;font-weight:700;">${isTimeout ? `تم خصم نصف الدرجة (${scoreDelta} درجات)` : "المثابرة والمراجعة هما سر التفوق والتميّز"}</div>
+            <div style="font-weight:900;font-size:16.5px;color:#7f1d1d;">${isTimeout ? "انتهى الوقت المحدد للسؤال! ⏰" : "إجابة غير صحيحة! ❌"}</div>
+            <div style="font-size:13px;color:#991b1b;font-weight:700;">${scoreDelta < 0 ? `تم خصم ${Math.abs(scoreDelta)} درجات من الرصيد ❌` : "المثابرة والمراجعة هما سر التفوق والتميّز"}</div>
           </div>
         </div>
         ${isPenalty ? `<div class="score-penalty-badge" style="font-size:16px;">${scoreDelta}</div>` : ''}
@@ -6586,9 +6586,10 @@ function loadStageQuestion(idx) {
               activeCardEffect = null;
               advanceToNext(-penaltyOnWrong, true, false, choiceIdx);
             } else {
-              showToast("❌ إجابة خاطئة", "fa-xmark");
+              const wrongPenalty = 3;
+              showToast("❌ إجابة خاطئة (خصم 3 درجات ❌)", "fa-circle-xmark", 3000);
               activeCardEffect = null;
-              advanceToNext(0, false, false, choiceIdx);
+              advanceToNext(-wrongPenalty, true, false, choiceIdx);
             }
           }
         }, { once: true });
@@ -7132,7 +7133,10 @@ function loadStageQuestion(idx) {
             activeCardEffect = null;
             advanceToNext(-penaltyOnWrong, true, false);
           } else {
-            showToast("❌ الترتيب غير صحيح، حاول مرة أخرى أو اضغط إعادة الترتيب", "fa-xmark", 3000);
+            const wrongPenalty = 3;
+            showToast("❌ الترتيب غير صحيح (خصم 3 درجات ❌)", "fa-circle-xmark", 3000);
+            activeCardEffect = null;
+            advanceToNext(-wrongPenalty, true, false);
           }
         }
       });
@@ -7252,16 +7256,7 @@ function loadStageQuestion(idx) {
 
   syncAndRunLiveTimer(qTimerState, () => {
     // عند انتهاء الوقت: يتم تشغيل انتهاء الوقت كإجابة خاطئة مع إظهار X والخصم والانتقال
-    const isLeader = currentUser && (
-      currentUser.name === currentLiveRoom?.leaderName || 
-      currentUser.name === currentLiveRoom?.creatorName ||
-      currentUser.role === "supervisor" ||
-      isSupervisor(currentUser.name)
-    );
-    const isAllowedSolver = checkIsSolverAllowed(currentLiveRoom);
-    if (isLeader || isAllowedSolver) {
-      handleStageQuestionTimeout();
-    }
+    handleStageQuestionTimeout();
   });
 
   resetOralEvaluation();
@@ -7306,8 +7301,8 @@ async function backToStudentSelect() {
 }
 
 function addContestantScore(pts) {
-  contestantScore = Math.max(0, contestantScore + pts);
-  if (stageStudentScore) stageStudentScore.textContent = contestantScore;
+  contestantScore = contestantScore + pts;
+  if (stageStudentScore) stageStudentScore.textContent = String(contestantScore);
   // مزامنة النقاط مع بيانات الغرفة السحابية لضمان التطابق
   if (currentLiveRoom) currentLiveRoom.contestantScore = contestantScore;
 }
