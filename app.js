@@ -1242,6 +1242,7 @@ let currentDrawInterval = null;
 let currentDrawTimeout = null;
 let lastSeenAnswerTimestamp = 0;
 let lastSeenMatchingVerifyTimestamp = 0;
+let lastSeenOrderingTimestamp = 0;
 let lastSeenCardsTurnTimestamp = 0;
 let isQuestionTransitionRunning = false;
 let lastKnownSolverRole = null;
@@ -1299,6 +1300,15 @@ function canCurrentUserSolveQuestion() {
 // تحديث واجهة المسرح الحي عند وصول تحديث سحابي من Firestore
 function updateArenaUIRealtime(room) {
   if (!room) return;
+  // حفظ وتحديث بيانات الغرفة الحالية فورياً لجميع الأدوار لمنع فقدان المزامنة
+  currentLiveRoom = { ...(currentLiveRoom || {}), ...room };
+  if (room.quizData && room.quizData.sections) {
+    currentQuizData = room.quizData;
+  }
+  if (room.sectionCounts && typeof room.sectionCounts === 'object') {
+    currentLiveRoom.sectionCounts = { ...room.sectionCounts };
+  }
+
   if (arenaRoomTitle) arenaRoomTitle.textContent = room.name;
   if (arenaRoomCode) arenaRoomCode.textContent = `#${room.id}`;
   if (arenaCurrentLeaderName) arenaCurrentLeaderName.textContent = room.leaderName || MASTER_SUPERVISOR_NAME;
@@ -1424,7 +1434,7 @@ function updateArenaUIRealtime(room) {
     }
 
     // عرض أقسام الاختبار وسحب الأسئلة لجميع الأدوار (المعلم والعارض والمشرف)
-    const quiz = quizzesCache.find(q => q.id === room.quizId) || quizzesCache[0];
+    const quiz = (room.quizData && room.quizData.sections) ? room.quizData : (quizzesCache.find(q => q.id === room.quizId) || quizzesCache[0]);
     if (quiz) {
       currentQuizData = quiz;
       const secList = Array.isArray(quiz.sections) ? quiz.sections : [];
@@ -1513,6 +1523,18 @@ function updateArenaUIRealtime(room) {
       } else if (!room.matchingState.verifying) {
         if (typeof window.syncExternalMatchingPairsUI === "function") {
           window.syncExternalMatchingPairsUI(conns);
+        }
+      }
+    }
+
+    // مزامنة ترتيب الجمل والكلمات اللحظية للجميع (Real-time Sentence/Words Ordering Sync)
+    if (room.orderingState && room.orderingState.questionIdx === (room.currentQuestionIdx || 0)) {
+      if (room.orderingState.timestamp > lastSeenOrderingTimestamp) {
+        lastSeenOrderingTimestamp = room.orderingState.timestamp;
+        if (!currentUser || room.orderingState.updatedBy !== currentUser.name) {
+          if (typeof window.syncExternalOrderingUI === "function") {
+            window.syncExternalOrderingUI(room.orderingState.placedWords, room.orderingState.bankWords);
+          }
         }
       }
     }
@@ -4299,7 +4321,9 @@ createRoomForm?.addEventListener("submit", async (e) => {
 
   const roomName = newRoomNameInput.value.trim() || `مسابقة نور البيان الكبرى - ${new Date().toLocaleDateString('ar-EG')}`;
   const quizId = roomQuizSelect.value || (quizzesCache[0]?.id || "quiz_default_1");
-  const cardsEnabled = roomTacticalCardsToggle ? roomTacticalCardsToggle.checked : true;
+  const cardFreqSelect = document.getElementById("roomCardFrequencySelect");
+  const cardFreq = cardFreqSelect ? cardFreqSelect.value : "1";
+  const cardsEnabled = (cardFreq !== "off") && (roomTacticalCardsToggle ? roomTacticalCardsToggle.checked : true);
   const roomId = "ROOM-" + Math.floor(1000 + Math.random() * 9000);
 
   const perStudentInput = document.getElementById("questionsPerStudentInput");
@@ -4313,11 +4337,26 @@ createRoomForm?.addEventListener("submit", async (e) => {
   const creatorName = currentUser ? currentUser.name : MASTER_SUPERVISOR_NAME;
   const creatorRole = currentUser ? currentUser.role : "supervisor";
 
+  // استخراج بيانات الاختبار وأقسامه المعتمدة لتضمينها في مستند الغرفة
+  const chosenQuiz = quizzesCache.find(q => q.id === quizId) || quizzesCache[0];
+  const initialSectionCounts = {};
+  if (chosenQuiz && Array.isArray(chosenQuiz.sections)) {
+    const totalQInQuiz = chosenQuiz.sections.reduce((a, s) => a + (Array.isArray(s.questions) ? s.questions.length : 0), 0);
+    const targetPerStudent = questionsPerStudent || (totalQInQuiz || 5);
+    chosenQuiz.sections.forEach(s => {
+      const sLen = Array.isArray(s.questions) ? s.questions.length : 0;
+      initialSectionCounts[s.sectionName] = Math.min(sLen, Math.max(1, Math.round((sLen / (totalQInQuiz || 1)) * targetPerStudent)));
+    });
+  }
+
   const newRoom = {
     id: roomId,
     name: roomName,
     quizId: quizId,
+    quizData: chosenQuiz,
+    sectionCounts: initialSectionCounts,
     tacticalCardsEnabled: cardsEnabled,
+    cardFrequency: cardFreq,
     questionsPerStudent: questionsPerStudent,
     questionTimer: questionTimer,
     presenterName: creatorRole === 'presenter' ? creatorName : "شاشة العرض",
@@ -4729,6 +4768,10 @@ function openRoomSettingsModal() {
   if (settingsQuestionTimerInput) {
     settingsQuestionTimerInput.value = currentLiveRoom.questionTimer || 30;
   }
+  const freqSelect = document.getElementById("settingsCardFrequencySelect");
+  if (freqSelect) {
+    freqSelect.value = currentLiveRoom.cardFrequency || "1";
+  }
   roomSettingsModal.classList.remove("hidden");
 }
 
@@ -4738,10 +4781,13 @@ btnSaveRoomSettings?.addEventListener("click", async () => {
   if (!currentLiveRoom) return;
   const selectedRadio = document.querySelector("input[name='roomAnsweringPermission']:checked");
   const newPerm = selectedRadio ? selectedRadio.value : "contestant_and_lead";
-  const newCardsToggle = settingsTacticalCardsToggle ? settingsTacticalCardsToggle.checked : true;
+  const freqSelect = document.getElementById("settingsCardFrequencySelect");
+  const newFreq = freqSelect ? freqSelect.value : (currentLiveRoom.cardFrequency || "1");
+  const newCardsToggle = (newFreq !== "off") && (settingsTacticalCardsToggle ? settingsTacticalCardsToggle.checked : true);
   const newTimer = settingsQuestionTimerInput ? Math.max(5, parseInt(settingsQuestionTimerInput.value) || 30) : 30;
 
   currentLiveRoom.solverRole = newPerm;
+  currentLiveRoom.cardFrequency = newFreq;
   currentLiveRoom.tacticalCardsEnabled = newCardsToggle;
   currentLiveRoom.questionTimer = newTimer;
 
@@ -4754,6 +4800,7 @@ btnSaveRoomSettings?.addEventListener("click", async () => {
       const roomRef = doc(db, "live_rooms", currentLiveRoom.id);
       await updateDoc(roomRef, {
         solverRole: newPerm,
+        cardFrequency: newFreq,
         tacticalCardsEnabled: newCardsToggle,
         questionTimer: newTimer,
         lastUpdated: serverTimestamp()
@@ -5231,7 +5278,7 @@ async function selectContestant(student) {
 // =========================================================
 function enterPhaseQuestionDraw() {
   showArenaPhase("draw");
-  const quiz = quizzesCache.find(q => q.id === currentLiveRoom?.quizId);
+  const quiz = (currentLiveRoom?.quizData && currentLiveRoom.quizData.sections) ? currentLiveRoom.quizData : (quizzesCache.find(q => q.id === currentLiveRoom?.quizId) || quizzesCache[0]);
   currentQuizData = quiz || quizzesCache[0];
 
   if (drawPhaseStudentLabel)
@@ -5549,32 +5596,53 @@ document.getElementById("btnStartAfterDraw")?.addEventListener("click", async ()
 });
 
 // =========================================================
-// التمرير التلقائي الذكي لظهور السؤال بوسط الشاشة (المشرف، العارض، الطالب، المعلم)
+// التمرير التلقائي الذكي والتكبير/التصغير المتناسق لظهور السؤال بوسط الشاشة (المشرف، العارض، الطالب، المعلم)
+// بدون الحاجة للنزول بالإصبع، ومطابقة أي نوع سؤال (خيارات، ترتيب، توصيل، شفهي) في وسط الشاشة تماماً
 // =========================================================
 function bringQuestionCardIntoView(cardEl) {
+  if (!cardEl) cardEl = document.querySelector(".stage-question-card");
   if (!cardEl) return;
-  const doScroll = () => {
-    try {
-      const rect = cardEl.getBoundingClientRect();
-      const stickyHeader = document.querySelector(".main-header");
-      const headerHeight = stickyHeader ? stickyHeader.offsetHeight : 70;
-      const totalHeaderOffset = Math.max(80, headerHeight + 15);
-      const cardAbsoluteTop = window.pageYOffset + rect.top;
 
-      // إذا كانت البطاقة طويلة جداً، نحاذي أولها أسفل الهيدر مباشرة لترى الخيارات كاملة
-      if (rect.height > window.innerHeight * 0.72) {
-        window.scrollTo({
-          top: Math.max(0, cardAbsoluteTop - totalHeaderOffset),
-          behavior: "smooth"
-        });
-      } else {
-        // إذا كان ارتفاعها مناسباً، نمركزها تماماً في وسط الشاشة
-        const targetScrollTop = cardAbsoluteTop - ((window.innerHeight - rect.height) / 2);
-        window.scrollTo({
-          top: Math.max(0, targetScrollTop),
-          behavior: "smooth"
-        });
+  const fitAndCenter = () => {
+    try {
+      // 1. إعادة ضبط التكبير والهوامش لقياس الارتفاع الطبيعي بدقة
+      cardEl.style.transform = '';
+      cardEl.style.marginBottom = '';
+      cardEl.classList.remove("auto-scale-fit");
+
+      const headerEl = document.querySelector(".main-header");
+      const headerH = headerEl ? headerEl.offsetHeight : 64;
+      const contestantBanner = document.querySelector(".current-contestant-banner");
+      const bannerH = (contestantBanner && !contestantBanner.classList.contains("hidden")) ? contestantBanner.offsetHeight : 0;
+
+      const viewportH = window.innerHeight;
+      // المساحة الرأسية المتاحة لبطاقة السؤال مع ترك متسع مريح أعلى وأسفل
+      const availableH = viewportH - headerH - Math.min(50, bannerH) - 25;
+      const naturalH = cardEl.offsetHeight;
+
+      // إذا كان السؤال مع خياراته وتفاصيله (خصوصاً التوصيل، الترتيب، الشفهي) طويلاً
+      // نصغر حجم البطاقة بسلاسة ونضبط توازنها لتظهر كاملة في وسط الشاشة بدون حاجة للنزول بالإصبع
+      let scale = 1;
+      if (naturalH > availableH && availableH > 260) {
+        scale = Math.max(0.68, Math.min(0.98, (availableH - 12) / naturalH));
+        cardEl.classList.add("auto-scale-fit");
+        cardEl.style.transform = `scale(${scale.toFixed(3)})`;
+        cardEl.style.transformOrigin = "top center";
+        // تقليص الهامش السفلي لعدم ترك فراغ فارغ تحت البطاقة
+        const diffH = Math.round(naturalH * (1 - scale));
+        cardEl.style.marginBottom = `-${diffH}px`;
       }
+
+      // 2. التمرير التلقائي السلس إلى وسط الشاشة تماماً
+      const rect = cardEl.getBoundingClientRect();
+      const cardAbsoluteTop = window.pageYOffset + rect.top;
+      const scaledH = rect.height;
+      const idealCenterTop = cardAbsoluteTop - headerH - Math.max(10, (viewportH - headerH - scaledH) / 2);
+
+      window.scrollTo({
+        top: Math.max(0, idealCenterTop),
+        behavior: "smooth"
+      });
     } catch (e) {
       try {
         cardEl.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -5582,11 +5650,11 @@ function bringQuestionCardIntoView(cardEl) {
     }
   };
 
-  // تمرير فوري مع بداية ظهور السؤال، ثم تمرير تأكيدي ناعم بعد انقضاء أنيميشن النزول
   requestAnimationFrame(() => {
-    doScroll();
-    setTimeout(doScroll, 350);
-    setTimeout(doScroll, 700);
+    fitAndCenter();
+    setTimeout(fitAndCenter, 120);
+    setTimeout(fitAndCenter, 380);
+    setTimeout(fitAndCenter, 720);
   });
 }
 
@@ -5767,6 +5835,21 @@ function showBigQuestionResultOverlay({ isCorrect, isTimeout = false, scoreDelta
 
 // =========================================================
 // دورة الانتقال السينمائية بين الأسئلة: تقييم الإجابة -> تلاشي السؤال -> ظهور لوحة الشرف -> البطاقات التكتيكية -> ظهور السؤال التالي
+// فحص هل هذا دور ظهور البطاقات التكتيكية بناءً على اختيار المشرف (كل سؤال أو كل X أسئلة)
+function shouldTriggerTacticalCards(room, currentIdx, nextIdx, totalQ) {
+  if (!room || room.tacticalCardsEnabled === false) return false;
+  if (nextIdx >= totalQ) return false;
+  const freq = String(room.cardFrequency || "1");
+  if (freq === "off") return false;
+  if (freq === "1" || freq === "every_1") return true; // كل سؤال
+  if (freq === "2" || freq === "every_2") return ((currentIdx + 1) % 2 === 0);
+  if (freq === "3" || freq === "every_3") return ((currentIdx + 1) % 3 === 0);
+  if (freq === "4" || freq === "every_4") return ((currentIdx + 1) % 4 === 0);
+  if (freq === "5" || freq === "every_5") return ((currentIdx + 1) % 5 === 0);
+  if (freq === "quarter") return ((currentIdx + 1) % Math.max(1, Math.round(totalQ / 4)) === 0);
+  return true;
+}
+
 // =========================================================
 function playQuestionTransitionSequence({ isCorrect, scoreDelta, isPenalty, nextIdx, isFinished, allQuestions, currentIdx, isLeaderUser = true, isTimeout = false }) {
   isQuestionTransitionRunning = true;
@@ -5830,18 +5913,16 @@ function playQuestionTransitionSequence({ isCorrect, scoreDelta, isPenalty, next
             saveRooms(currentLiveRoom);
           }
 
-          // نظام البطاقات التكتيكية: كل ربع الأسئلة (مثلاً 20 سؤال تظهر فيها 5 مرات)
+          // نظام البطاقات التكتيكية التفاعلي المتزامن للجميع
           const totalQ = allQuestions.length || 20;
-          const cardStep = Math.max(1, Math.round(totalQ / 5)); // للـ 20 سؤال: 20/5 = 4
-          const isCardTurn = (currentLiveRoom?.tacticalCardsEnabled !== false) && 
-            ((currentIdx + 1) % cardStep === 0) &&
-            (nextIdx < allQuestions.length);
+          const isCardTurn = shouldTriggerTacticalCards(currentLiveRoom, currentIdx, nextIdx, totalQ);
 
           if (isCardTurn) {
             const canGenerate = isLeaderUser || checkIsSolverAllowed(currentLiveRoom);
             if (canGenerate) {
               triggerTacticalCardsModal(() => loadStageQuestion(nextIdx), nextIdx);
             }
+            // في حال كان المستخدم متفرجاً أو شاشة عرض، ينتظر بث البطاقات عبر activeCardsTurn
           } else {
             loadStageQuestion(nextIdx);
           }
@@ -6342,6 +6423,8 @@ function loadStageQuestion(idx) {
         `).join("")}
       </div>`;
 
+    bringQuestionCardIntoView();
+
     if (isAllowedToSolve) {
       const btns = stageInteractiveArea.querySelectorAll(".btn-choice-duo:not([disabled])");
       btns.forEach(btn => {
@@ -6737,6 +6820,7 @@ function loadStageQuestion(idx) {
     }
 
     renderMatchingBoard();
+    bringQuestionCardIntoView();
 
   // ── Ordering: ترتيب تفاعلي للجمل والكلمات ──
   } else if (q.type === "ordering") {
@@ -6771,6 +6855,31 @@ function loadStageQuestion(idx) {
       }
       showToast("🛡️ حصانة الترتيب: تم تثبيت أول عنصرين في موقعهما الصحيح!", "fa-lock", 3000);
     }
+
+    function broadcastOrderingState() {
+      if (!currentLiveRoom || !currentLiveRoom.id) return;
+      const placedPayload = placedWords.map(w => ({ id: w.id, text: w.text, locked: !!w.locked, origIdx: w.origIdx }));
+      const bankPayload = bankWords.map(w => ({ id: w.id, text: w.text, locked: !!w.locked, origIdx: w.origIdx }));
+      updateDoc(doc(db, "live_rooms", currentLiveRoom.id), {
+        orderingState: {
+          questionIdx: idx,
+          placedWords: placedPayload,
+          bankWords: bankPayload,
+          updatedBy: currentUser?.name || "المتسابق",
+          timestamp: Date.now()
+        },
+        lastUpdated: serverTimestamp()
+      }).catch(err => console.warn("Broadcast orderingState err:", err));
+    }
+
+    window.syncExternalOrderingUI = function(extPlaced, extBank) {
+      if (currentQuestionIndex !== idx) return;
+      if (Array.isArray(extPlaced) && Array.isArray(extBank)) {
+        placedWords = extPlaced;
+        bankWords = extBank;
+        renderOrderingBoard();
+      }
+    };
 
     function renderOrderingBoard() {
       const isAllowedToSolve = checkIsSolverAllowed(currentLiveRoom);
@@ -6855,6 +6964,7 @@ function loadStageQuestion(idx) {
             bankWords.splice(idx, 1);
             try { soundFX.btnClick(); } catch (e) {}
             renderOrderingBoard();
+            broadcastOrderingState();
           }
         });
       });
@@ -6869,6 +6979,7 @@ function loadStageQuestion(idx) {
             placedWords.splice(idx, 1);
             try { soundFX.btnClick(); } catch (e) {}
             renderOrderingBoard();
+            broadcastOrderingState();
           }
         });
       });
@@ -6879,6 +6990,7 @@ function loadStageQuestion(idx) {
         placedWords = placedWords.filter(w => w.locked);
         bankWords.push(...unlockeds);
         renderOrderingBoard();
+        broadcastOrderingState();
       });
 
       // اعتماد وتحقق
@@ -6925,6 +7037,7 @@ function loadStageQuestion(idx) {
     }
 
     renderOrderingBoard();
+    bringQuestionCardIntoView();
 
   // ── Oral: تقييم المعلمين + زر قبول للمشرف ──
   } else if (q.type === "oral") {
@@ -7734,53 +7847,89 @@ function showHonorBoardModal(openNextStudentAfter = false, onDone = null, highli
     return;
   }
 
-  // إنشاء قائمة مع دمج نقاط المتسابق الحالي إن كان يخوض المسابقة الآن
-  let displayList = [...honorLeaderboardCache];
-  if (highlightStudentName && typeof contestantScore === "number") {
-    const existing = displayList.find(x => x.name === highlightStudentName);
+  // حساب النقاط السابقة والنهائية للمتسابق الحالي بدقة
+  let currentTargetScore = 0;
+  let previousTargetScore = 0;
+  if (highlightStudentName) {
+    const existingEntry = honorLeaderboardCache.find(x => x.name === highlightStudentName);
     const studentUser = participantsCache.find(p => p.name === highlightStudentName);
-    const base = (studentUser && typeof studentUser.totalScore === "number") ? studentUser.totalScore : (existing ? existing.score : 0);
-    const liveTotal = base + contestantScore;
-    if (existing) {
-      displayList = displayList.map(x => x.name === highlightStudentName ? { ...x, score: liveTotal } : x);
-    } else {
-      displayList.push({ name: highlightStudentName, score: liveTotal });
-    }
-    displayList.sort((a, b) => b.score - a.score);
+    const base = (studentUser && typeof studentUser.totalScore === "number") ? studentUser.totalScore : (existingEntry ? existingEntry.score : 0);
+    currentTargetScore = (typeof contestantScore === "number") ? (base + contestantScore) : (existingEntry ? existingEntry.score : 0);
+    previousTargetScore = Math.max(0, currentTargetScore - scoreDelta);
   }
 
-  if (displayList.length === 0) {
-    honorPodiumList.innerHTML = `
-      <div style="text-align: center; padding: 25px 15px; color: #64748b;">
-        <i class="fa-solid fa-trophy" style="font-size: 38px; color: #facc15; margin-bottom: 10px; display: block;"></i>
-        <p style="font-weight: 700; font-size: 15px;">لا توجد نتائج مسجلة في لوحة الشرف بعد.</p>
-        <span style="font-size: 12.5px; color: #94a3b8;">ستُدرج النتائج تلقائياً عند إنهاء تقييم المتسابقين</span>
-      </div>
-    `;
-  } else {
-    honorPodiumList.innerHTML = displayList.slice(0, 7).map((item, idx) => {
+  // 1. قائمة الترتيب الأولية (قبل احتساب نقاط هذا السؤال لتنفيذ أنيميشن الصعود والتجاوز)
+  let initialList = honorLeaderboardCache.map(x => ({ ...x }));
+  if (highlightStudentName) {
+    const exIdx = initialList.findIndex(x => x.name === highlightStudentName);
+    if (exIdx >= 0) {
+      initialList[exIdx].score = previousTargetScore;
+    } else {
+      initialList.push({ name: highlightStudentName, score: previousTargetScore });
+    }
+  }
+  initialList.sort((a, b) => b.score - a.score);
+
+  // 2. قائمة الترتيب النهائية (بعد إضافة/خصم النقاط)
+  let finalList = honorLeaderboardCache.map(x => ({ ...x }));
+  if (highlightStudentName) {
+    const exIdx = finalList.findIndex(x => x.name === highlightStudentName);
+    if (exIdx >= 0) {
+      finalList[exIdx].score = currentTargetScore;
+    } else {
+      finalList.push({ name: highlightStudentName, score: currentTargetScore });
+    }
+  }
+  finalList.sort((a, b) => b.score - a.score);
+
+  const initialRank = highlightStudentName ? (initialList.findIndex(x => x.name === highlightStudentName) + 1) : 0;
+  const finalRank = highlightStudentName ? (finalList.findIndex(x => x.name === highlightStudentName) + 1) : 0;
+  const didClimb = (scoreDelta > 0 && finalRank > 0 && initialRank > 0 && finalRank < initialRank);
+  const overtakenCount = didClimb ? (initialRank - finalRank) : 0;
+
+  // رسم صفوف لوحة الشرف
+  function renderPodiumRows(listToRender, scoreToShowTarget, isRolling = false, showBadge = true) {
+    if (listToRender.length === 0) {
+      honorPodiumList.innerHTML = `
+        <div style="text-align: center; padding: 25px 15px; color: #64748b;">
+          <i class="fa-solid fa-trophy" style="font-size: 38px; color: #facc15; margin-bottom: 10px; display: block;"></i>
+          <p style="font-weight: 700; font-size: 15px;">لا توجد نتائج مسجلة في لوحة الشرف بعد.</p>
+        </div>
+      `;
+      return;
+    }
+
+    honorPodiumList.innerHTML = listToRender.slice(0, 8).map((item, idx) => {
       const isTarget = highlightStudentName && item.name === highlightStudentName;
+      const scoreVal = isTarget ? scoreToShowTarget : item.score;
       let badgeHtml = "";
-      if (isTarget && scoreDelta !== 0) {
+      if (isTarget && showBadge && scoreDelta !== 0) {
         badgeHtml = isPenalty
-          ? `<span class="score-penalty-badge">${scoreDelta}</span>`
-          : `<span class="score-increase-badge">+${scoreDelta}</span>`;
+          ? `<span class="score-delta-popup penalty">${scoreDelta}</span>`
+          : `<span class="score-delta-popup bonus">+${scoreDelta}</span>`;
       }
       return `
-        <div class="honor-rank-card ${idx === 0 ? 'rank-1' : ''} ${isTarget ? 'highlight-student' : ''}">
+        <div class="honor-rank-card ${idx === 0 ? 'rank-1' : ''} ${isTarget ? 'highlight-student' : ''}" 
+             data-student-name="${escapeHtml(item.name)}" 
+             id="honorCard_${idx}">
           <span class="honor-rank-num">#${idx + 1}</span>
           <span class="honor-student-name">
-            ${item.name}
+            ${escapeHtml(item.name)}
             ${isTarget ? ' <i class="fa-solid fa-star" style="color:#eab308;font-size:14px;"></i>' : ''}
           </span>
           <div style="display:flex;align-items:center;">
             ${badgeHtml}
-            <span class="honor-score-val">${item.score} نقطة</span>
+            <span class="honor-score-val ${isTarget && isRolling ? 'honor-score-rolling' : ''}" id="${isTarget ? 'activeStudentHonorScore' : ''}">
+              ${scoreVal} نقطة
+            </span>
           </div>
         </div>
       `;
     }).join("");
   }
+
+  // عرض القائمة المبدئية
+  renderPodiumRows(initialList, previousTargetScore, false, true);
 
   const honorBoxEl = honorBoardModal.querySelector(".honor-box") || honorBoardModal.querySelector(".duo-modal-box");
   if (honorBoxEl) {
@@ -7789,7 +7938,89 @@ function showHonorBoardModal(openNextStudentAfter = false, onDone = null, highli
   }
 
   honorBoardModal.classList.remove("hidden");
-  try { soundFX.celebrate(); } catch (e) {}
+  try { soundFX.btnClick(); } catch (e) {}
+
+  // ── 1. أنيميشن عداد الأرقام السريع مثل آلات السلوت ──
+  if (highlightStudentName && scoreDelta !== 0) {
+    const scoreValEl = document.getElementById("activeStudentHonorScore");
+    if (scoreValEl) {
+      scoreValEl.classList.add("honor-score-rolling");
+      const duration = 750;
+      const startTime = performance.now();
+      const startNum = previousTargetScore;
+      const endNum = currentTargetScore;
+
+      function updateCounter(now) {
+        const elapsed = now - startTime;
+        const progress = Math.min(1, elapsed / duration);
+        const easeVal = 1 - (1 - progress) * (1 - progress);
+        const currentNum = Math.round(startNum + (endNum - startNum) * easeVal);
+        if (scoreValEl) {
+          scoreValEl.textContent = `${currentNum} نقطة`;
+        }
+        if (progress < 1) {
+          try { soundFX.btnClick(); } catch (e) {}
+          requestAnimationFrame(updateCounter);
+        } else {
+          scoreValEl.classList.remove("honor-score-rolling");
+          scoreValEl.textContent = `${endNum} نقطة`;
+          if (scoreDelta > 0) {
+            try { soundFX.celebrate(); } catch (e) {}
+          }
+
+          // ── 2. أنيميشن الصعود والتجاوز السلس فوق المنافسين (FLIP Animation) ──
+          if (didClimb) {
+            setTimeout(() => {
+              executeOvertakeAnimation(overtakenCount, finalRank);
+            }, 260);
+          }
+        }
+      }
+
+      setTimeout(() => {
+        requestAnimationFrame(updateCounter);
+      }, 200);
+    }
+  }
+
+  function executeOvertakeAnimation(climbCount, newRank) {
+    const cardsBefore = Array.from(honorPodiumList.querySelectorAll(".honor-rank-card"));
+    const rectsBefore = new Map();
+    cardsBefore.forEach(card => {
+      const name = card.getAttribute("data-student-name");
+      if (name) rectsBefore.set(name, card.getBoundingClientRect());
+    });
+
+    renderPodiumRows(finalList, currentTargetScore, false, false);
+
+    const cardsAfter = Array.from(honorPodiumList.querySelectorAll(".honor-rank-card"));
+    cardsAfter.forEach(card => {
+      const name = card.getAttribute("data-student-name");
+      if (!name || !rectsBefore.has(name)) return;
+      const beforeRect = rectsBefore.get(name);
+      const afterRect = card.getBoundingClientRect();
+      const deltaY = beforeRect.top - afterRect.top;
+
+      if (deltaY !== 0) {
+        card.style.transform = `translateY(${deltaY}px)`;
+        card.style.transition = 'none';
+
+        requestAnimationFrame(() => {
+          card.style.transition = 'transform 0.75s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.4s ease';
+          card.style.transform = 'translateY(0)';
+
+          if (name === highlightStudentName) {
+            card.classList.add("is-climbing-up");
+            try { soundFX.celebrate(); } catch (e) {}
+          } else {
+            card.classList.add("is-falling-down");
+          }
+        });
+      }
+    });
+
+    showToast(`🚀 تقدم مذهل! المتسابق (${highlightStudentName}) تجاوز ${climbCount} ${climbCount === 1 ? 'منافس' : 'منافسين'} وصعد للمركز #${newRank}!`, "fa-rocket", 3500);
+  }
 
   if (honorCountdownInterval) {
     clearInterval(honorCountdownInterval);
@@ -7820,7 +8051,6 @@ function showHonorBoardModal(openNextStudentAfter = false, onDone = null, highli
     }, 380);
   }
 
-  // دعم زر الإغلاق ليتلاشى أيضاً بسلاسة
   const closeBtn = honorBoardModal.querySelector("[data-close-modal='honorBoardModal']");
   if (closeBtn) {
     closeBtn.onclick = (e) => {
@@ -7829,7 +8059,7 @@ function showHonorBoardModal(openNextStudentAfter = false, onDone = null, highli
     };
   }
 
-  let secLeft = 3;
+  let secLeft = (didClimb || (scoreDelta !== 0)) ? 5 : 3;
   if (honorCountdownSec) honorCountdownSec.textContent = secLeft;
 
   honorCountdownInterval = setInterval(() => {
