@@ -1609,15 +1609,16 @@ function updateArenaUIRealtime(room) {
     if (room.walletSync && room.walletSync.timestamp > lastSeenWalletSyncTimestamp) {
       lastSeenWalletSyncTimestamp = room.walletSync.timestamp;
       const ws = room.walletSync;
+      const myName = currentUser?.name || currentContestant?.name;
       if (ws.isOpen) {
-        if (!currentUser || ws.openedBy !== currentUser.name) {
+        if (!myName || ws.openedBy !== myName) {
           showToast(`🎴 قام (${ws.openedBy}) بفتح محفظة البطاقات التكتيكية للمتسابق!`, "fa-layer-group", 3500);
           if (typeof openSynchronizedWallet === "function") {
             openSynchronizedWallet(false, ws.openedBy);
           }
         }
       } else {
-        if (!currentUser || ws.closedBy !== currentUser.name) {
+        if (!myName || ws.closedBy !== myName) {
           if (typeof closeSynchronizedWallet === "function") {
             closeSynchronizedWallet(false, ws.closedBy);
           }
@@ -1696,6 +1697,8 @@ function updateArenaUIRealtime(room) {
         playQuestionTransitionSequence({
           isCorrect: ev.isCorrect,
           scoreDelta: ev.scoreDelta,
+          cardBonus: ev.cardBonus || 0,
+          basePoints: ev.basePoints || (ev.scoreDelta - (ev.cardBonus || 0)),
           isPenalty: ev.isPenalty,
           nextIdx: ev.questionIdx + 1,
           isFinished: (ev.questionIdx + 1) >= allQuestions.length,
@@ -1708,14 +1711,18 @@ function updateArenaUIRealtime(room) {
       }
     }
 
-    // إذا كانت هناك حركة انتقال جارية، نتركها تكمل بسلاسة ما لم تتجاوز المهلة الآمنة (4.5 ثوانٍ)
+    // إذا كانت هناك حركة انتقال جارية أو مودال لوحة الشرف معروض، نتركها تكمل بسلاسة حتى تختفي لوحة الشرف تماماً
     if (isQuestionTransitionRunning) {
-      if (Date.now() - transitionStartTime > 4500) {
+      if (Date.now() - transitionStartTime > 12000) {
         isQuestionTransitionRunning = false;
         isAdvancingQuestion = false;
       } else {
         return;
       }
+    }
+
+    if (honorBoardModal && !honorBoardModal.classList.contains("hidden")) {
+      return;
     }
 
     // مزامنة حالة التأثيرات والبطاقات النشطة فورياً للجميع (بما فيها تكبير الخط القرآني 150%)
@@ -6333,7 +6340,7 @@ function shouldTriggerTacticalCards(room, currentIdx, nextIdx, totalQ) {
 }
 
 // =========================================================
-function playQuestionTransitionSequence({ isCorrect, scoreDelta, isPenalty, nextIdx, isFinished, allQuestions, currentIdx, isLeaderUser = true, isTimeout = false }) {
+function playQuestionTransitionSequence({ isCorrect, scoreDelta, isPenalty, nextIdx, isFinished, allQuestions, currentIdx, isLeaderUser = true, isTimeout = false, cardBonus = 0, basePoints = 0 }) {
   isQuestionTransitionRunning = true;
   transitionStartTime = Date.now();
 
@@ -6375,33 +6382,43 @@ function playQuestionTransitionSequence({ isCorrect, scoreDelta, isPenalty, next
     }
   };
 
-  // صمام أمان حاسم: يمنع تعليق الانتقال إطلاقاً إذا حدث أي تأخير أو عائق في المودال
+  // صمام أمان حاسم: يمنع تعليق الانتقال إطلاقاً إذا حدث أي تأخير أو عائق غير متوقع (12.5 ثانية تتيح للوحة الشرف وعداد النقاط الاكتمال بطلاقة)
   if (questionTransitionWatchdog) clearTimeout(questionTransitionWatchdog);
   questionTransitionWatchdog = setTimeout(() => {
     if (!transitionFinished) {
-      console.warn("Safety Watchdog: forced release of question transition at question", nextIdx);
+      console.warn("Safety Watchdog: release transition at question", nextIdx);
       finishTransitionSafely();
     }
-  }, 5800);
+  }, 12500);
 
   // 1. إظهار غطاء النتيجة الكبير الذي يغطي السؤال بالكامل ويطلع من تحت بأنيميشن صعود مبهج
   showBigQuestionResultOverlay({ isCorrect, isTimeout, scoreDelta });
 
-  // 2. إظهار شريط نتيجة الإجابة الفورية أسفل الخيارات أيضاً
+  // 2. إظهار شريط نتيجة الإجابة الفورية أسفل الخيارات أيضاً مع تفصيل نقاط البطاقات
   const existingFeedback = stageInteractiveArea.querySelector(".answer-feedback-banner");
   if (!existingFeedback) {
     const fb = document.createElement("div");
     fb.className = `answer-feedback-banner ${isCorrect ? "correct" : "wrong"}`;
     if (isCorrect) {
+      const breakdownText = (cardBonus > 0 && basePoints > 0)
+        ? `+${basePoints} أساسي + ${cardBonus} بطاقات تكتيكية 🎴 تم احتسابها لرصيدك سحابياً`
+        : `+${scoreDelta} درجات تم احتسابها لرصيدك سحابياً`;
       fb.innerHTML = `
         <div style="display:flex;align-items:center;gap:12px;">
           <i class="fa-solid fa-circle-check" style="font-size:30px;color:#16a34a;"></i>
           <div>
             <div style="font-weight:900;font-size:16.5px;color:#14532d;">أحسنت! إجابة صحيحة ومتقنة 🌟</div>
-            <div style="font-size:13px;color:#15803d;font-weight:700;">+${scoreDelta} درجات تم احتسابها لرصيدك سحابياً</div>
+            <div style="font-size:13px;color:#15803d;font-weight:700;">${breakdownText}</div>
           </div>
         </div>
-        <div class="score-increase-badge" style="font-size:16px;">+${scoreDelta}</div>
+        <div class="honor-score-delta-group">
+          ${(cardBonus > 0 && basePoints > 0) ? `
+            <span class="score-delta-popup bonus-base">+${basePoints} أساسي</span>
+            <span class="score-delta-popup bonus-cards"><i class="fa-solid fa-bolt"></i> +${cardBonus} بطاقات</span>
+          ` : `
+            <div class="score-increase-badge" style="font-size:16px;">+${scoreDelta}</div>
+          `}
+        </div>
       `;
     } else {
       fb.innerHTML = `
@@ -6427,12 +6444,12 @@ function playQuestionTransitionSequence({ isCorrect, scoreDelta, isPenalty, next
       questionCardEl.classList.add("question-exit-anim");
     }
 
-    // 4. بعد انتهاء تلاشي السؤال (420ms)، ظهور لوحة الشرف بأنيميشن جميل
+    // 4. بعد انتهاء تلاشي السؤال (420ms)، ظهور لوحة الشرف بأنيميشن جميل وعرض تفاصيل نقاط البطاقات
     setTimeout(() => {
       try {
         showHonorBoardModal(false, () => {
           finishTransitionSafely();
-        }, currentContestant?.name, scoreDelta, isPenalty);
+        }, currentContestant?.name, scoreDelta, isPenalty, cardBonus, basePoints);
       } catch (err) {
         console.warn("Honor board display notice:", err);
         finishTransitionSafely();
@@ -6752,7 +6769,7 @@ function loadStageQuestion(idx) {
   stageInteractiveArea.querySelectorAll(".answer-feedback-banner").forEach(fb => fb.remove());
 
   // الانتقال للسؤال التالي مع عرض كرت نتيجة الإجابة أولاً ثم خروج السؤال ثم لوحة الشرف
-  function advanceToNext(scoreDelta = 0, isPenalty = false, isCorrect = true, chosenChoiceIdx = null, isTimeout = false) {
+  function advanceToNext(scoreDelta = 0, isPenalty = false, isCorrect = true, chosenChoiceIdx = null, isTimeout = false, cardBonus = 0, basePoints = 0) {
     if (isAdvancingQuestion) return;
     isAdvancingQuestion = true;
     clearInterval(liveTimerInterval);
@@ -6767,8 +6784,8 @@ function loadStageQuestion(idx) {
     const nextIdx = idx + 1;
     const isFinished = nextIdx >= allQuestions.length;
 
-    // بث نتيجة الإجابة سحابياً للغرفة الحية وتحديث رقم السؤال والنقاط فوراً للجميع
-    // ملاحظة حاسمة: لا نبدأ مؤقت السؤال القادم هنا إطلاقاً حتى لا يُحسب وقت لوحة الشرف أو اختيار البطاقات من وقت السؤال!
+    // بث نتيجة الإجابة سحابياً للغرفة الحية مع نقاط البطاقات والتحديثات
+    // ملاحظة حاسمة: لا نحدث currentQuestionIdx إلى nextIdx في السحابة هنا حتى لا يقفز أي جهاز للسؤال التالي أثناء عرض لوحة الشرف!
     if (currentLiveRoom) {
       const answerPayload = {
         questionIdx: idx,
@@ -6776,6 +6793,8 @@ function loadStageQuestion(idx) {
         isCorrect: isCorrect,
         isTimeout: isTimeout,
         scoreDelta: scoreDelta,
+        cardBonus: cardBonus,
+        basePoints: basePoints,
         isPenalty: isPenalty,
         contestantScore: contestantScore,
         answeredBy: currentUser?.name || "المتسابق",
@@ -6783,7 +6802,6 @@ function loadStageQuestion(idx) {
       };
       currentLiveRoom.lastAnswerEvent = answerPayload;
       currentLiveRoom.contestantScore = contestantScore;
-      currentLiveRoom.currentQuestionIdx = nextIdx;
       currentLiveRoom.timerState = null; // إيقاف العداد كلياً أثناء الانتقال والبطاقات
 
       if (currentLiveRoom.id) {
@@ -6792,7 +6810,6 @@ function loadStageQuestion(idx) {
           const updatePayload = {
             lastAnswerEvent: answerPayload,
             contestantScore: contestantScore,
-            currentQuestionIdx: nextIdx,
             timerState: null,
             lastUpdated: serverTimestamp()
           };
@@ -6805,6 +6822,8 @@ function loadStageQuestion(idx) {
     playQuestionTransitionSequence({
       isCorrect,
       scoreDelta,
+      cardBonus,
+      basePoints,
       isPenalty,
       nextIdx,
       isFinished,
@@ -6960,7 +6979,12 @@ function loadStageQuestion(idx) {
 
     if (activeCardEffect.effect) {
       const eff = activeCardEffect.effect;
-      if (eff.pointsBonus) cardBonusPoints = eff.pointsBonus;
+      if (eff.pointsBonus) cardBonusPoints += eff.pointsBonus;
+      if (eff.speedBonus) cardBonusPoints += eff.speedBonus;
+      if (eff.honorPointsBonus) cardBonusPoints += eff.honorPointsBonus;
+      if (eff.comboStreakBonus) cardBonusPoints += eff.comboStreakBonus;
+      if (eff.bonusCapPoints && q.points) cardBonusPoints += Math.max(0, eff.bonusCapPoints - q.points);
+      if (eff.oralBonus && q.type === "oral") cardBonusPoints += eff.oralBonus;
       if (eff.immunity) hasImmunity = true;
       if (eff.doublePoints) doublePointsActive = true;
       if (eff.eliminateOptions) eliminateActive = eff.eliminateOptions;
@@ -7016,20 +7040,24 @@ function loadStageQuestion(idx) {
           const choiceIdx = parseInt(btn.getAttribute("data-choice"));
           const elapsedSec = (Date.now() - questionStartTime) / 1000;
 
-          let earnedPoints = q.points || 5;
-          if (doublePointsActive) earnedPoints *= 2;
-          earnedPoints += cardBonusPoints;
-          // مكافأة السرعة: إن أجاب في أقل من 5 ثوانٍ
-          if (speedBonusExtra > 0 && elapsedSec < 5) {
-            earnedPoints += speedBonusExtra;
-            showToast(`⚡ سرعة البرق! +${speedBonusExtra} نقاط إضافية (${elapsedSec.toFixed(1)}ث)`, "fa-forward-fast", 2500);
+          const basePoints = (choiceIdx === q.correct) ? (q.points || 5) : 0;
+          let actualCardBonus = 0;
+          if (choiceIdx === q.correct) {
+            if (doublePointsActive) actualCardBonus += basePoints;
+            actualCardBonus += cardBonusPoints;
+            // مكافأة السرعة: إن أجاب في أقل من 5 ثوانٍ
+            if (speedBonusExtra > 0 && elapsedSec < 5) {
+              actualCardBonus += speedBonusExtra;
+              showToast(`⚡ سرعة البرق! +${speedBonusExtra} نقاط إضافية (${elapsedSec.toFixed(1)}ث)`, "fa-forward-fast", 2500);
+            }
           }
+          const earnedPoints = basePoints + actualCardBonus;
 
           if (choiceIdx === q.correct) {
             btn.classList.add("correct");
             showToast(`✅ إجابة صحيحة! (+${earnedPoints} درجات)`, "fa-circle-check");
             activeCardEffect = null; // استهلاك البطاقة
-            advanceToNext(earnedPoints, false, true, choiceIdx);
+            advanceToNext(earnedPoints, false, true, choiceIdx, false, actualCardBonus, basePoints);
           } else {
             // فحص بطاقة "فرصة ثانية"
             if (activeCardEffect?.effect?.secondChance) {
@@ -7054,16 +7082,15 @@ function loadStageQuestion(idx) {
             if (hasImmunity) {
               showToast("🛡️ درع الأمان: تم إحباط أي خصم للدرجات!", "fa-shield-halved");
               activeCardEffect = null;
-              advanceToNext(0, false, false, choiceIdx);
+              advanceToNext(0, false, false, choiceIdx, false, 0, 0);
             } else if (penaltyOnWrong > 0) {
               showToast(`❌ إجابة خاطئة — المخاطرة الكبرى: خصم ${penaltyOnWrong} درجات!`, "fa-fire-flame-curved", 3000);
               activeCardEffect = null;
-              advanceToNext(-penaltyOnWrong, true, false, choiceIdx);
+              advanceToNext(-penaltyOnWrong, true, false, choiceIdx, false, 0, 0);
             } else {
-              const wrongPenalty = 3;
-              showToast("❌ إجابة خاطئة (خصم 3 درجات ❌)", "fa-circle-xmark", 3000);
+              showToast("❌ إجابة غير صحيحة!", "fa-circle-xmark");
               activeCardEffect = null;
-              advanceToNext(-wrongPenalty, true, false, choiceIdx);
+              advanceToNext(0, false, false, choiceIdx, false, 0, 0);
             }
           }
         }, { once: true });
@@ -7313,8 +7340,10 @@ function loadStageQuestion(idx) {
       // قبول المشرف المباشر
       document.getElementById("btnMatchingAccept")?.addEventListener("click", () => {
         let sc = parseInt(document.getElementById("matchingScoreInput")?.value || String(earnedPoints));
+        const basePts = q.points || 5;
+        const bonusPts = Math.max(0, sc - basePts);
         activeCardEffect = null;
-        advanceToNext(sc, false, true);
+        advanceToNext(sc, false, true, null, false, bonusPts, basePts);
       }, { once: true });
     }
 
@@ -7353,7 +7382,9 @@ function loadStageQuestion(idx) {
         if (pairCheckIdx >= activeConnections.length) {
           // انتهى فحص جميع الأزواج
           const allCorrect = (correctMatchesCount === cleanPairs.length) && (activeConnections.length === cleanPairs.length);
+          const baseEarned = Math.round((correctMatchesCount / cleanPairs.length) * (q.points || 5));
           const finalEarnedScore = Math.round((correctMatchesCount / cleanPairs.length) * earnedPoints);
+          const actualCardBonus = Math.max(0, finalEarnedScore - baseEarned);
 
           setTimeout(() => {
             if (allCorrect) {
@@ -7364,7 +7395,7 @@ function loadStageQuestion(idx) {
             }
             activeCardEffect = null;
             if (isInitiator) {
-              advanceToNext(finalEarnedScore, false, allCorrect);
+              advanceToNext(finalEarnedScore, false, allCorrect, null, false, actualCardBonus, baseEarned);
             }
           }, 1200);
           return;
@@ -7554,6 +7585,8 @@ function loadStageQuestion(idx) {
         if (wordCheckIdx >= placedWords.length) {
           // انتهى فحص جميع الكلمات
           const allCorrect = (correctWordsCount === originalItems.length && placedWords.length === originalItems.length);
+          const baseEarned = allCorrect ? (q.points || 5) : 0;
+          const actualCardBonus = allCorrect ? Math.max(0, earnedPoints - baseEarned) : 0;
 
           setTimeout(() => {
             if (allCorrect) {
@@ -7561,7 +7594,7 @@ function loadStageQuestion(idx) {
               showToast(`🌟 ما شاء الله! جميع الكلمات مرتبة بإتقان تام (+${earnedPoints} درجات)`, "fa-circle-check", 3500);
               activeCardEffect = null;
               if (isInitiator) {
-                advanceToNext(earnedPoints, false, true);
+                advanceToNext(earnedPoints, false, true, null, false, actualCardBonus, baseEarned);
               }
             } else {
               try { soundFX.wrong(); } catch (e) {}
@@ -7725,7 +7758,9 @@ function loadStageQuestion(idx) {
 
         document.getElementById("btnManualAcceptOrdering")?.addEventListener("click", () => {
           activeCardEffect = null;
-          advanceToNext(earnedPoints, false, true);
+          const basePts = q.points || 5;
+          const bonusPts = Math.max(0, earnedPoints - basePts);
+          advanceToNext(earnedPoints, false, true, null, false, bonusPts, basePts);
         }, { once: true });
       }
 
@@ -7838,15 +7873,13 @@ function loadStageQuestion(idx) {
       let avg = ratings.length > 0 ? (ratings.reduce((a, b) => a + b, 0) / ratings.length) : 5;
       // تطبيق الحد الأدنى من بطاقة "درع المعلمين" إن وجدت
       if (minRatingVal > 0) avg = Math.max(avg, minRatingVal);
-      const rounded = Math.round(avg * 4) / 4;
-      let pts = Math.round((rounded / 5) * (q.points || 5));
-      if (doublePointsActive) pts *= 2;
-      pts += cardBonusPoints;
+      const baseEarned = Math.round((rounded / 5) * (q.points || 5));
+      const actualCardBonus = Math.max(0, pts - baseEarned);
       const btn = document.getElementById("btnOralAccept");
       if (btn) btn.disabled = true;
       showToast(`✅ تم تسجيل التقييم الشفهي: ${rounded.toFixed(2)} من 5 (+${pts} درجات)`, "fa-microphone");
       activeCardEffect = null;
-      advanceToNext(pts, false);
+      advanceToNext(pts, false, true, null, false, actualCardBonus, baseEarned);
     }, { once: true });
 
   } else {
@@ -8570,6 +8603,8 @@ function addCardToContestantWallet(cardId) {
   updateContestantWalletUI();
 }
 
+let lastRenderedWalletFingerprint = "";
+
 function updateContestantWalletUI(wallet = null) {
   const list = wallet !== null ? wallet : (currentLiveRoom?.contestantWallet || []);
   const badgeEl = document.getElementById("walletBadgeCount");
@@ -8595,9 +8630,12 @@ function updateContestantWalletUI(wallet = null) {
     }
   }
 
-  // إذا كان مودال المحفظة معروضاً، إعادة بنائه
+  // إذا كان مودال المحفظة معروضاً، نحدثه فقط إذا تغيرت قائمة البطاقات فعلياً لمنع تكرار أنيميشن الانفتاح
   if (walletModal && !walletModal.classList.contains("hidden")) {
-    renderContestantWalletCards();
+    const currentFingerprint = (Array.isArray(list) ? list : []).map(String).join(",");
+    if (currentFingerprint !== lastRenderedWalletFingerprint) {
+      renderContestantWalletCards();
+    }
   }
 }
 
@@ -8605,6 +8643,7 @@ function renderContestantWalletCards() {
   const container = document.getElementById("walletCardsList");
   if (!container) return;
   const walletIds = Array.isArray(currentLiveRoom?.contestantWallet) ? currentLiveRoom.contestantWallet : [];
+  lastRenderedWalletFingerprint = walletIds.map(String).join(",");
   const cards = walletIds.map(id => TACTICAL_CARDS.find(c => String(c.id) === String(id))).filter(Boolean);
 
   const subtitleEl = document.getElementById("walletModalSubtitle");
@@ -8654,9 +8693,15 @@ function renderContestantWalletCards() {
 
 let walletModalClosingTimer = null;
 
-// فتح محفظة البطاقات متزامنة للجميع مع أنيميشن انفتاح وانقلاب البطاقات
+// فتح محفظة البطاقات متزامنة للجميع مع أنيميشن انفتاح وانقلاب البطاقات بسلاسة ودون تعليق
 function openSynchronizedWallet(broadcast = true, openedBy = null) {
   if (!walletModal) return;
+
+  // إذا كانت المحفظة مفتوحة بالفعل وغير مغلقة، نمنع إعادة تشغيل أنيميشن الفتح
+  if (!walletModal.classList.contains("hidden") && !walletModal.classList.contains("wallet-modal-closing")) {
+    return;
+  }
+
   if (walletModalClosingTimer) {
     clearTimeout(walletModalClosingTimer);
     walletModalClosingTimer = null;
@@ -8672,17 +8717,25 @@ function openSynchronizedWallet(broadcast = true, openedBy = null) {
     syncText.innerHTML = `مزامنة حية: قام <strong>${openerName}</strong> بفتح محفظة البطاقات التكتيكية 🎴`;
   }
 
-  // تفعيل أنيميشن الانفتاح السلس
+  // تفعيل أنيميشن الانفتاح السلس وإزالته تلقائياً عند انتهاء مدته لئلا يعلق في الـ DOM
   walletModal.classList.remove("hidden", "wallet-modal-closing");
   walletModal.classList.add("wallet-modal-opening");
+  setTimeout(() => {
+    if (walletModal && !walletModal.classList.contains("hidden")) {
+      walletModal.classList.remove("wallet-modal-opening");
+    }
+  }, 380);
+
   try { soundFX.btnClick(); } catch (e) {}
 
   if (broadcast && currentLiveRoom?.id) {
+    const now = Date.now();
+    lastSeenWalletSyncTimestamp = now;
     updateDoc(doc(db, "live_rooms", currentLiveRoom.id), {
       walletSync: {
         isOpen: true,
         openedBy: openerName,
-        timestamp: Date.now()
+        timestamp: now
       },
       lastUpdated: serverTimestamp()
     }).catch(err => console.warn("Broadcast wallet open notice:", err));
@@ -8699,7 +8752,8 @@ function closeSynchronizedWallet(broadcast = true, closedBy = null) {
     if (walletModalClosingTimer) clearTimeout(walletModalClosingTimer);
     walletModalClosingTimer = setTimeout(() => {
       walletModal.classList.add("hidden");
-      walletModal.classList.remove("wallet-modal-closing");
+      walletModal.classList.remove("wallet-modal-closing", "wallet-modal-opening");
+      walletModalClosingTimer = null;
     }, 220);
   } else {
     walletModal.classList.add("hidden");
@@ -8707,11 +8761,13 @@ function closeSynchronizedWallet(broadcast = true, closedBy = null) {
   }
 
   if (broadcast && currentLiveRoom?.id) {
+    const now = Date.now();
+    lastSeenWalletSyncTimestamp = now;
     updateDoc(doc(db, "live_rooms", currentLiveRoom.id), {
       walletSync: {
         isOpen: false,
-        closedBy: closedBy || currentUser?.name || "المتسابق",
-        timestamp: Date.now()
+        closedBy: closedBy || currentUser?.name || currentContestant?.name || "المتسابق",
+        timestamp: now
       },
       lastUpdated: serverTimestamp()
     }).catch(err => console.warn("Broadcast wallet close notice:", err));
@@ -9258,7 +9314,7 @@ function executeCurrentQuestionSkip(grantedPoints = 3) {
     finishContestant();
   } else {
     if (currentLiveRoom) currentLiveRoom.currentQuestionIdx = nextIdx;
-    showHonorBoardModal(false, () => loadStageQuestion(nextIdx), currentContestant?.name, grantedPoints, false);
+    showHonorBoardModal(false, () => loadStageQuestion(nextIdx), currentContestant?.name, grantedPoints, false, grantedPoints, 0);
   }
 }
 
@@ -9829,21 +9885,39 @@ function recordHonorScore(studentName, sessionFinalScore) {
   renderHonorLeaderboardTab();
 }
 
-function showHonorBoardModal(openNextStudentAfter = false, onDone = null, highlightStudentName = null, scoreDelta = 0, isPenalty = false) {
+function showHonorBoardModal(openNextStudentAfter = false, onDone = null, highlightStudentName = null, scoreDelta = 0, isPenalty = false, cardBonus = 0, basePoints = 0) {
   if (!honorBoardModal || !honorPodiumList) {
     if (typeof onDone === 'function') onDone();
     return;
   }
 
-  // حساب النقاط السابقة والنهائية للمتسابق الحالي بدقة
+  // حساب النقاط السابقة والنهائية للمتسابق الحالي بدقة وضمان إضافة نقاط البطاقات التكتيكية للرصيد
   let currentTargetScore = 0;
   let previousTargetScore = 0;
   if (highlightStudentName) {
     const existingEntry = honorLeaderboardCache.find(x => x.name === highlightStudentName);
     const studentUser = participantsCache.find(p => p.name === highlightStudentName);
-    const base = (studentUser && typeof studentUser.totalScore === "number") ? studentUser.totalScore : (existingEntry ? existingEntry.score : 0);
-    currentTargetScore = (typeof contestantScore === "number") ? (base + contestantScore) : (existingEntry ? existingEntry.score : 0);
+    const savedTotal = (studentUser && typeof studentUser.totalScore === "number")
+      ? studentUser.totalScore
+      : (existingEntry ? existingEntry.score : 0);
+
+    // إضافة نقاط السؤال والبطاقات التكتيكية بالكامل للرصيد المستهدف
+    currentTargetScore = (typeof contestantScore === "number")
+      ? (savedTotal + contestantScore)
+      : ((existingEntry ? existingEntry.score : 0) + scoreDelta);
+
     previousTargetScore = Math.max(0, currentTargetScore - scoreDelta);
+
+    // تحديث رصيد الطالب فورياً في كاش لوحة الشرف وسحابياً لضمان إضافة نقاط البطاقات وعدم فقدانها
+    if (existingEntry) {
+      existingEntry.score = currentTargetScore;
+      existingEntry.timestamp = new Date().toISOString();
+    } else {
+      honorLeaderboardCache.push({ name: highlightStudentName, score: currentTargetScore, timestamp: new Date().toISOString() });
+    }
+    honorLeaderboardCache.sort((a, b) => b.score - a.score);
+    localStorage.setItem("nour_honor_board", JSON.stringify(honorLeaderboardCache));
+    syncHonorBoardToCloud();
   }
 
   // 1. قائمة الترتيب الأولية (قبل احتساب نقاط هذا السؤال لتنفيذ أنيميشن الصعود والتجاوز)
@@ -9875,7 +9949,7 @@ function showHonorBoardModal(openNextStudentAfter = false, onDone = null, highli
   const didClimb = (scoreDelta > 0 && finalRank > 0 && initialRank > 0 && finalRank < initialRank);
   const overtakenCount = didClimb ? (initialRank - finalRank) : 0;
 
-  // رسم صفوف لوحة الشرف
+  // رسم صفوف لوحة الشرف مع إبراز نقاط السؤال الأساسية وبونص البطاقات التكتيكية جنباً إلى جنب
   function renderPodiumRows(listToRender, scoreToShowTarget, isRolling = false, showBadge = true) {
     if (listToRender.length === 0) {
       honorPodiumList.innerHTML = `
@@ -9892,9 +9966,25 @@ function showHonorBoardModal(openNextStudentAfter = false, onDone = null, highli
       const scoreVal = isTarget ? scoreToShowTarget : item.score;
       let badgeHtml = "";
       if (isTarget && showBadge && scoreDelta !== 0) {
-        badgeHtml = isPenalty
-          ? `<span class="score-delta-popup penalty">${scoreDelta}</span>`
-          : `<span class="score-delta-popup bonus">+${scoreDelta}</span>`;
+        if (isPenalty) {
+          badgeHtml = `<span class="score-delta-popup penalty">${scoreDelta}</span>`;
+        } else if (cardBonus > 0 && basePoints > 0) {
+          badgeHtml = `
+            <div class="honor-score-delta-group">
+              <span class="score-delta-popup bonus-base" title="نقاط السؤال الأساسية">+${basePoints} أساسي</span>
+              <span class="score-delta-popup bonus-cards" title="نقاط إضافية من البطاقات التكتيكية"><i class="fa-solid fa-bolt"></i> +${cardBonus} بطاقات</span>
+              <span class="score-delta-popup bonus-total" title="إجمالي النقاط المكتسبة">+${scoreDelta}</span>
+            </div>
+          `;
+        } else if (cardBonus > 0 && basePoints === 0) {
+          badgeHtml = `
+            <div class="honor-score-delta-group">
+              <span class="score-delta-popup bonus-cards" title="نقاط تكتيكية من البطاقة"><i class="fa-solid fa-bolt"></i> +${cardBonus} بطاقات</span>
+            </div>
+          `;
+        } else {
+          badgeHtml = `<span class="score-delta-popup bonus">+${scoreDelta}</span>`;
+        }
       }
       return `
         <div class="honor-rank-card ${idx === 0 ? 'rank-1' : ''} ${isTarget ? 'highlight-student' : ''}" 
@@ -9928,26 +10018,31 @@ function showHonorBoardModal(openNextStudentAfter = false, onDone = null, highli
   honorBoardModal.classList.remove("hidden");
   try { soundFX.btnClick(); } catch (e) {}
 
-  // ── 1. أنيميشن عداد الأرقام السريع مثل آلات السلوت ──
+  // ── 1. أنيميشن عداد الأرقام المتصاعد بتمهل وسلاسة (1.8 ثانية لمشاهدة إضافة النقاط بوضوح) ──
   if (highlightStudentName && scoreDelta !== 0) {
     const scoreValEl = document.getElementById("activeStudentHonorScore");
     if (scoreValEl) {
       scoreValEl.classList.add("honor-score-rolling");
-      const duration = 750;
+      const duration = 1800; // 1.8 ثانية هادئة وممتعة تتيح رؤية النقاط تتصاعد أمام الجميع
       const startTime = performance.now();
       const startNum = previousTargetScore;
       const endNum = currentTargetScore;
+      let lastAudioTickTime = 0;
 
       function updateCounter(now) {
         const elapsed = now - startTime;
         const progress = Math.min(1, elapsed / duration);
-        const easeVal = 1 - (1 - progress) * (1 - progress);
+        // حركة إبطاء ناعمة (ease-out cubic)
+        const easeVal = 1 - Math.pow(1 - progress, 3);
         const currentNum = Math.round(startNum + (endNum - startNum) * easeVal);
         if (scoreValEl) {
           scoreValEl.textContent = `${currentNum} نقطة`;
         }
         if (progress < 1) {
-          try { soundFX.btnClick(); } catch (e) {}
+          if (now - lastAudioTickTime > 110) {
+            lastAudioTickTime = now;
+            try { soundFX.btnClick(); } catch (e) {}
+          }
           requestAnimationFrame(updateCounter);
         } else {
           scoreValEl.classList.remove("honor-score-rolling");
@@ -9960,14 +10055,14 @@ function showHonorBoardModal(openNextStudentAfter = false, onDone = null, highli
           if (didClimb) {
             setTimeout(() => {
               executeOvertakeAnimation(overtakenCount, finalRank);
-            }, 260);
+            }, 300);
           }
         }
       }
 
       setTimeout(() => {
         requestAnimationFrame(updateCounter);
-      }, 200);
+      }, 250);
     }
   }
 
@@ -10057,7 +10152,7 @@ function showHonorBoardModal(openNextStudentAfter = false, onDone = null, highli
     };
   }
 
-  let secLeft = (didClimb || (scoreDelta !== 0)) ? 5 : 3;
+  let secLeft = (didClimb || (scoreDelta !== 0)) ? 6 : 4;
   if (honorCountdownSec) honorCountdownSec.textContent = secLeft;
 
   honorCountdownInterval = setInterval(() => {
