@@ -8101,6 +8101,236 @@ button:disabled .fa-spin,
   color: #94a3b8;
 }
 
+/* ========================================================
+   التأثير البصري البنفسجي الإلزامي للبطاقات التكتيكية النشطة
+   ======================================================== */
+.card-purple-aura {
+  box-shadow: 0 0 25px rgba(147, 51, 234, 0.65), 0 0 50px rgba(126, 34, 206, 0.35) !important;
+  border: 3.5px solid #a855f7 !important;
+  animation: purpleGlowPulse 2.8s ease-in-out infinite alternate !important;
+  position: relative;
+  transition: all 0.4s ease;
+}
+
+@keyframes purpleGlowPulse {
+  0% {
+    box-shadow: 0 0 16px rgba(147, 51, 234, 0.5), 0 0 35px rgba(126, 34, 206, 0.25);
+    border-color: #a855f7;
+  }
+  50% {
+    box-shadow: 0 0 28px rgba(168, 85, 247, 0.8), 0 0 60px rgba(147, 51, 234, 0.45);
+    border-color: #c084fc;
+  }
+  100% {
+    box-shadow: 0 0 20px rgba(147, 51, 234, 0.6), 0 0 45px rgba(126, 34, 206, 0.3);
+    border-color: #9333ea;
+  }
+}
+
+/* شريط البطاقات النشطة البنفسجي الأنيق أعلى السؤال */
+.purple-active-cards-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 14px;
+  padding: 8px 14px;
+  background: linear-gradient(135deg, rgba(245, 243, 255, 0.95), rgba(237, 233, 254, 0.95));
+  border: 1.5px solid #c084fc;
+  border-radius: 14px;
+  box-shadow: 0 4px 15px rgba(147, 51, 234, 0.15);
+  animation: cardSlideInDown 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes cardSlideInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.purple-card-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  background: #7e22ce;
+  color: #ffffff;
+  border-radius: 30px;
+  font-size: 13.5px;
+  font-weight: 800;
+  box-shadow: 0 2px 8px rgba(126, 34, 206, 0.35);
+  transition: all 0.2s ease;
+}
+
+.purple-card-badge:hover {
+  transform: scale(1.02);
+  background: #6b21a8;
+}
+
+.purple-card-badge i {
+  font-size: 15px;
+  color: #facc15;
+}
+
+.purple-card-badge .badge-scope-pill {
+  background: rgba(255, 255, 255, 0.22);
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fef08a;
+}
+
+.purple-card-badge .btn-cancel-effect {
+  background: rgba(239, 68, 68, 0.85);
+  color: #ffffff;
+  border: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  margin-right: 4px;
+  transition: all 0.2s ease;
+}
+
+.purple-card-badge .btn-cancel-effect:hover {
+  background: #dc2626;
+  transform: scale(1.15);
+}
+
+/* لوحة تحكم المشرف في البطاقات النشطة */
+.supervisor-active-effects-box {
+  background: #ffffff;
+  border: 2px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.supervisor-active-effects-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.supervisor-active-effects-header h4 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 900;
+  color: #1e1b4b;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.supervisor-active-effects-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.supervisor-active-effect-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  transition: all 0.2s ease;
+}
+
+.supervisor-active-effect-row:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+/* قائمة المعلمين المؤهلين في نافذة الاستشارة */
+.teachers-consult-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 6px;
+  margin: 12px 0;
+  background: #f8fafc;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 12px;
+}
+
+.teacher-consult-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: #ffffff;
+  border: 2px solid #e2e8f0;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: right;
+}
+
+.teacher-consult-card:hover {
+  border-color: #eab308;
+  background: #fefce8;
+  transform: translateY(-2px);
+}
+
+.teacher-consult-card.selected {
+  border-color: #ca8a04;
+  background: #fef08a;
+  box-shadow: 0 0 10px rgba(234, 179, 8, 0.4);
+}
+
+.teacher-consult-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: #e2e8f0;
+  color: #475569;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.teacher-consult-card.selected .teacher-consult-avatar {
+  background: #ca8a04;
+  color: #ffffff;
+}
+
+.teacher-consult-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.teacher-consult-name {
+  font-size: 13.5px;
+  font-weight: 800;
+  color: #1e293b;
+}
+
+.teacher-consult-role {
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 600;
+}
+
+
 
 
 

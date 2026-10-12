@@ -610,9 +610,22 @@
                 <button class="filter-pill-btn active" data-filter="all">الكل (40) ✨</button>
                 <button class="filter-pill-btn" data-filter="buff">مزايا إيجابية (30) 🌟</button>
                 <button class="filter-pill-btn" data-filter="risk">مخاطرات ذكية (10) ⚡</button>
+                <button class="filter-pill-btn" data-filter="instant">فورية لسؤال ⚡</button>
+                <button class="filter-pill-btn" data-filter="cycle">مستمرة للدورة 🔄</button>
                 <button class="filter-pill-btn" data-filter="timer">الوقت والمؤقت ⏱️</button>
                 <button class="filter-pill-btn" data-filter="score">النقاط والمكافآت 🏆</button>
                 <button class="filter-pill-btn" data-filter="help">المساعدة والتيسير 🤝</button>
+              </div>
+            </div>
+
+            <!-- لوحة متابعة وإدارة البطاقات الفعالة حالياً في المسابقة الحية -->
+            <div id="supervisorActiveEffectsPanel" class="supervisor-active-effects-box hidden">
+              <div class="supervisor-active-effects-header">
+                <h4><i class="fa-solid fa-wand-magic-sparkles" style="color:#9333ea;"></i> البطاقات التكتيكية الفعالة حالياً في الغرفة:</h4>
+                <span id="activeEffectsCountBadge" style="background:#7e22ce; color:#ffffff; padding:3px 10px; border-radius:12px; font-size:12px; font-weight:800;">0 بطاقات نشطة</span>
+              </div>
+              <div id="supervisorActiveEffectsList" class="supervisor-active-effects-list">
+                <!-- تُبنى ديناميكياً -->
               </div>
             </div>
 
@@ -877,7 +890,10 @@
           </div>
 
           <!-- منطقة عرض السؤال الحالي والخط القرآني -->
-          <div class="stage-question-card">
+          <div class="stage-question-card" id="stageQuestionCardMain">
+            <!-- شريط البطاقات التكتيكية النشطة باللون البنفسجي الأنيق المعتمد -->
+            <div id="stagePurpleActiveCardsBar" class="purple-active-cards-bar hidden"></div>
+
             <!-- غطاء أنيميشن النتيجة الكبير (صح أخضر أو خطأ/انتهاء وقت أحمر طالع من تحت بجمالية فائقة) -->
             <div id="stageQuestionResultOverlay" class="question-result-overlay hidden">
               <div class="result-badge-anim-wrap">
@@ -1638,27 +1654,49 @@
     </div>
   </div>
 
-  <!-- مودال تنبيه مساعدة المعلم (Teacher Help Alert Modal) -->
+  <!-- مودال تنبيه واستشارة المعلم (Teacher Consultation Modal) -->
   <div id="teacherHelpModal" class="modal-overlay hidden" style="z-index: 10007;">
-    <div class="duo-modal-box" style="max-width: 520px; text-align: center; border: 3px solid #eab308;">
+    <div class="duo-modal-box" style="max-width: 580px; text-align: center; border: 3px solid #eab308;">
       <div style="width: 70px; height: 70px; border-radius: 50%; background: #fef08a; color: #ca8a04; display: inline-flex; align-items: center; justify-content: center; font-size: 32px; margin-bottom: 12px;">
         <i class="fa-solid fa-chalkboard-user"></i>
       </div>
-      <h3 style="font-size: 20px; font-weight: 900; color: #854d0e; margin-bottom: 6px;">📢 تفعيل بطاقة: استشارة المعلم!</h3>
-      <p id="teacherHelpDescription" style="font-size: 14.5px; color: #475569; margin-bottom: 16px;">
-        تم اختيار أحد المعلمين أو المشرفين عشوائياً لمساعدة المتسابق وتوجيه نصيحة توضيحية له.
+      <h3 style="font-size: 21px; font-weight: 900; color: #854d0e; margin-bottom: 6px;">📢 نافذة استشارة المعلم</h3>
+      <p id="teacherHelpDescription" style="font-size: 14px; color: #475569; margin-bottom: 12px; line-height: 1.5;">
+        المؤقت متوقف حالياً. يتم اختيار أحد المعلمين أو المشرفين المؤهلين لتقديم توجيه وإرشاد للمتسابق.
       </p>
-      <div style="background: #fefce8; border: 2px dashed #facc15; border-radius: 12px; padding: 14px; margin-bottom: 16px;">
-        <div style="font-size: 13px; font-weight: 700; color: #a16207;">المعلم المساعد المختار:</div>
+
+      <!-- المعلم المختار حالياً -->
+      <div style="background: #fefce8; border: 2px dashed #facc15; border-radius: 12px; padding: 12px; margin-bottom: 12px;">
+        <div style="font-size: 13px; font-weight: 700; color: #a16207;">المعلم المساعد المعتمد:</div>
         <div id="teacherHelpChosenName" style="font-size: 20px; font-weight: 900; color: #854d0e; margin-top: 4px;">--</div>
-        <div id="teacherHelpContestantTarget" style="font-size: 13px; font-weight: 700; color: #166534; margin-top: 6px;"></div>
+        <div id="teacherHelpContestantTarget" style="font-size: 13px; font-weight: 700; color: #166534; margin-top: 4px;"></div>
       </div>
-      <div style="background: #eff6ff; border: 1.5px solid #bfdbfe; border-radius: 10px; padding: 10px; font-size: 13.5px; color: #1e40af; font-weight: 700; margin-bottom: 18px;">
-        <i class="fa-solid fa-clock"></i> تم تمديد وقت السؤال الحالي بـ <strong>+15 ثانية إضافية</strong> للتفكير والتوجيه!
+
+      <!-- قائمة المعلمين المؤهلين في الغرفة (تدعم 10+ معلمين) -->
+      <div id="teacherConsultListSection" style="text-align: right; margin-bottom: 12px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
+          <span style="font-size: 13px; font-weight: 800; color: #334155;"><i class="fa-solid fa-users"></i> قائمة المعلمين المؤهلين المتصلين:</span>
+          <button type="button" id="btnTeacherHelpPickRandom" class="btn-duo-yellow btn-sm" style="padding: 4px 10px; font-size: 12px;">
+            <i class="fa-solid fa-dice"></i> اختيار عشوائي
+          </button>
+        </div>
+        <div id="teacherConsultTeachersList" class="teachers-consult-grid">
+          <!-- تُبنى ديناميكياً -->
+        </div>
       </div>
-      <button id="btnCloseTeacherHelpModal" class="btn-duo-green" style="width: 100%;">
-        <i class="fa-solid fa-check"></i> تم التوجيه ومتابعة المسابقة
-      </button>
+
+      <div style="background: #eff6ff; border: 1.5px solid #bfdbfe; border-radius: 10px; padding: 10px; font-size: 13.5px; color: #1e40af; font-weight: 700; margin-bottom: 16px;">
+        <i class="fa-solid fa-clock"></i> عند استئناف المسابقة، يُستأنف المؤقت من الوقت المتبقي السابق + <strong>15 ثانية إضافية</strong>!
+      </div>
+
+      <div style="display: flex; gap: 10px; justify-content: center;">
+        <button id="btnCancelTeacherHelpModal" class="btn-duo-gray btn-sm" style="flex: 1;">
+          <i class="fa-solid fa-xmark"></i> إلغاء الاستشارة
+        </button>
+        <button id="btnCloseTeacherHelpModal" class="btn-duo-green" style="flex: 2;">
+          <i class="fa-solid fa-check"></i> اعتماد التوجيه واستئناف المؤقت (+15ث)
+        </button>
+      </div>
     </div>
   </div>
 
