@@ -1595,6 +1595,20 @@ function updateArenaUIRealtime(room) {
               if (corBtn) corBtn.classList.add("correct");
             }
           }
+        } else if (ev.isTimeout && !ev.isCorrect) {
+          const allQ = currentLiveRoom?.drawnQuestions || [];
+          const curQ = allQ[ev.questionIdx];
+          if (curQ && curQ.type === "mcq") {
+            const btns = stageInteractiveArea.querySelectorAll(".btn-choice-duo");
+            btns.forEach(b => {
+              b.disabled = true;
+              b.style.pointerEvents = "none";
+            });
+            if (curQ.correct !== undefined) {
+              const corBtn = stageInteractiveArea.querySelector(`[data-choice="${curQ.correct}"]`);
+              if (corBtn) corBtn.classList.add("correct");
+            }
+          }
         }
 
         const allQuestions = (currentLiveRoom?.drawnQuestions && currentLiveRoom.drawnQuestions.length > 0)
@@ -5807,8 +5821,10 @@ function syncAndRunLiveTimer(timerState, onTimeout = null) {
 }
 
 // --------------------------------------------------------
-// معالجة انتهاء وقت السؤال تلقائياً وخصم نصف النقاط والانتقال للوحة الشرف
+// معالجة انتهاء وقت السؤال تلقائياً كإجابة خاطئة مع إظهار X والخصم
 // --------------------------------------------------------
+let currentStageAdvanceToNext = null;
+
 function handleLiveQuestionTimeout() {
   if (isQuestionTransitionRunning) return;
 
@@ -5816,21 +5832,40 @@ function handleLiveQuestionTimeout() {
     ? currentLiveRoom.drawnQuestions
     : (currentQuizData?.sections?.flatMap(s => s.questions || []) || []);
   const curQ = allQ[currentLiveRoom?.currentQuestionIdx || 0] || {};
-  const qPoints = curQ.points || 5;
-  // خصم نصف النقاط التي كان المفروض أن يأخذها لو جاوب صح
-  const penalty = Math.round((qPoints / 2) * 10) / 10;
+  
+  // فحص بطاقة الحصانة (درع الأمان)
+  const hasImmunity = !!(activeCardEffect?.effect?.immunity);
+  let penalty = 0;
+  if (hasImmunity) {
+    showToast("🛡️ درع الأمان (الحصانة): انتهى الوقت ولكن تم إلغاء أي خصم درجات!", "fa-shield-halved", 3500);
+    activeCardEffect = null;
+  } else {
+    penalty = 3;
+    showToast("⏰ انتهى الوقت المحدد للسؤال! ❌ خصم 3 درجات والانتقال للسؤال التالي", "fa-clock", 3500);
+  }
 
-  showToast(`⏰ انتهى الوقت المحدد للسؤال! خصم نصف الدرجة (${penalty} درجات) والانتقال للوحة الشرف`, "fa-clock", 3500);
+  // إذا كان نوع السؤال اختيار من متعدد، نعطل الخيارات ونظهر الإجابة الصحيحة
+  if (curQ.type === "mcq" && curQ.correct !== undefined) {
+    const btns = stageInteractiveArea.querySelectorAll(".btn-choice-duo");
+    btns.forEach(b => {
+      b.disabled = true;
+      b.style.pointerEvents = "none";
+    });
+    const correctBtn = stageInteractiveArea.querySelector(`[data-choice="${curQ.correct}"]`);
+    if (correctBtn) correctBtn.classList.add("correct");
+  }
 
-  // إيقاف العداد كلياً وتمرير انتهاء الوقت
-  if (typeof advanceToNext === "function") {
-    advanceToNext(-penalty, true, false, null, true);
+  // إيقاف العداد كلياً وتمرير انتهاء الوقت كإجابة خاطئة تماماً مع ظهور X أحمر
+  if (typeof currentStageAdvanceToNext === "function") {
+    currentStageAdvanceToNext(-penalty, penalty > 0, false, null, true);
+  } else if (typeof advanceToNext === "function") {
+    advanceToNext(-penalty, penalty > 0, false, null, true);
   }
 }
 
 // =========================================================
 // غطاء النتيجة الكبير يغطي السؤال بالكامل ويطلع من تحت بأنيميشن صعود مبهج ويتلاشى
-// صح أخضر كبير عند الإجابة الصحيحة أو X أحمر كبير عند الخطأ أو انتهاء الوقت
+// صح أخضر كبير عند الإجابة الصحيحة أو X أحمر كبير وضخم عند الخطأ أو انتهاء الوقت
 // =========================================================
 function showBigQuestionResultOverlay({ isCorrect, isTimeout = false, scoreDelta = 0 }) {
   const overlay = document.getElementById("stageQuestionResultOverlay");
@@ -5842,6 +5877,12 @@ function showBigQuestionResultOverlay({ isCorrect, isTimeout = false, scoreDelta
   overlay.classList.remove("hidden", "correct", "wrong", "timeout");
   void overlay.offsetWidth; // إعادة تشغيل الأنيميشن من البداية
 
+  const questionCardEl = document.querySelector(".stage-question-card");
+  if (questionCardEl) {
+    questionCardEl.classList.remove("question-wrong-shake");
+    void questionCardEl.offsetWidth;
+  }
+
   if (isCorrect) {
     overlay.classList.add("correct");
     iconEl.innerHTML = `<i class="fa-solid fa-circle-check"></i>`;
@@ -5849,16 +5890,19 @@ function showBigQuestionResultOverlay({ isCorrect, isTimeout = false, scoreDelta
     pointsEl.textContent = `+${scoreDelta} درجات`;
     try { soundFX.correct(); } catch (e) {}
   } else if (isTimeout) {
-    overlay.classList.add("timeout");
+    // بالضبط زي الإجابة الخطأ مع X أحمر ضخم واهتزاز وصوت الخطأ
+    overlay.classList.add("wrong", "timeout");
     iconEl.innerHTML = `<i class="fa-solid fa-circle-xmark"></i>`;
-    titleEl.textContent = "انتهى الوقت المحدد للسؤال! ⏰";
-    pointsEl.textContent = `${scoreDelta} درجات (خصم نصف الدرجة)`;
+    titleEl.textContent = "انتهى الوقت! ❌";
+    pointsEl.textContent = scoreDelta !== 0 ? `${scoreDelta} درجات` : "انتهى الوقت المحدد للسؤال ⏰";
+    if (questionCardEl) questionCardEl.classList.add("question-wrong-shake");
     try { soundFX.wrong(); } catch (e) {}
   } else {
     overlay.classList.add("wrong");
     iconEl.innerHTML = `<i class="fa-solid fa-circle-xmark"></i>`;
     titleEl.textContent = "إجابة غير صحيحة! ❌";
     pointsEl.textContent = scoreDelta !== 0 ? `${scoreDelta} درجات` : "ركّز في السؤال القادم 💪";
+    if (questionCardEl) questionCardEl.classList.add("question-wrong-shake");
     try { soundFX.wrong(); } catch (e) {}
   }
 
@@ -5867,6 +5911,7 @@ function showBigQuestionResultOverlay({ isCorrect, isTimeout = false, scoreDelta
   // يتلاشى ويختفي بعد انتهاء الأنيميشن الجميل
   setTimeout(() => {
     overlay.classList.add("hidden");
+    if (questionCardEl) questionCardEl.classList.remove("question-wrong-shake");
   }, 1600);
 }
 
@@ -6327,6 +6372,40 @@ function loadStageQuestion(idx) {
       isLeaderUser: true,
       isTimeout
     });
+  }
+
+  currentStageAdvanceToNext = advanceToNext;
+
+  // معالجة انتهاء وقت السؤال الحالي كإجابة خاطئة مع ظهور X أحمر
+  function handleStageQuestionTimeout() {
+    if (isQuestionTransitionRunning) return;
+
+    // فحص بطاقة الحصانة (درع الأمان)
+    const hasImmunity = !!(activeCardEffect?.effect?.immunity);
+    let penalty = 0;
+    if (hasImmunity) {
+      showToast("🛡️ درع الأمان (الحصانة): انتهى الوقت ولكن تم إلغاء أي خصم درجات!", "fa-shield-halved", 3500);
+      activeCardEffect = null;
+    } else {
+      penalty = 3;
+      showToast("⏰ انتهى الوقت المحدد للسؤال! ❌ خصم 3 درجات والانتقال للسؤال التالي", "fa-clock", 3500);
+    }
+
+    // إذا كان نوع السؤال اختيار من متعدد (MCQ)، نظهر الإجابة الصحيحة باللون الأخضر ونعطل الخيارات
+    if (q.type === "mcq") {
+      const btns = stageInteractiveArea.querySelectorAll(".btn-choice-duo");
+      btns.forEach(b => {
+        b.disabled = true;
+        b.style.pointerEvents = "none";
+      });
+      if (q.correct !== undefined) {
+        const correctBtn = stageInteractiveArea.querySelector(`[data-choice="${q.correct}"]`);
+        if (correctBtn) correctBtn.classList.add("correct");
+      }
+    }
+
+    // الانتقال مع ظهور علامة X الحمراء الكبيرة تماماً كالإجابة الخاطئة
+    advanceToNext(-penalty, penalty > 0, false, null, true);
   }
 
   // فحص ما إذا كان هذا السؤال قد تم تخطيه مسبقاً ببطاقة التخطي التكتيكية
@@ -7172,16 +7251,16 @@ function loadStageQuestion(idx) {
   }
 
   syncAndRunLiveTimer(qTimerState, () => {
-    // عند انتهاء الوقت: المشرف/القائد ينفذ الخصم والانتقال
+    // عند انتهاء الوقت: يتم تشغيل انتهاء الوقت كإجابة خاطئة مع إظهار X والخصم والانتقال
     const isLeader = currentUser && (
       currentUser.name === currentLiveRoom?.leaderName || 
       currentUser.name === currentLiveRoom?.creatorName ||
       currentUser.role === "supervisor" ||
       isSupervisor(currentUser.name)
     );
-    if (isLeader) {
-      showToast("⚠️ انتهى الوقت المحدد للسؤال! خصم 3 درجات والانتقال للسؤال التالي", "fa-clock", 3500);
-      advanceToNext(-3, true);
+    const isAllowedSolver = checkIsSolverAllowed(currentLiveRoom);
+    if (isLeader || isAllowedSolver) {
+      handleStageQuestionTimeout();
     }
   });
 
