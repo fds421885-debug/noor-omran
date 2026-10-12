@@ -1244,6 +1244,7 @@ let lastSeenAnswerTimestamp = 0;
 let lastSeenMatchingVerifyTimestamp = 0;
 let lastSeenOrderingTimestamp = 0;
 let lastSeenCardsTurnTimestamp = 0;
+let lastSeenCardUsedTimestamp = 0;
 let isQuestionTransitionRunning = false;
 let lastKnownSolverRole = null;
 let currentUserProfileUnsubscribe = null;
@@ -1553,6 +1554,22 @@ function updateArenaUIRealtime(room) {
           showToast(`⏭️ تم تخطي البطاقات وإضافة +15 ثانية للوقت من قبل (${room.activeCardsTurn.chosenBy || 'المتسابق'})!`, "fa-hourglass-start", 3000);
           loadStageQuestion(room.activeCardsTurn.nextIdx ?? (room.currentQuestionIdx || 0));
         }
+      }
+    }
+
+    // مزامنة محفظة البطاقات التكتيكية للمتسابق (Contestant Cards Wallet Sync)
+    if (Array.isArray(room.contestantWallet)) {
+      if (currentLiveRoom) currentLiveRoom.contestantWallet = room.contestantWallet;
+      if (typeof updateContestantWalletUI === "function") {
+        updateContestantWalletUI(room.contestantWallet);
+      }
+    }
+
+    // مزامنة تفعيل بطاقة من محفظة المتسابق (Real-time Card Used Sync)
+    if (room.activeCardUsed && room.activeCardUsed.timestamp > lastSeenCardUsedTimestamp) {
+      lastSeenCardUsedTimestamp = room.activeCardUsed.timestamp;
+      if (typeof handleSynchronizedCardUsed === "function") {
+        handleSynchronizedCardUsed(room.activeCardUsed.cardId, room.activeCardUsed.usedBy, room.activeCardUsed.contestantName);
       }
     }
 
@@ -2609,10 +2626,12 @@ function renderSupervisorDashboard() {
   const tabQuizzesBtn = document.querySelector(".nav-tab[data-tab='tabQuizzes']");
   const tabLiveBtn = document.querySelector(".nav-tab[data-tab='tabLive']");
   const tabHonorBoardBtn = document.querySelector(".nav-tab[data-tab='tabHonorBoard']");
+  const tabTacticalCardsBtn = document.querySelector(".nav-tab[data-tab='tabTacticalCards']");
   const quickActionsBar = document.querySelector(".quick-actions-bar");
 
-  // تبويب لوحة الشرف متاح دائماً ومرئي للجميع
+  // تبويب لوحة الشرف وقسم البطاقات التكتيكية متاح دائماً ومرئي للجميع
   if (tabHonorBoardBtn) tabHonorBoardBtn.style.display = "inline-flex";
+  if (tabTacticalCardsBtn) tabTacticalCardsBtn.style.display = "inline-flex";
 
   if (isPresenterRole) {
     // العارض: يرى فقط شاشات العرض والمسابقات الحية ولوحة الشرف
@@ -2695,6 +2714,9 @@ function renderSupervisorDashboard() {
 
   // 7. لوحة الشرف
   renderHonorLeaderboardTab();
+
+  // 8. قسم البطاقات التكتيكية الكامل
+  try { renderSupervisorCardsCatalog(); } catch (e) {}
 }
 
 // --------------------------------------------------------
@@ -6056,6 +6078,9 @@ function enterPhaseStage() {
   if (stageStudentGrade) stageStudentGrade.innerHTML = `<i class="fa-solid fa-layer-group"></i> ${currentContestant.grade || '--'}`;
   if (stageStudentScore) stageStudentScore.textContent = String(contestantScore);
 
+  // تحديث محفظة البطاقات للمتسابق الحالي فور دخول المسرح
+  updateContestantWalletUI(room.contestantWallet || []);
+
   loadStageQuestion(currentQuestionIndex);
 }
 
@@ -6249,23 +6274,15 @@ function loadStageQuestion(idx) {
   // الانتقال للسؤال التالي مع عرض كرت نتيجة الإجابة أولاً ثم خروج السؤال ثم لوحة الشرف
   function advanceToNext(scoreDelta = 0, isPenalty = false, isCorrect = true, chosenChoiceIdx = null, isTimeout = false) {
     clearInterval(liveTimerInterval);
+    liveTimerInterval = null;
+    lastTimerConfigKey = "";
     addContestantScore(scoreDelta);
 
     const nextIdx = idx + 1;
     const isFinished = nextIdx >= allQuestions.length;
-    const qDuration = currentLiveRoom?.questionTimer || 30;
-    const now = Date.now();
-    const nextTimerState = isFinished ? null : {
-      questionIdx: nextIdx,
-      duration: qDuration,
-      startedAt: now,
-      endsAt: now + (qDuration * 1000),
-      isFrozen: false,
-      noTimeLimit: false,
-      updatedAt: now
-    };
 
-    // بث نتيجة الإجابة سحابياً للغرفة الحية وتحديث رقم السؤال والنقاط والمؤقت فوراً للجميع
+    // بث نتيجة الإجابة سحابياً للغرفة الحية وتحديث رقم السؤال والنقاط فوراً للجميع
+    // ملاحظة حاسمة: لا نبدأ مؤقت السؤال القادم هنا إطلاقاً حتى لا يُحسب وقت لوحة الشرف أو اختيار البطاقات من وقت السؤال!
     if (currentLiveRoom) {
       const answerPayload = {
         questionIdx: idx,
@@ -6281,9 +6298,8 @@ function loadStageQuestion(idx) {
       currentLiveRoom.lastAnswerEvent = answerPayload;
       currentLiveRoom.contestantScore = contestantScore;
       currentLiveRoom.currentQuestionIdx = nextIdx;
-      if (nextTimerState) {
-        currentLiveRoom.timerState = nextTimerState;
-      }
+      currentLiveRoom.timerState = null; // إيقاف العداد كلياً أثناء الانتقال والبطاقات
+
       if (currentLiveRoom.id) {
         try {
           const roomRef = doc(db, "live_rooms", currentLiveRoom.id);
@@ -6291,11 +6307,9 @@ function loadStageQuestion(idx) {
             lastAnswerEvent: answerPayload,
             contestantScore: contestantScore,
             currentQuestionIdx: nextIdx,
+            timerState: null,
             lastUpdated: serverTimestamp()
           };
-          if (nextTimerState) {
-            updatePayload.timerState = nextTimerState;
-          }
           updateDoc(roomRef, updatePayload).catch(err => console.warn("Sync lastAnswerEvent notice:", err));
         } catch (e) {}
       }
@@ -7389,6 +7403,16 @@ function renderStudentPickerList() {
         stageStudentGrade.innerHTML = `<i class="fa-solid fa-layer-group"></i> ${found.grade || '--'}`;
         contestantScore = 0;
         stageStudentScore.textContent = "0";
+        if (currentLiveRoom) {
+          currentLiveRoom.contestantWallet = [];
+          if (currentLiveRoom.id) {
+            updateDoc(doc(db, "live_rooms", currentLiveRoom.id), {
+              contestantWallet: [],
+              lastUpdated: serverTimestamp()
+            }).catch(() => {});
+          }
+        }
+        updateContestantWalletUI([]);
         pickStudentModal.classList.add("hidden");
         loadStageQuestion(0);
         showToast(`تم تعيين المتسابق: ${found.name}`);
@@ -7416,6 +7440,7 @@ btnNextStudentCycle?.addEventListener("click", () => {
 
 // --------------------------------------------------------
 // نظام البطاقات التكتيكية الثلاثي الأبعاد الموحد والمتزامن لجميع المشاركين
+// + محفظة البطاقات للمتسابق + قسم البطاقات عند المشرف
 // --------------------------------------------------------
 const tacticalCardsModal = document.getElementById("tacticalCardsModal");
 const cards3DRow = document.getElementById("cards3DRow");
@@ -7425,12 +7450,189 @@ let cardsTimerInterval = null;
 
 let tacticalCardsCallback = null;
 
+// محفظة البطاقات التكتيكية للمتسابق
+const walletTriggerBtn = document.getElementById("contestantCardsWalletTrigger");
+const walletModal = document.getElementById("contestantCardsWalletModal");
+const btnCloseWalletModal = document.getElementById("btnCloseWalletModal");
+const btnDismissWalletModal = document.getElementById("btnDismissWalletModal");
+
+function addCardToContestantWallet(cardId) {
+  if (!currentLiveRoom) return;
+  if (!Array.isArray(currentLiveRoom.contestantWallet)) {
+    currentLiveRoom.contestantWallet = [];
+  }
+  currentLiveRoom.contestantWallet.push(cardId);
+  updateContestantWalletUI();
+}
+
+function updateContestantWalletUI(wallet = null) {
+  const list = wallet !== null ? wallet : (currentLiveRoom?.contestantWallet || []);
+  const badgeEl = document.getElementById("walletBadgeCount");
+  const triggerEl = document.getElementById("contestantCardsWalletTrigger");
+
+  const count = Array.isArray(list) ? list.length : 0;
+  if (badgeEl) badgeEl.textContent = String(count);
+
+  if (triggerEl) {
+    const inArena = views.liveArena && !views.liveArena.classList.contains("hidden");
+    const inStage = document.getElementById("arenaStage") && !document.getElementById("arenaStage").classList.contains("hidden");
+    if (inArena && inStage) {
+      triggerEl.classList.remove("hidden");
+      if (count > 0) {
+        triggerEl.classList.add("has-cards");
+      } else {
+        triggerEl.classList.remove("has-cards");
+      }
+    } else {
+      triggerEl.classList.add("hidden");
+    }
+  }
+
+  // إذا كان مودال المحفظة معروضاً، إعادة بنائه
+  if (walletModal && !walletModal.classList.contains("hidden")) {
+    renderContestantWalletCards();
+  }
+}
+
+function renderContestantWalletCards() {
+  const container = document.getElementById("walletCardsList");
+  if (!container) return;
+  const walletIds = Array.isArray(currentLiveRoom?.contestantWallet) ? currentLiveRoom.contestantWallet : [];
+  const cards = walletIds.map(id => TACTICAL_CARDS.find(c => String(c.id) === String(id))).filter(Boolean);
+
+  const subtitleEl = document.getElementById("walletModalSubtitle");
+  if (subtitleEl) {
+    const studentName = currentContestant?.name || currentLiveRoom?.contestantName || "المتسابق";
+    subtitleEl.textContent = `المتسابق: ${studentName} — لديك (${cards.length}) بطاقة تكتيكية جاهزة للاستخدام في أي سؤال!`;
+  }
+
+  if (cards.length === 0) {
+    container.innerHTML = `
+      <div class="wallet-empty-state">
+        <i class="fa-solid fa-wallet"></i>
+        <h4>محفظة البطاقات فارغة حالياً</h4>
+        <p>تحصل على بطاقات تكتيكية كل 4 أسئلة (أو عند تفعيل المشرف للبطاقات)، وتُحفظ هنا لتستخدمها في أي سؤال تريده بالضغط عليها!</p>
+      </div>
+    `;
+    return;
+  }
+
+  const isAllowedToUse = checkIsSolverAllowed(currentLiveRoom);
+
+  container.innerHTML = cards.map(c => `
+    <div class="wallet-card-item ${c.type}">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div class="wallet-card-icon-bubble">
+          <i class="fa-solid ${c.icon}"></i>
+        </div>
+        <span class="wallet-card-tag">${c.type === 'buff' ? 'ميزة إيجابية 🌟' : 'مخاطرة ذكية ⚡'}</span>
+      </div>
+      <h4 class="wallet-card-title">${c.title}</h4>
+      <p class="wallet-card-desc">${c.desc}</p>
+      <button class="btn-use-card" data-card-id="${c.id}" ${!isAllowedToUse ? 'disabled style="opacity:0.6;cursor:not-allowed;"' : ''}>
+        <i class="fa-solid fa-bolt"></i> ${isAllowedToUse ? 'استخدم هذه البطاقة الآن ⚡' : 'المتسابق/المشرف مخوّل بالاستخدام'}
+      </button>
+    </div>
+  `).join("");
+
+  container.querySelectorAll(".btn-use-card").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const cardId = parseInt(btn.getAttribute("data-card-id"));
+      useCardFromWallet(cardId);
+    });
+  });
+}
+
+function useCardFromWallet(cardId) {
+  if (!currentLiveRoom || !currentLiveRoom.id) {
+    showToast("لا توجد غرفة مسابقة حية نشطة حالياً", "fa-circle-exclamation");
+    return;
+  }
+  if (!checkIsSolverAllowed(currentLiveRoom)) {
+    showToast("المتسابق أو المشرف هو المخوّل باستخدام البطاقة", "fa-lock");
+    return;
+  }
+  const card = TACTICAL_CARDS.find(c => String(c.id) === String(cardId));
+  if (!card) return;
+
+  // إغلاق مودال المحفظة فوراً
+  walletModal?.classList.add("hidden");
+
+  // حذف البطاقة من المحفظة محلياً وسحابياً
+  const wallet = Array.isArray(currentLiveRoom.contestantWallet) ? [...currentLiveRoom.contestantWallet] : [];
+  const idx = wallet.indexOf(cardId);
+  if (idx > -1) wallet.splice(idx, 1);
+  currentLiveRoom.contestantWallet = wallet;
+  updateContestantWalletUI(wallet);
+
+  const contestantName = currentContestant?.name || currentLiveRoom.contestantName || "المتسابق";
+  const usedByName = currentUser?.name || contestantName;
+
+  // بث تفعيل البطاقة فوراً لجميع المشاركين في الغرفة
+  updateDoc(doc(db, "live_rooms", currentLiveRoom.id), {
+    activeCardUsed: {
+      cardId: card.id,
+      usedBy: usedByName,
+      contestantName: contestantName,
+      timestamp: Date.now()
+    },
+    contestantWallet: wallet,
+    lastUpdated: serverTimestamp()
+  }).catch(err => console.warn("Broadcast card used notice:", err));
+
+  // تشغيل الأنيميشن المتزامن وتطبيق الأثر على السؤال الحالي
+  playCardAnnouncementOverlay(card, usedByName);
+  executeCardEffect(card, null);
+}
+
+function playCardAnnouncementOverlay(card, usedByName) {
+  const overlay = document.getElementById("activeCardAnnouncementOverlay");
+  const iconEl = document.getElementById("announcementCardIcon");
+  const titleEl = document.getElementById("announcementCardTitle");
+  const userEl = document.getElementById("announcementUserName");
+  const descEl = document.getElementById("announcementCardDesc");
+  if (!overlay) return;
+
+  if (iconEl) iconEl.innerHTML = `<i class="fa-solid ${card.icon || 'fa-bolt'}"></i>`;
+  if (titleEl) titleEl.textContent = card.title;
+  if (userEl) userEl.textContent = usedByName || "المتسابق";
+  if (descEl) descEl.textContent = card.desc;
+
+  overlay.classList.remove("hidden");
+  try { soundFX.fanfare(); } catch (e) { try { soundFX.correct(); } catch(err){} }
+
+  setTimeout(() => {
+    overlay.classList.add("hidden");
+  }, 2500);
+}
+
+function handleSynchronizedCardUsed(cardId, usedBy, contestantName) {
+  const card = TACTICAL_CARDS.find(c => String(c.id) === String(cardId));
+  if (!card) return;
+
+  if (currentLiveRoom && Array.isArray(currentLiveRoom.contestantWallet)) {
+    const idx = currentLiveRoom.contestantWallet.indexOf(cardId);
+    if (idx > -1) currentLiveRoom.contestantWallet.splice(idx, 1);
+    updateContestantWalletUI(currentLiveRoom.contestantWallet);
+  }
+
+  playCardAnnouncementOverlay(card, usedBy);
+  executeCardEffect(card, null);
+}
+
 function triggerTacticalCardsModal(onComplete = null, nextQuestionIdx = null) {
   if (!tacticalCardsModal || !cards3DRow) {
     if (typeof onComplete === 'function') onComplete();
     return;
   }
   tacticalCardsCallback = typeof onComplete === 'function' ? onComplete : null;
+
+  // إيقاف مؤقت السؤال تماماً أثناء طور البطاقات
+  if (liveTimerInterval) {
+    clearInterval(liveTimerInterval);
+    liveTimerInterval = null;
+    lastTimerConfigKey = "";
+  }
 
   // اختيار 3 بطاقات عشوائية فريدة من بنك الـ 40 بطاقة في cards-data.js
   const selected3 = getRandomTacticalCards(3);
@@ -7455,6 +7657,14 @@ function triggerTacticalCardsModal(onComplete = null, nextQuestionIdx = null) {
 
 function showSynchronizedTacticalCardsModal(cardIds, nextIdx = null) {
   if (!tacticalCardsModal || !cards3DRow) return;
+
+  // إيقاف مؤقت السؤال تماماً عند ظهور البطاقات ليكون وقت البطاقات مستقلاً تماماً
+  if (liveTimerInterval) {
+    clearInterval(liveTimerInterval);
+    liveTimerInterval = null;
+    lastTimerConfigKey = "";
+  }
+
   const ids = Array.isArray(cardIds) ? cardIds : [];
   let selected3 = ids
     .map(id => TACTICAL_CARDS.find(c => String(c.id) === String(id)))
@@ -7512,7 +7722,7 @@ function showSynchronizedTacticalCardsModal(cardIds, nextIdx = null) {
     });
   });
 
-  // مؤقت الـ 15 ثانية للبطاقات
+  // مؤقت الـ 15 ثانية الخاص بالبطاقات فقط (مستقل تماماً عن وقت الأسئلة)
   let cardsTimeLeft = 15;
   if (cardsCountdownTimer) cardsCountdownTimer.textContent = cardsTimeLeft;
   clearInterval(cardsTimerInterval);
@@ -7536,8 +7746,13 @@ function applySynchronizedChosenCard(cardIdOrObj, chosenBy, nextIdx = null) {
   if (!card) return;
   clearInterval(cardsTimerInterval);
   tacticalCardsModal?.classList.add("hidden");
-  showToast(`✨ تم اختيار بطاقة: «${card.title}» من قبل (${chosenBy || 'المتسابق'})!`, card.icon || "fa-bolt", 3500);
-  executeCardEffect(card, nextIdx);
+
+  // إضافة البطاقة لمحفظة المتسابق
+  addCardToContestantWallet(card.id);
+  showToast(`🎉 حصل المتسابق (${chosenBy || 'المتسابق'}) على بطاقة «${card.title}» وأُضيفت للمحفظة! 🃏`, card.icon || "fa-bolt", 4000);
+
+  const targetNextIdx = nextIdx !== null ? nextIdx : (currentLiveRoom?.currentQuestionIdx || 0);
+  loadStageQuestion(targetNextIdx);
 }
 
 btnTriggerTacticalCards?.addEventListener("click", () => {
@@ -7550,6 +7765,9 @@ function chooseCard(card, broadcast = true, nextIdx = null) {
 
   const targetNextIdx = nextIdx !== null ? nextIdx : (currentLiveRoom?.activeCardsTurn?.nextIdx ?? (currentLiveRoom?.currentQuestionIdx || 0));
 
+  // إضافة البطاقة لمحفظة المتسابق بدلاً من تفعيلها فوراً
+  addCardToContestantWallet(card.id);
+
   if (broadcast && currentLiveRoom?.id) {
     updateDoc(doc(db, "live_rooms", currentLiveRoom.id), {
       activeCardsTurn: {
@@ -7559,12 +7777,46 @@ function chooseCard(card, broadcast = true, nextIdx = null) {
         timestamp: Date.now(),
         nextIdx: targetNextIdx
       },
+      contestantWallet: arrayUnion(card.id),
       currentQuestionIdx: targetNextIdx,
       lastUpdated: serverTimestamp()
     }).catch(err => console.warn("Broadcast chosen card notice:", err));
   }
 
-  executeCardEffect(card, targetNextIdx);
+  showToast(`🎉 تم الحصول على بطاقة «${card.title}» وحفظها في محفظة بطاقاتك! 🃏 (يمكنك استخدامها في أي سؤال من زر المحفظة على اليمين)`, card.icon || "fa-bolt", 4500);
+  try { soundFX.correct(); } catch (e) {}
+
+  if (tacticalCardsCallback) {
+    const cb = tacticalCardsCallback;
+    tacticalCardsCallback = null;
+    cb();
+  } else {
+    loadStageQuestion(targetNextIdx);
+  }
+}
+
+function eliminateMCQWrongOptionsImmediately(count = 2) {
+  const allQ = (currentLiveRoom?.drawnQuestions && currentLiveRoom.drawnQuestions.length > 0)
+    ? currentLiveRoom.drawnQuestions
+    : (currentQuizData?.sections?.flatMap(s => s.questions || []) || []);
+  const curQ = allQ[currentQuestionIndex] || {};
+  if (curQ.type === "mcq" && curQ.options) {
+    const correctIdx = curQ.correct;
+    const choiceBtns = stageInteractiveArea.querySelectorAll(".btn-choice-duo:not([disabled])");
+    let eliminated = 0;
+    for (let i = choiceBtns.length - 1; i >= 0; i--) {
+      const btn = choiceBtns[i];
+      const cIdx = parseInt(btn.getAttribute("data-choice"));
+      if (cIdx !== correctIdx && eliminated < count) {
+        btn.disabled = true;
+        btn.style.opacity = "0.25";
+        btn.style.textDecoration = "line-through";
+        btn.style.pointerEvents = "none";
+        btn.innerHTML = `<i class="fa-solid fa-ban" style="color:#ef4444;margin-left:6px;"></i> ${btn.textContent}`;
+        eliminated++;
+      }
+    }
+  }
 }
 
 function executeCardEffect(card, targetNextIdx = null) {
@@ -7572,7 +7824,7 @@ function executeCardEffect(card, targetNextIdx = null) {
 
   // ── تأثيرات فورية وتوليد الشارة العائمة المبهجة ──
 
-  // بطاقة اختيار وتخطي السؤال (سهم الانطلاق والتخطي أو اختيار السؤال للتخطي مع نصف النقاط / 3 نقاط)
+  // بطاقة اختيار وتخطي السؤال
   if (eff.skipRemainingQuestion || card.id === 21 || card.id === 29) {
     showFloatingCardPill("تخطي سؤال قادم +3 نقاط ⏭️", "fa-forward-fast", "gold");
     openPreSkipQuestionModal();
@@ -7581,16 +7833,15 @@ function executeCardEffect(card, targetNextIdx = null) {
     return;
   }
 
-  // 1. تجميد الوقت: إيقاف العداد لـ N ثانية ثم إعادة تشغيله
-  // 1. تجميد الوقت: إيقاف العداد لـ N ثانية ثم إعادة تشغيله
+  // 1. تجميد الوقت
   if (eff.freezeTime) {
     showFloatingCardPill(`تجميد المؤقت ${eff.freezeTime}ث ❄️`, "fa-snowflake", "blue");
     showToast(`❄️ تجميد الوقت: العداد متوقف لـ ${eff.freezeTime} ثانية!`, "fa-snowflake", 3000);
     broadcastTimerModification({ freezeSeconds: eff.freezeTime });
-    activeCardEffect = card; // تُحفظ لتُطبَّق على السؤال القادم
+    activeCardEffect = card;
   }
 
-  // 2. إضافة/إنقاص وقت: تعديل الوقت المتبقي مباشرة مع شارة عائمة
+  // 2. إضافة/إنقاص وقت
   else if (eff.timeDelta && eff.timeDelta !== 0) {
     const sign = eff.timeDelta > 0 ? "+" : "";
     showFloatingCardPill(`${sign}${eff.timeDelta} ثانية ⏱️`, eff.timeDelta > 0 ? "fa-hourglass-start" : "fa-bolt", eff.timeDelta > 0 ? "green" : "red");
@@ -7599,7 +7850,7 @@ function executeCardEffect(card, targetNextIdx = null) {
     activeCardEffect = card;
   }
 
-  // 3. تخطي السؤال: الانتقال مباشرة بدون درجات/خصم
+  // 3. تخطي السؤال بأمان
   else if (eff.passQuestion) {
     showFloatingCardPill("تخطي السؤال بأمان ⏭️", "fa-forward", "blue");
     showToast("⏭️ تخطي السؤال: انتقال بدون درجات!", "fa-forward", 2500);
@@ -7658,7 +7909,7 @@ function executeCardEffect(card, targetNextIdx = null) {
     activeCardEffect = card;
   }
 
-  // 8. استشارة المعلم أو مساعدة الزميل: اختيار معلم عشوائياً وتنبيهه
+  // 8. استشارة المعلم أو مساعدة الزميل
   else if (eff.teacherHelp || eff.peerHelp || eff.adaptiveQuestion) {
     broadcastTimerModification({ deltaSeconds: 15 });
 
@@ -7718,7 +7969,7 @@ function executeCardEffect(card, targetNextIdx = null) {
     showToast(`⏱️ التأني والسلامة: +${eff.totalBankTime} ثانية إضافية للوقت!`, "fa-clock-rotate-left", 3000);
   }
 
-  // 11. تعزيز مركز الشرف (+5 نقاط فورية في لوحة الشرف)
+  // 11. تعزيز مركز الشرف
   else if (eff.rankBoost) {
     if (currentContestant) {
       recordHonorScore(currentContestant.name, 5);
@@ -7727,12 +7978,17 @@ function executeCardEffect(card, targetNextIdx = null) {
     }
   }
 
-  // 12. باقي التأثيرات المؤجلة: الشارات العائمة حسب النوع
+  // 12. حذف خيارات MCQ فورياً
+  else if (eff.eliminateOptions) {
+    showFloatingCardPill(`حذف خيارات خاطئة 🎯`, "fa-filter", "blue");
+    activeCardEffect = card;
+    eliminateMCQWrongOptionsImmediately(eff.eliminateOptions);
+  }
+
+  // 13. باقي التأثيرات
   else {
     activeCardEffect = card;
-    if (eff.eliminateOptions) {
-      showFloatingCardPill(`حذف خيارات خاطئة 🎯`, "fa-filter", "blue");
-    } else if (eff.doublePoints) {
+    if (eff.doublePoints) {
       showFloatingCardPill(`مضاعفة النقاط x2 ⭐`, "fa-angles-up", "gold");
     } else if (eff.immunity) {
       showFloatingCardPill(`درع الحماية مفعّل 🛡️`, "fa-shield-halved", "blue");
@@ -7746,6 +8002,7 @@ function executeCardEffect(card, targetNextIdx = null) {
       showFloatingCardPill(`رخصة التيسير والتجاوز ✨`, "fa-heart", "green");
     } else if (eff.zoomScript) {
       showFloatingCardPill(`تكبير الخط القرآني 🔍`, "fa-magnifying-glass-plus", "blue");
+      if (stageQuestionText) stageQuestionText.style.fontSize = "34px";
     } else if (eff.lockTwoItems) {
       showFloatingCardPill(`حصانة تثبيت عنصرين 🔒`, "fa-lock", "gold");
     } else if (eff.autoMatchOne) {
@@ -7765,8 +8022,6 @@ function executeCardEffect(card, targetNextIdx = null) {
     cb();
   } else if (targetNextIdx !== null && targetNextIdx !== undefined) {
     loadStageQuestion(targetNextIdx);
-  } else if (currentLiveRoom && currentLiveRoom.phase === "competing") {
-    loadStageQuestion(currentLiveRoom.currentQuestionIdx || 0);
   }
 }
 
@@ -7807,6 +8062,211 @@ btnSkipCards?.addEventListener("click", () => {
   } else {
     showToast("المتسابق أو المشرف هو المخوّل بتخطي البطاقات", "fa-lock");
   }
+});
+
+// أحداث محفظة البطاقات التكتيكية
+walletTriggerBtn?.addEventListener("click", () => {
+  renderContestantWalletCards();
+  walletModal?.classList.remove("hidden");
+});
+
+btnCloseWalletModal?.addEventListener("click", () => {
+  walletModal?.classList.add("hidden");
+});
+
+btnDismissWalletModal?.addEventListener("click", () => {
+  walletModal?.classList.add("hidden");
+});
+
+// ========================================================
+// قسم البطاقات التكتيكية الكامل عند المشرف (دليل الـ 40 بطاقة)
+// ========================================================
+function getCardMechanicsExplanation(card) {
+  const eff = card.effect || {};
+  if (eff.eliminateOptions) {
+    return "حذف خيارين خاطئين: عند استخدامها في سؤال اختيار من متعدد، يقوم النظام فوراً بحذف خيارين غير صحيحين وشطبهما، ليتبقى للمتسابق خياران فقط أحدهما هو الإجابة الصحيحة بنسبة صواب 50%!";
+  }
+  if (eff.freezeTime) {
+    return "تجميد الوقت: يوقف عداد السؤال تماماً لمدة 10 ثوانٍ، مانحاً المتسابق فرصة ذهبية للتفكير والقراءة بتركيز دون أن ينقص الوقت ثانية واحدة!";
+  }
+  if (eff.timeDelta && eff.timeDelta > 0) {
+    return `زيادة الوقت (+${eff.timeDelta}ث): يضيف ثوانٍ إضافية فورية لعداد السؤال الحالي، مما يتيح التروي والتأكد من مخرج الحرف أو الحكم.`;
+  }
+  if (eff.timeDelta && eff.timeDelta < 0) {
+    return `مخاطرة السرعة: ينقص ${Math.abs(eff.timeDelta)} ثوانٍ من المؤقت ولكنه يمنح بونص +${eff.pointsBonus||2} درجات إضافية عند الصواب!`;
+  }
+  if (eff.penaltyOnWrong) {
+    return "المخاطرة الكبرى: إجابة صحيحة تمنح الدرجة كاملة، لكن أي خطأ يخصم 3 درجات من رصيد المتسابق.";
+  }
+  if (eff.immunity) {
+    return "درع الأمان (الحصانة): يحمي المتسابق حماية كاملة من أي خصم درجات في حال أخطأ أو انتهى الوقت في السؤال الحالي.";
+  }
+  if (eff.teacherHelp || eff.peerHelp) {
+    return "استشارة المعلم: يفتح نافذة توجيه لمعلم أو مشرف حاضر في الغرفة لإعطاء نصيحة وتوجيه توضيحي، مع تمديد العداد بـ +15 ثانية إضافية.";
+  }
+  if (eff.doublePoints) {
+    return "السؤال الذهبي: يضاعف درجات السؤال الحالي مرتين (10 درجات بدلاً من 5) فور الإجابة الصحيحة والمتقنة!";
+  }
+  if (eff.swapQuestion) {
+    return "استبدال السؤال: يسحب سؤالاً بديلاً من بنك الأسئلة فوراً ويستبدل به السؤال الحالي المعروض على المسرح.";
+  }
+  if (eff.oralBonus) {
+    return "نجمة التلاوة: تضيف +1 درجة فورية إضافية فوق تقييم المعلمين الشفهي للسؤال الحالي.";
+  }
+  if (eff.hint || eff.showRuleHint) {
+    return "عين الصواب ونور البيان: يظهر شريطاً إرشادياً ذكياً يوضح حكم التجويد أو مخرج الحرف المتصل بالسؤال قبل الإجابة.";
+  }
+  if (eff.halfTime) {
+    return "تحدي الأبطال: ينصف وقت السؤال لكن الإجابة الصحيحة تمنح +3 نقاط إضافية على الفور.";
+  }
+  if (eff.secondChance) {
+    return "فرصة ثانية: إذا أخطأ الطالب في الإجابة، يُعطى فرصة ثانية فورية دون تسجيل خطأ أو خصم!";
+  }
+  if (eff.lockTwoItems) {
+    return "حصانة الترتيب: في أسئلة الترتيب، يثبت أول عنصرين في موقعهما الصحيح تلقائياً.";
+  }
+  if (eff.autoMatchOne) {
+    return "توصيل الحكمة: في أسئلة التوصيل والمطابقة، يربط زوجين متطابقين صحيحين تلقائياً.";
+  }
+  if (eff.passQuestion) {
+    return "تخطي السؤال بأمان: يسمح بتجاوز السؤال الصعب دون أي خسارة درجات والانتقال للسؤال التالي.";
+  }
+  if (eff.noTimeLimit) {
+    return "صوت الواثق: يلغي المؤقت تماماً للسؤال الحالي، فيقرأ الطالب بارتياح تام دون ضغط زمني.";
+  }
+  if (eff.bonus7Points) {
+    return "قلب الموازين: يمنح +7 درجات ذهبية فورية تضاف مباشرة لمجموع نقاط المتسابق.";
+  }
+  if (eff.totalBankTime) {
+    return `رصيد بنكي إضافي: يمنح +${eff.totalBankTime} ثانية إضافية للوقت فوراً.`;
+  }
+  if (eff.rankBoost) {
+    return "مضاعف الشرف: يضيف +5 نقاط فورية في لوحة الشرف التراكمية للمتسابق.";
+  }
+  if (eff.forgivingTajweed) {
+    return "حزام الأمان التجويدي: يتسامح مع خطأ تجويدي واحد ولا يحتسب خصماً عليه.";
+  }
+  if (eff.speedBonusUnder5s) {
+    return "مكافأة السرعة: يمنح +3 نقاط فورية إذا أجاب المتسابق في أقل من 5 ثوانٍ.";
+  }
+  if (eff.zoomScript) {
+    return "تكبير الخط القرآني: يكبّر حجم الآية والكلمة بنسبة 150% لإتاحة رؤية واضحة ومريحة.";
+  }
+  if (eff.resetQuestionTimer) {
+    return "إعادة شحن المؤقت: يعيد ضبط عداد السؤال من بدايته (30 ثانية) إذا كاد الوقت ينفد.";
+  }
+  if (eff.honorBadge) {
+    return "وسام الشرف: يضيف +1 نقطة شرف فورية لرصيد المتسابق النهائي.";
+  }
+  return "ميزة تكتيكية تفاعلية تؤثر بشكل إيجابي ومباشر على مجريات المسابقة ونقاط المتسابق.";
+}
+
+function renderSupervisorCardsCatalog(activeFilter = "all", searchQuery = "") {
+  const grid = document.getElementById("cardsCatalogGrid");
+  if (!grid) return;
+
+  const query = (searchQuery || "").trim().toLowerCase();
+
+  const filtered = TACTICAL_CARDS.filter(card => {
+    // فلتر الفئة
+    if (activeFilter === "buff" && card.type !== "buff") return false;
+    if (activeFilter === "risk" && card.type !== "risk") return false;
+    if (activeFilter === "timer" && !(card.effect?.timeDelta || card.effect?.freezeTime || card.effect?.resetQuestionTimer || card.effect?.noTimeLimit || card.effect?.totalBankTime || card.effect?.halfTime)) return false;
+    if (activeFilter === "score" && !(card.effect?.pointsBonus || card.effect?.doublePoints || card.effect?.bonus7Points || card.effect?.rankBoost || card.effect?.honorBadge || card.effect?.oralBonus)) return false;
+    if (activeFilter === "help" && !(card.effect?.teacherHelp || card.effect?.peerHelp || card.effect?.hint || card.effect?.showRuleHint || card.effect?.secondChance || card.effect?.eliminateOptions)) return false;
+
+    // بحث النص
+    if (query) {
+      const matchTitle = (card.title || "").toLowerCase().includes(query);
+      const matchDesc = (card.desc || "").toLowerCase().includes(query);
+      const matchId = String(card.id) === query;
+      return matchTitle || matchDesc || matchId;
+    }
+    return true;
+  });
+
+  if (filtered.length === 0) {
+    grid.innerHTML = `
+      <div style="grid-column: 1 / -1; text-align: center; padding: 40px; color: #64748b;">
+        <i class="fa-solid fa-search" style="font-size: 38px; color: #cbd5e1; margin-bottom: 12px;"></i>
+        <h4>لا توجد بطاقات تطابق البحث أو الفلتر المحدد</h4>
+        <p>جرب كتابة اسم مختلف أو اختر فلتر «الكل (40)» لعرض كافة البطاقات.</p>
+      </div>
+    `;
+    return;
+  }
+
+  const hasLiveRoom = !!(currentLiveRoom && currentLiveRoom.id && (currentContestant || currentLiveRoom.contestantName));
+
+  grid.innerHTML = filtered.map(card => {
+    const mechanicsText = getCardMechanicsExplanation(card);
+    return `
+      <div class="catalog-card-item ${card.type}">
+        <div>
+          <div class="catalog-card-top-row">
+            <span class="catalog-card-id-pill">#${card.id}</span>
+            <div class="catalog-card-icon-box">
+              <i class="fa-solid ${card.icon}"></i>
+            </div>
+            <span class="wallet-card-tag">${card.type === 'buff' ? 'ميزة إيجابية 🌟' : 'مخاطرة ذكية ⚡'}</span>
+          </div>
+
+          <h3 class="catalog-card-title">${card.title}</h3>
+          <p class="catalog-card-desc">${card.desc}</p>
+
+          <div class="catalog-card-mechanics-box">
+            <div class="catalog-card-mechanics-title">
+              <i class="fa-solid fa-circle-info" style="color:#6d28d9;"></i>
+              <span>ماذا تفعل هذه البطاقة بالتفصيل؟</span>
+            </div>
+            <p class="catalog-card-mechanics-text">${mechanicsText}</p>
+          </div>
+        </div>
+
+        <button class="catalog-card-grant-btn" data-card-id="${card.id}" ${!hasLiveRoom ? 'disabled title="يتطلب وجود غرفة حية مع متسابق نشط لمنح البطاقة"' : ''}>
+          <i class="fa-solid fa-gift"></i> ${hasLiveRoom ? 'منح البطاقة لمحفظة المتسابق الحالي 🎁' : 'منح للمتسابق (يلزم غرفة نشطة)'}
+        </button>
+      </div>
+    `;
+  }).join("");
+
+  // أحداث زر المنح السريع للمشرف
+  grid.querySelectorAll(".catalog-card-grant-btn:not([disabled])").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const cId = parseInt(btn.getAttribute("data-card-id"));
+      const targetCard = TACTICAL_CARDS.find(c => c.id === cId);
+      if (!targetCard) return;
+
+      if (!currentLiveRoom || !currentLiveRoom.id) {
+        showToast("يرجى فتح غرفة مسابقة حية أولاً لمنح البطاقة للمتسابق", "fa-info-circle");
+        return;
+      }
+
+      addCardToContestantWallet(targetCard.id);
+      updateDoc(doc(db, "live_rooms", currentLiveRoom.id), {
+        contestantWallet: arrayUnion(targetCard.id),
+        lastUpdated: serverTimestamp()
+      }).catch(err => console.warn("Grant card error:", err));
+
+      showToast(`🎁 قام المشرف بمنح بطاقة «${targetCard.title}» لمحفظة المتسابق!`, targetCard.icon, 3500);
+    });
+  });
+}
+
+// أحداث فلاتر وبحث قسم البطاقات عند المشرف
+let currentCatalogFilter = "all";
+document.querySelectorAll(".catalog-filters-row .filter-pill-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".catalog-filters-row .filter-pill-btn").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    currentCatalogFilter = btn.getAttribute("data-filter") || "all";
+    const searchVal = document.getElementById("catalogCardSearchInput")?.value || "";
+    renderSupervisorCardsCatalog(currentCatalogFilter, searchVal);
+  });
+});
+
+document.getElementById("catalogCardSearchInput")?.addEventListener("input", (e) => {
+  renderSupervisorCardsCatalog(currentCatalogFilter, e.target.value);
 });
 
 // --------------------------------------------------------

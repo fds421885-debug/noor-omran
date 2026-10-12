@@ -7009,6 +7009,677 @@ button:disabled .fa-spin,
   }
 }
 
+/* ========================================================
+   خانة محفظة البطاقات التكتيكية على اليمين + الإشعار الأحمر
+   ======================================================== */
+.contestant-cards-wallet-trigger {
+  position: fixed;
+  right: 18px;
+  top: 52%;
+  transform: translateY(-50%);
+  z-index: 1050;
+  width: 98px;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  display: block;
+}
+
+.contestant-cards-wallet-trigger.hidden {
+  display: none !important;
+}
+
+.contestant-cards-wallet-trigger .wallet-card-inner {
+  position: relative;
+  background: linear-gradient(145deg, #1e1b4b 0%, #312e81 50%, #4338ca 100%);
+  border: 2.5px solid #facc15;
+  border-radius: 16px;
+  padding: 14px 8px 12px;
+  text-align: center;
+  box-shadow: 0 10px 25px rgba(30, 27, 75, 0.4), 0 0 16px rgba(250, 204, 21, 0.35);
+  color: #ffffff;
+  transition: all 0.25s ease;
+  overflow: hidden;
+}
+
+.contestant-cards-wallet-trigger .wallet-card-inner::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle, rgba(250, 204, 21, 0.2) 0%, transparent 65%);
+  pointer-events: none;
+}
+
+.contestant-cards-wallet-trigger:hover {
+  transform: translateY(-50%) scale(1.08);
+}
+
+.contestant-cards-wallet-trigger:hover .wallet-card-inner {
+  border-color: #fef08a;
+  box-shadow: 0 14px 32px rgba(30, 27, 75, 0.5), 0 0 28px rgba(250, 204, 21, 0.6);
+}
+
+/* إشعار أحمر مكتوب عليه باللون الأبيض عدد البطاقات */
+.contestant-cards-wallet-trigger .wallet-badge-red {
+  position: absolute;
+  top: -8px;
+  right: -6px;
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: #ffffff;
+  font-size: 13.5px;
+  font-weight: 900;
+  min-width: 28px;
+  height: 28px;
+  line-height: 24px;
+  padding: 0 6px;
+  border-radius: 9999px;
+  border: 2.5px solid #ffffff;
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.7);
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.contestant-cards-wallet-trigger.has-cards {
+  animation: walletGlowPulse 2.2s infinite ease-in-out;
+}
+
+.contestant-cards-wallet-trigger.has-cards .wallet-badge-red {
+  animation: badgeBounceAnim 1.8s infinite ease-in-out;
+}
+
+@keyframes walletGlowPulse {
+  0%, 100% {
+    filter: drop-shadow(0 0 4px rgba(250, 204, 21, 0.4));
+  }
+  50% {
+    filter: drop-shadow(0 0 16px rgba(250, 204, 21, 0.9));
+  }
+}
+
+@keyframes badgeBounceAnim {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.22); }
+}
+
+.wallet-card-icon {
+  font-size: 26px;
+  color: #facc15;
+  margin-bottom: 6px;
+  filter: drop-shadow(0 2px 5px rgba(0,0,0,0.4));
+}
+
+.wallet-card-text {
+  font-size: 12px;
+  font-weight: 900;
+  color: #f8fafc;
+  line-height: 1.3;
+  margin-bottom: 4px;
+}
+
+.wallet-card-hint {
+  font-size: 9.5px;
+  font-weight: 700;
+  color: #cbd5e1;
+  opacity: 0.9;
+}
+
+@media (max-width: 768px) {
+  .contestant-cards-wallet-trigger {
+    right: 10px;
+    top: auto;
+    bottom: 24px;
+    transform: none;
+    width: 84px;
+  }
+  .contestant-cards-wallet-trigger:hover {
+    transform: scale(1.05);
+  }
+}
+
+/* ========================================================
+   مودال محفظة البطاقات التكتيكية
+   ======================================================== */
+.wallet-modal-box {
+  max-width: 780px !important;
+  width: 95% !important;
+  border: 3px solid #facc15 !important;
+  background: #ffffff !important;
+  border-radius: 20px !important;
+  overflow: hidden !important;
+  box-shadow: 0 25px 50px -12px rgba(30, 27, 75, 0.35) !important;
+}
+
+.wallet-modal-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 24px;
+  background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
+  color: #ffffff;
+  border-bottom: 2px solid #facc15;
+}
+
+.wallet-header-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: rgba(250, 204, 21, 0.2);
+  border: 2px solid #facc15;
+  color: #facc15;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.wallet-modal-title {
+  font-size: 20px;
+  font-weight: 900;
+  color: #ffffff;
+  margin: 0 0 4px;
+}
+
+.wallet-modal-subtitle {
+  font-size: 13px;
+  color: #cbd5e1;
+  margin: 0;
+}
+
+.wallet-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+  padding: 20px 24px;
+  max-height: 60vh;
+  overflow-y: auto;
+  background: #f8fafc;
+}
+
+.wallet-card-item {
+  background: #ffffff;
+  border: 2px solid var(--border-duo);
+  border-radius: 16px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.wallet-card-item:hover {
+  transform: translateY(-4px);
+  border-color: #facc15;
+  box-shadow: 0 10px 24px rgba(250, 204, 21, 0.2);
+}
+
+.wallet-card-item.buff {
+  border-top: 4px solid #22c55e;
+}
+
+.wallet-card-item.risk {
+  border-top: 4px solid #f97316;
+}
+
+.wallet-card-icon-bubble {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  margin-bottom: 10px;
+}
+
+.wallet-card-item.buff .wallet-card-icon-bubble {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+.wallet-card-item.risk .wallet-card-icon-bubble {
+  background: #ffedd5;
+  color: #ea580c;
+}
+
+.wallet-card-title {
+  font-size: 16px;
+  font-weight: 900;
+  color: #1e293b;
+  margin-bottom: 6px;
+}
+
+.wallet-card-tag {
+  font-size: 11px;
+  font-weight: 800;
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  margin-bottom: 8px;
+}
+
+.wallet-card-item.buff .wallet-card-tag {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.wallet-card-item.risk .wallet-card-tag {
+  background: #ffedd5;
+  color: #c2410c;
+}
+
+.wallet-card-desc {
+  font-size: 13px;
+  color: #475569;
+  line-height: 1.5;
+  margin-bottom: 14px;
+  flex-grow: 1;
+}
+
+.btn-use-card {
+  width: 100%;
+  padding: 10px 14px;
+  font-size: 14px;
+  font-weight: 900;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  background: linear-gradient(135deg, #facc15 0%, #eab308 100%);
+  color: #713f12;
+  box-shadow: 0 4px 10px rgba(234, 179, 8, 0.3);
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.btn-use-card:hover {
+  transform: scale(1.03);
+  box-shadow: 0 6px 16px rgba(234, 179, 8, 0.45);
+  background: linear-gradient(135deg, #fde047 0%, #facc15 100%);
+}
+
+.wallet-empty-state {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 40px 20px;
+  color: #64748b;
+}
+
+.wallet-empty-state i {
+  font-size: 48px;
+  color: #cbd5e1;
+  margin-bottom: 14px;
+}
+
+.wallet-empty-state h4 {
+  font-size: 18px;
+  font-weight: 800;
+  color: #334155;
+  margin-bottom: 6px;
+}
+
+.wallet-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 24px;
+  background: #f1f5f9;
+  border-top: 1.5px solid var(--border-duo);
+  flex-wrap: wrap;
+}
+
+.wallet-footer-tip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #475569;
+  flex: 1;
+}
+
+/* ========================================================
+   غطاء وبنر تفعيل البطاقة المتزامن للجميع
+   ======================================================== */
+.card-announcement-card-box {
+  background: linear-gradient(145deg, #1e1b4b 0%, #312e81 60%, #4338ca 100%);
+  border: 3.5px solid #facc15;
+  border-radius: 24px;
+  padding: 32px 28px;
+  text-align: center;
+  max-width: 500px;
+  width: 90%;
+  color: #ffffff;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.6), 0 0 35px rgba(250, 204, 21, 0.5);
+  animation: cardAnnouncementPop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  position: relative;
+  overflow: hidden;
+}
+
+@keyframes cardAnnouncementPop {
+  0% {
+    opacity: 0;
+    transform: scale(0.6) translateY(40px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.announcement-sparkles-wrap {
+  margin-bottom: 14px;
+}
+
+.announcement-card-icon {
+  width: 72px;
+  height: 72px;
+  margin: 0 auto;
+  border-radius: 20px;
+  background: rgba(250, 204, 21, 0.25);
+  border: 2.5px solid #facc15;
+  color: #facc15;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 36px;
+  box-shadow: 0 0 25px rgba(250, 204, 21, 0.5);
+  animation: iconPulseAnim 2s infinite ease-in-out;
+}
+
+@keyframes iconPulseAnim {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+}
+
+.announcement-card-tag {
+  display: inline-block;
+  background: #facc15;
+  color: #713f12;
+  font-size: 13px;
+  font-weight: 900;
+  padding: 4px 14px;
+  border-radius: 9999px;
+  margin-bottom: 10px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+}
+
+.announcement-card-title {
+  font-size: 24px;
+  font-weight: 900;
+  color: #ffffff;
+  margin: 0 0 10px;
+  text-shadow: 0 2px 10px rgba(0,0,0,0.4);
+}
+
+.announcement-user-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  padding: 6px 14px;
+  border-radius: 9999px;
+  font-size: 13.5px;
+  font-weight: 800;
+  color: #fef08a;
+  margin-bottom: 14px;
+}
+
+.announcement-card-desc {
+  font-size: 15px;
+  color: #e2e8f0;
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* ========================================================
+   قسم البطاقات التكتيكية عند المشرف (Cards Catalog)
+   ======================================================== */
+.cards-catalog-tab-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.cards-catalog-header-card {
+  background: linear-gradient(135deg, #ffffff 0%, #f5f3ff 100%);
+  border: 2px solid #c4b5fd;
+  border-radius: 20px;
+  padding: 24px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  box-shadow: 0 4px 16px rgba(109, 40, 217, 0.06);
+}
+
+.catalog-header-badge {
+  width: 68px;
+  height: 68px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  box-shadow: 0 8px 20px rgba(109, 40, 217, 0.3);
+  flex-shrink: 0;
+}
+
+.catalog-toolbar-box {
+  background: #ffffff;
+  border: 2px solid var(--border-duo);
+  border-radius: 18px;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.catalog-search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.catalog-search-wrap i {
+  position: absolute;
+  right: 14px;
+  color: #94a3b8;
+  font-size: 16px;
+  pointer-events: none;
+}
+
+.catalog-search-wrap input {
+  padding-right: 42px !important;
+  font-size: 14.5px !important;
+  font-weight: 700 !important;
+  border-radius: 12px !important;
+}
+
+.catalog-filters-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.filter-pill-btn {
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 800;
+  border-radius: 9999px;
+  border: 2px solid var(--border-duo);
+  background: #ffffff;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.filter-pill-btn:hover {
+  border-color: #8b5cf6;
+  color: #6d28d9;
+}
+
+.filter-pill-btn.active {
+  background: #6d28d9;
+  border-color: #6d28d9;
+  color: #ffffff;
+  box-shadow: 0 4px 10px rgba(109, 40, 217, 0.25);
+}
+
+.cards-catalog-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 18px;
+}
+
+.catalog-card-item {
+  background: #ffffff;
+  border: 2px solid var(--border-duo);
+  border-radius: 18px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.04);
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.catalog-card-item:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.08);
+}
+
+.catalog-card-item.buff {
+  border-top: 5px solid #22c55e;
+}
+
+.catalog-card-item.risk {
+  border-top: 5px solid #f97316;
+}
+
+.catalog-card-top-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.catalog-card-id-pill {
+  font-size: 12px;
+  font-weight: 900;
+  color: #64748b;
+  background: #f1f5f9;
+  padding: 3px 9px;
+  border-radius: 8px;
+}
+
+.catalog-card-icon-box {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+}
+
+.catalog-card-item.buff .catalog-card-icon-box {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+.catalog-card-item.risk .catalog-card-icon-box {
+  background: #ffedd5;
+  color: #ea580c;
+}
+
+.catalog-card-title {
+  font-size: 18px;
+  font-weight: 900;
+  color: #1e293b;
+  margin: 0 0 6px;
+}
+
+.catalog-card-desc {
+  font-size: 13.5px;
+  color: #64748b;
+  line-height: 1.5;
+  margin-bottom: 14px;
+}
+
+.catalog-card-mechanics-box {
+  background: #f8fafc;
+  border: 1.5px dashed #cbd5e1;
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+}
+
+.catalog-card-mechanics-title {
+  font-size: 12.5px;
+  font-weight: 800;
+  color: #334155;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.catalog-card-mechanics-text {
+  font-size: 12.5px;
+  color: #475569;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.catalog-card-grant-btn {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 800;
+  border: 1.5px solid #8b5cf6;
+  background: #f5f3ff;
+  color: #6d28d9;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.catalog-card-grant-btn:hover {
+  background: #6d28d9;
+  color: #ffffff;
+}
+
+.catalog-card-grant-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  border-color: #cbd5e1;
+  background: #f1f5f9;
+  color: #94a3b8;
+}
+
+
 
 
 

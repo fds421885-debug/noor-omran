@@ -323,6 +323,10 @@
           <button class="nav-tab" data-tab="tabHonorBoard">
             <i class="fa-solid fa-trophy"></i> لوحة الشرف
           </button>
+          <button class="nav-tab" data-tab="tabTacticalCards" id="navTabTacticalCards">
+            <i class="fa-solid fa-wand-magic-sparkles"></i> قسم البطاقات
+            <span class="badge" style="background: #8b5cf6; color: #fff; font-size: 11px; padding: 2px 7px; border-radius: 12px; margin-right: 5px;">40</span>
+          </button>
         </nav>
 
         <!-- التبويب 1: الرئيسية والإحصائيات -->
@@ -562,6 +566,61 @@
             <div id="honorBoardTabList" class="honor-board-tab-list">
               <!-- تُملأ تلقائياً -->
             </div>
+          </div>
+        </div>
+
+        <!-- التبويب 6: قسم البطاقات التكتيكية الكامل (40 بطاقة وماذا تفعل) -->
+        <div id="tabTacticalCards" class="tab-content-panel">
+          <div class="cards-catalog-tab-wrapper">
+            
+            <!-- ترويسة قسم البطاقات -->
+            <div class="cards-catalog-header-card">
+              <div class="catalog-header-badge">
+                <i class="fa-solid fa-wand-magic-sparkles"></i>
+              </div>
+              <div class="catalog-header-info">
+                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                  <span class="role-pill" style="background: #ede9fe; color: #6d28d9; border: 1.5px solid #c4b5fd; font-weight: 800;">
+                    <i class="fa-solid fa-bolt"></i> دليل المشرف والمعلم التكتيكي
+                  </span>
+                  <span class="role-pill" style="background: #fef08a; color: #854d0e; border: 1.5px solid #fde047; font-weight: 800;">
+                    <i class="fa-solid fa-layer-group"></i> 40 بطاقة استراتيجية
+                  </span>
+                  <span class="role-pill" style="background: #dcfce7; color: #166534; border: 1.5px solid #86efac; font-weight: 800;">
+                    <i class="fa-solid fa-wallet"></i> نظام المحفظة الذكية
+                  </span>
+                </div>
+                <h2 style="font-size: 24px; font-weight: 900; color: #1e1b4b; margin: 8px 0 4px;">
+                  🃏 قسم البطاقات التكتيكية (دليل الـ 40 بطاقة وماذا تفعل)
+                </h2>
+                <p style="color: #475569; font-size: 14px; line-height: 1.6; margin: 0;">
+                  تظهر 3 بطاقات عشوائية تلقائياً كل 4 أسئلة في المسابقة الحية (أو يدوياً بزر المشرف)، وعند اختيار الطالب لبطاقة يتم حفظها في <strong>محفظة بطاقاته</strong> على اليمين ليختار تفعيلها واستخدامها في أي سؤال يشاء بتزامن كامل عند الجميع!
+                </p>
+              </div>
+            </div>
+
+            <!-- شريط البحث والفلترة -->
+            <div class="catalog-toolbar-box">
+              <div class="catalog-search-wrap">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" id="catalogCardSearchInput" placeholder="ابحث باسم البطاقة أو ما تفعله أو تصنيفها..." class="form-control" />
+              </div>
+
+              <div class="catalog-filters-row">
+                <button class="filter-pill-btn active" data-filter="all">الكل (40) ✨</button>
+                <button class="filter-pill-btn" data-filter="buff">مزايا إيجابية (30) 🌟</button>
+                <button class="filter-pill-btn" data-filter="risk">مخاطرات ذكية (10) ⚡</button>
+                <button class="filter-pill-btn" data-filter="timer">الوقت والمؤقت ⏱️</button>
+                <button class="filter-pill-btn" data-filter="score">النقاط والمكافآت 🏆</button>
+                <button class="filter-pill-btn" data-filter="help">المساعدة والتيسير 🤝</button>
+              </div>
+            </div>
+
+            <!-- شبكة عرض البطاقات الـ 40 -->
+            <div id="cardsCatalogGrid" class="cards-catalog-grid">
+              <!-- تُبنى ديناميكياً بواسطة جافاسكربت -->
+            </div>
+
           </div>
         </div>
 
@@ -862,6 +921,18 @@
               </div>
             </div>
 
+          </div>
+
+          <!-- خانة على اليمين شكلها بطاقة: محفظة البطاقات وعليها إشعار أحمر بالعدد بالأبيض -->
+          <div id="contestantCardsWalletTrigger" class="contestant-cards-wallet-trigger hidden" title="محفظة البطاقات التكتيكية للمتسابق">
+            <div class="wallet-badge-red" id="walletBadgeCount">0</div>
+            <div class="wallet-card-inner">
+              <div class="wallet-card-icon">
+                <i class="fa-solid fa-layer-group"></i>
+              </div>
+              <div class="wallet-card-text">محفظة البطاقات</div>
+              <div class="wallet-card-hint">انقر للاستخدام ⚡</div>
+            </div>
           </div>
 
         </div>
@@ -1566,6 +1637,60 @@
       <button id="btnCloseTeacherHelpModal" class="btn-duo-green" style="width: 100%;">
         <i class="fa-solid fa-check"></i> تم التوجيه ومتابعة المسابقة
       </button>
+    </div>
+  </div>
+
+  <!-- 8. مودال محفظة البطاقات التكتيكية للمتسابق (Card Wallet Modal) -->
+  <div id="contestantCardsWalletModal" class="modal-overlay hidden" style="z-index: 10010;">
+    <div class="duo-modal-box wallet-modal-box">
+      <div class="wallet-modal-header">
+        <div class="wallet-header-icon">
+          <i class="fa-solid fa-layer-group"></i>
+        </div>
+        <div>
+          <h3 class="wallet-modal-title">🃏 محفظة البطاقات التكتيكية</h3>
+          <p class="wallet-modal-subtitle" id="walletModalSubtitle">
+            البطاقات المتاحة للمتسابق الحالي — اختر أي بطاقة لتفعيلها في السؤال الحالي بتزامن كامل!
+          </p>
+        </div>
+        <button id="btnCloseWalletModal" class="modal-close-btn" style="margin-right: auto;" title="إغلاق المحفظة">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <!-- قائمة البطاقات في المحفظة -->
+      <div id="walletCardsList" class="wallet-cards-grid">
+        <!-- يتم تعبئتها ديناميكياً بواسطة جافاسكربت -->
+      </div>
+
+      <div class="wallet-modal-footer">
+        <div class="wallet-footer-tip">
+          <i class="fa-solid fa-lightbulb" style="color: #f59e0b;"></i>
+          <span>البطاقات تُحفظ معك طوال جولة المتسابق، ويمكنك تفعيلها في أي سؤال بالضغط على «استخدم هذه البطاقة الآن ⚡».</span>
+        </div>
+        <button id="btnDismissWalletModal" class="btn-duo-outline btn-sm">
+          إغلاق المحفظة
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- غطاء وبنر أنيميشن تفعيل البطاقة المتزامن للجميع (Active Card Announcement Overlay) -->
+  <div id="activeCardAnnouncementOverlay" class="modal-overlay hidden" style="z-index: 10025; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(8px);">
+    <div class="card-announcement-card-box">
+      <div class="announcement-sparkles-wrap">
+        <div class="announcement-card-icon" id="announcementCardIcon">
+          <i class="fa-solid fa-bolt"></i>
+        </div>
+      </div>
+      <div class="announcement-card-tag" id="announcementCardTag">⚡ تفعيل بطاقة تكتيكية!</div>
+      <h2 class="announcement-card-title" id="announcementCardTitle">اسم البطاقة</h2>
+      <div class="announcement-user-pill" id="announcementUserPill">
+        <i class="fa-solid fa-user-graduate"></i> <span id="announcementUserName">المتسابق</span> قام بتفعيل هذه البطاقة
+      </div>
+      <p class="announcement-card-desc" id="announcementCardDesc">
+        وصف وتأثير البطاقة...
+      </p>
     </div>
   </div>
 
