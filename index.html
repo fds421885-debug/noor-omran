@@ -892,9 +892,24 @@
             <div class="question-header-bar">
               <span class="question-index-tag" id="stageQuestionNumber">السؤال 1 من 10</span>
               <span class="question-section-name" id="stageSectionName">القسم: التجويد والتهجي</span>
-              <div class="stage-timer-pill" id="stageTimerPill">
-                <i class="fa-solid fa-stopwatch"></i>
-                <span id="stageTimerSeconds">30</span> ثانية
+              <div class="stage-timer-wrapper" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                <div class="stage-timer-pill" id="stageTimerPill">
+                  <i class="fa-solid fa-stopwatch"></i>
+                  <span id="stageTimerSeconds">30</span> ثانية
+                </div>
+                <!-- أدوات تحكم المشرف الفورية في مؤقت المسابقة (رئيس المؤقت بالتزامن التام) -->
+                <div id="stageSupervisorTimerControls" class="supervisor-timer-controls hidden" style="display: inline-flex; align-items: center; gap: 4px;">
+                  <button type="button" id="btnSupPauseResumeTimer" class="btn-timer-ctrl" title="إيقاف / استئناف التايمر للجميع بالتزامن" style="background: #ffffff; border: 1.5px solid #cbd5e1; border-radius: 20px; padding: 4px 10px; font-size: 12px; font-weight: 800; color: #475569; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); transition: all 0.2s;">
+                    <i class="fa-solid fa-pause" style="color: #f59e0b;"></i>
+                    <span id="btnSupPauseResumeTimerText">إيقاف</span>
+                  </button>
+                  <button type="button" id="btnSupAdd15s" class="btn-timer-ctrl" title="إضافة +15 ثانية للوقت لجميع الحضور" style="background: #ffffff; border: 1.5px solid #cbd5e1; border-radius: 20px; padding: 4px 10px; font-size: 12px; font-weight: 800; color: #16a34a; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); transition: all 0.2s;">
+                    <i class="fa-solid fa-plus"></i> 15ث
+                  </button>
+                  <button type="button" id="btnSupResetTimer" class="btn-timer-ctrl" title="إعادة ضبط وقت السؤال بالكامل بالتزامن" style="background: #ffffff; border: 1.5px solid #cbd5e1; border-radius: 20px; padding: 4px 8px; font-size: 12px; font-weight: 800; color: #6366f1; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); transition: all 0.2s;">
+                    <i class="fa-solid fa-rotate-left"></i>
+                  </button>
+                </div>
               </div>
             </div>
 

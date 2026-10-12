@@ -1243,6 +1243,7 @@ let currentDrawTimeout = null;
 let lastSeenAnswerTimestamp = 0;
 let lastSeenMatchingVerifyTimestamp = 0;
 let lastSeenOrderingTimestamp = 0;
+let lastSeenOrderingVerifyTimestamp = 0;
 let lastSeenCardsTurnTimestamp = 0;
 let lastSeenCardUsedTimestamp = 0;
 let lastSeenWalletSyncTimestamp = 0;
@@ -1505,6 +1506,23 @@ function updateArenaUIRealtime(room) {
       stageSolverQuick.value = room.solverRole;
     }
 
+    // إظهار أو إخفاء أدوات تحكم المشرف في المؤقت اللحظي (رئيس المؤقت)
+    const isSupervisorUser = currentUser && (
+      currentUser.role === "supervisor" ||
+      isSupervisor(currentUser.name) ||
+      currentUser.name === room.leaderName ||
+      currentUser.name === room.creatorName
+    );
+    const supTimerCtrls = document.getElementById("stageSupervisorTimerControls");
+    if (supTimerCtrls) {
+      if (isSupervisorUser) {
+        supTimerCtrls.classList.remove("hidden");
+        updateSupervisorTimerButtonUI(room.timerState?.isFrozen || room.timerState?.isCorrectionPaused);
+      } else {
+        supTimerCtrls.classList.add("hidden");
+      }
+    }
+
     // مزامنة المؤقت اللحظي الموحد لجميع المشاركين (عارض، مشرف، طلاب، معلمون)
     if (room.timerState && typeof syncAndRunLiveTimer === "function") {
       syncAndRunLiveTimer(room.timerState);
@@ -1530,18 +1548,24 @@ function updateArenaUIRealtime(room) {
       }
     }
 
-    // مزامنة ترتيب الجمل والكلمات اللحظية للجميع (Real-time Sentence/Words Ordering Sync)
+    // مزامنة ترتيب الجمل والكلمات اللحظية وتصحيحها للجميع (Real-time Sentence/Words Ordering & Verification Sync)
     if (room.orderingState && room.orderingState.questionIdx === (room.currentQuestionIdx || 0)) {
-      if (room.orderingState.timestamp > lastSeenOrderingTimestamp) {
-        lastSeenOrderingTimestamp = room.orderingState.timestamp;
+      const ordPlaced = Array.isArray(room.orderingState.placedWords) ? room.orderingState.placedWords : [];
+      const ordBank = Array.isArray(room.orderingState.bankWords) ? room.orderingState.bankWords : [];
+
+      if (room.orderingState.verifying && (room.orderingState.startedAt || room.orderingState.timestamp) > lastSeenOrderingVerifyTimestamp) {
+        lastSeenOrderingVerifyTimestamp = room.orderingState.startedAt || room.orderingState.timestamp;
         if (!currentUser || room.orderingState.updatedBy !== currentUser.name) {
-          if (room.orderingState.verifying) {
-            if (typeof window.runExternalOrderingVerification === "function") {
-              window.runExternalOrderingVerification(room.orderingState.placedWords);
-            }
-          } else {
+          if (typeof window.runExternalOrderingVerification === "function") {
+            window.runExternalOrderingVerification(ordPlaced);
+          }
+        }
+      } else if (!room.orderingState.verifying) {
+        if (room.orderingState.timestamp > lastSeenOrderingTimestamp) {
+          lastSeenOrderingTimestamp = room.orderingState.timestamp;
+          if (!currentUser || room.orderingState.updatedBy !== currentUser.name) {
             if (typeof window.syncExternalOrderingUI === "function") {
-              window.syncExternalOrderingUI(room.orderingState.placedWords, room.orderingState.bankWords);
+              window.syncExternalOrderingUI(ordPlaced, ordBank);
             }
           }
         }
@@ -4919,6 +4943,151 @@ stageSolverRoleQuickSelect?.addEventListener("change", async () => {
 });
 
 // --------------------------------------------------------
+// أدوات تحكم المشرف الفورية في مؤقت المسابقة اللحظي (رئيس المؤقت بالتزامن)
+// --------------------------------------------------------
+document.getElementById("btnSupPauseResumeTimer")?.addEventListener("click", async () => {
+  if (!currentLiveRoom) return;
+  const isSup = currentUser && (
+    currentUser.role === "supervisor" ||
+    isSupervisor(currentUser.name) ||
+    currentUser.name === currentLiveRoom.leaderName ||
+    currentUser.name === currentLiveRoom.creatorName
+  );
+  if (!isSup) return;
+
+  const curTimer = currentLiveRoom.timerState || {};
+  const isCurrentlyFrozen = !!(curTimer.isFrozen || curTimer.isCorrectionPaused);
+
+  if (isCurrentlyFrozen) {
+    // استئناف
+    const remainingSecs = Math.max(1, Math.ceil(curTimer.freezeRemaining || curTimer.remainingSeconds || 15));
+    const now = Date.now();
+    const unfreezeTimer = {
+      ...curTimer,
+      isFrozen: false,
+      isCorrectionPaused: false,
+      endsAt: now + (remainingSecs * 1000),
+      remainingSeconds: remainingSecs,
+      updatedAt: now,
+      supervisorAuthoritative: true
+    };
+    currentLiveRoom.timerState = unfreezeTimer;
+    syncAndRunLiveTimer(unfreezeTimer);
+    if (currentLiveRoom.id) {
+      try {
+        await updateDoc(doc(db, "live_rooms", currentLiveRoom.id), {
+          timerState: unfreezeTimer,
+          lastUpdated: serverTimestamp()
+        });
+      } catch (e) { console.warn("Sup unfreeze err:", e); }
+    }
+    showToast("▶️ استئناف المؤقت بالتزامن لجميع المشاركين", "fa-play", 2500);
+  } else {
+    // إيقاف مؤقت
+    const now = Date.now();
+    const remainingMs = Math.max(0, (curTimer.endsAt || (now + 30000)) - now);
+    const remainingSecs = Math.max(0, Math.ceil(remainingMs / 1000));
+    const freezeTimer = {
+      ...curTimer,
+      isFrozen: true,
+      isCorrectionPaused: false,
+      freezeRemaining: remainingSecs,
+      remainingSeconds: remainingSecs,
+      pausedBy: currentUser.name,
+      updatedAt: now,
+      supervisorAuthoritative: true
+    };
+    currentLiveRoom.timerState = freezeTimer;
+    syncAndRunLiveTimer(freezeTimer);
+    if (currentLiveRoom.id) {
+      try {
+        await updateDoc(doc(db, "live_rooms", currentLiveRoom.id), {
+          timerState: freezeTimer,
+          lastUpdated: serverTimestamp()
+        });
+      } catch (e) { console.warn("Sup pause err:", e); }
+    }
+    showToast(`⏸️ تم إيقاف المؤقت مؤقتاً عند (${remainingSecs} ثانية) بالتزامن للجميع`, "fa-pause", 2500);
+  }
+});
+
+document.getElementById("btnSupAdd15s")?.addEventListener("click", async () => {
+  if (!currentLiveRoom) return;
+  const isSup = currentUser && (
+    currentUser.role === "supervisor" ||
+    isSupervisor(currentUser.name) ||
+    currentUser.name === currentLiveRoom.leaderName ||
+    currentUser.name === currentLiveRoom.creatorName
+  );
+  if (!isSup) return;
+
+  const now = Date.now();
+  const curTimer = currentLiveRoom.timerState || {};
+  const currentEndsAt = curTimer.endsAt || (now + 30000);
+  const newEndsAt = currentEndsAt + 15000;
+  const newFreeze = (curTimer.freezeRemaining || 15) + 15;
+  const newRem = Math.ceil(Math.max(0, newEndsAt - now) / 1000);
+
+  const updatedTimer = {
+    ...curTimer,
+    endsAt: newEndsAt,
+    freezeRemaining: curTimer.isFrozen ? newFreeze : undefined,
+    remainingSeconds: curTimer.isFrozen ? newFreeze : newRem,
+    updatedAt: now,
+    supervisorAuthoritative: true
+  };
+  currentLiveRoom.timerState = updatedTimer;
+  syncAndRunLiveTimer(updatedTimer);
+  if (currentLiveRoom.id) {
+    try {
+      await updateDoc(doc(db, "live_rooms", currentLiveRoom.id), {
+        timerState: updatedTimer,
+        lastUpdated: serverTimestamp()
+      });
+    } catch (e) { console.warn("Sup add 15s err:", e); }
+  }
+  try { soundFX.btnClick(); } catch (e) {}
+  showToast("⏱️ أضاف المشرف +15 ثانية إضافية للوقت بالتزامن للجميع!", "fa-clock", 2500);
+});
+
+document.getElementById("btnSupResetTimer")?.addEventListener("click", async () => {
+  if (!currentLiveRoom) return;
+  const isSup = currentUser && (
+    currentUser.role === "supervisor" ||
+    isSupervisor(currentUser.name) ||
+    currentUser.name === currentLiveRoom.leaderName ||
+    currentUser.name === currentLiveRoom.creatorName
+  );
+  if (!isSup) return;
+
+  const timeLimit = currentLiveRoom.questionTimer || 30;
+  const now = Date.now();
+  const resetTimer = {
+    questionIdx: currentQuestionIndex,
+    duration: timeLimit,
+    startedAt: now,
+    endsAt: now + (timeLimit * 1000),
+    remainingSeconds: timeLimit,
+    isFrozen: false,
+    isCorrectionPaused: false,
+    updatedAt: now,
+    supervisorAuthoritative: true
+  };
+  currentLiveRoom.timerState = resetTimer;
+  syncAndRunLiveTimer(resetTimer);
+  if (currentLiveRoom.id) {
+    try {
+      await updateDoc(doc(db, "live_rooms", currentLiveRoom.id), {
+        timerState: resetTimer,
+        lastUpdated: serverTimestamp()
+      });
+    } catch (e) { console.warn("Sup reset timer err:", e); }
+  }
+  try { soundFX.btnClick(); } catch (e) {}
+  showToast("🔄 تم إعادة ضبط وقت السؤال بالكامل بالتزامن للجميع!", "fa-rotate-left", 2500);
+});
+
+// --------------------------------------------------------
 // مودال إدارة مغادرة قائد الغرفة (تسليم الإشراف أو إنهاء المسابقة)
 // --------------------------------------------------------
 const leaderExitModal = document.getElementById("leaderExitModal");
@@ -5759,9 +5928,66 @@ function bringQuestionCardIntoView(cardEl) {
 
 // =========================================================
 // المؤقت اللحظي السحابي الموحد والمزامن عبر Firestore لجميع المتسابقين والعارض والمشرف
-// سريع واستجابة فائقة الدقة لكل 100 ملي ثانية لمنع البطء والتقطيع
+// المشرف هو المرجع الأساسي (رئيس المؤقت)، ومزامنة دقيقة 100ms بدون أي فرق في الساعات
 // =========================================================
 let lastTimerConfigKey = "";
+let supervisorClockOffset = 0;
+
+// تحديث نص وأيقونة زر الإيقاف/الاستئناف للمشرف
+function updateSupervisorTimerButtonUI(isFrozen) {
+  const btnText = document.getElementById("btnSupPauseResumeTimerText");
+  const btn = document.getElementById("btnSupPauseResumeTimer");
+  if (!btn) return;
+  if (isFrozen) {
+    btn.innerHTML = `<i class="fa-solid fa-play" style="color: #16a34a;"></i> <span id="btnSupPauseResumeTimerText">استئناف</span>`;
+  } else {
+    btn.innerHTML = `<i class="fa-solid fa-pause" style="color: #f59e0b;"></i> <span id="btnSupPauseResumeTimerText">إيقاف</span>`;
+  }
+}
+
+// إيقاف التايمر فوراً للجميع بالتزامن أثناء تصحيح وترتيب الكلمات أو فحص الأزواج
+function pauseLiveTimerForCorrection(remainingSecs = null) {
+  if (liveTimerInterval) {
+    clearInterval(liveTimerInterval);
+    liveTimerInterval = null;
+  }
+  lastTimerConfigKey = "correction_paused";
+  const timerDisplay = stageTimerSeconds;
+  const timerPill = document.getElementById("stageTimerPill");
+  if (timerDisplay) {
+    timerDisplay.innerHTML = `<span style="font-size: 13.5px; color: #d97706; font-weight: 800;"><i class="fa-solid fa-pause"></i> جاري التصحيح</span>`;
+  }
+  if (timerPill) {
+    timerPill.classList.remove("timer-urgent", "timer-infinite");
+    timerPill.classList.add("timer-frozen");
+  }
+  updateSupervisorTimerButtonUI(true);
+}
+
+// استئناف التايمر بعد انتهاء التصحيح (في حال وجود فرصة ثانية)
+function resumeLiveTimerAfterCorrection(remainingSecs) {
+  const secs = Math.max(1, Math.ceil(remainingSecs || liveTimeRemaining || 15));
+  const now = Date.now();
+  const unfreezeTimer = {
+    ...(currentLiveRoom?.timerState || {}),
+    isFrozen: false,
+    isCorrectionPaused: false,
+    endsAt: now + (secs * 1000),
+    remainingSeconds: secs,
+    updatedAt: now
+  };
+  if (currentLiveRoom) {
+    currentLiveRoom.timerState = unfreezeTimer;
+  }
+  syncAndRunLiveTimer(unfreezeTimer);
+  if (currentLiveRoom?.id) {
+    updateDoc(doc(db, "live_rooms", currentLiveRoom.id), {
+      timerState: unfreezeTimer,
+      lastUpdated: serverTimestamp()
+    }).catch(e => console.warn("Resume timer notice:", e));
+  }
+  updateSupervisorTimerButtonUI(false);
+}
 
 function syncAndRunLiveTimer(timerState, onTimeout = null) {
   const timerDisplay = stageTimerSeconds;
@@ -5775,10 +6001,13 @@ function syncAndRunLiveTimer(timerState, onTimeout = null) {
     return;
   }
 
+  // تحديث حالة زر الإيقاف/الاستئناف للمشرف
+  updateSupervisorTimerButtonUI(!!(timerState.isFrozen || timerState.isCorrectionPaused));
+
   // 1. فحص ميزة "بلا حد زمني" (بطاقة تكتيكية)
   if (timerState.noTimeLimit) {
     if (liveTimerInterval) { clearInterval(liveTimerInterval); liveTimerInterval = null; }
-    lastTimerConfigKey = "";
+    lastTimerConfigKey = "no_time_limit";
     timerDisplay.textContent = "∞";
     liveTimeRemaining = 9999;
     if (timerPill) {
@@ -5788,13 +6017,19 @@ function syncAndRunLiveTimer(timerState, onTimeout = null) {
     return;
   }
 
-  // 2. فحص حالة التجميد (بطاقة تجميد الوقت)
-  if (timerState.isFrozen) {
+  // 2. فحص حالة التجميد أو إيقاف المؤقت (بسبب التصحيح أو إيقاف المشرف أو بطاقة التجميد)
+  if (timerState.isFrozen || timerState.isCorrectionPaused) {
     if (liveTimerInterval) { clearInterval(liveTimerInterval); liveTimerInterval = null; }
-    lastTimerConfigKey = "";
-    const frozenSecs = Math.max(0, Math.ceil(timerState.freezeRemaining || 0));
-    timerDisplay.textContent = `${frozenSecs} ❄️`;
+    const frozenSecs = Math.max(0, Math.ceil(timerState.freezeRemaining || timerState.remainingSeconds || 0));
     liveTimeRemaining = frozenSecs;
+    lastTimerConfigKey = `frozen_${frozenSecs}_${timerState.isCorrectionPaused ? 'corr' : 'pause'}`;
+    
+    if (timerState.isCorrectionPaused) {
+      timerDisplay.innerHTML = `<span style="font-size: 13.5px; color: #d97706; font-weight: 800;"><i class="fa-solid fa-pause"></i> جاري التصحيح</span>`;
+    } else {
+      timerDisplay.textContent = `${frozenSecs} ⏸️`;
+    }
+
     if (timerPill) {
       timerPill.classList.remove("timer-urgent", "timer-infinite");
       timerPill.classList.add("timer-frozen");
@@ -5802,11 +6037,26 @@ function syncAndRunLiveTimer(timerState, onTimeout = null) {
     return;
   }
 
+  // 3. معايرة التوقيت مع المشرف (المشرف هو رأس المؤقت ومرجعه الأساسي)
+  const isSupervisorUser = currentUser && (
+    currentUser.role === "supervisor" ||
+    isSupervisor(currentUser.name) ||
+    currentUser.name === currentLiveRoom?.leaderName ||
+    currentUser.name === currentLiveRoom?.creatorName
+  );
+
+  // إذا لم يكن المستخدم هو المشرف، يعاير ساعته مع جهاز المشرف لمنع أي تفاوت زمني
+  if (!isSupervisorUser && timerState.updatedAt) {
+    supervisorClockOffset = timerState.updatedAt - Date.now();
+  } else if (isSupervisorUser) {
+    supervisorClockOffset = 0;
+  }
+
   const qIdx = timerState.questionIdx ?? 0;
   const endsAt = timerState.endsAt || (Date.now() + 30000);
-  const configKey = `${qIdx}_${endsAt}`;
+  const configKey = `${qIdx}_${endsAt}_running`;
 
-  // منع إعادة إنشاء العداد بشكل مستمر عند وصول تحديثات متكررة من السحابة إذا كان يعمل بالفعل على نفس السؤال
+  // منع إعادة إنشاء العداد بشكل متكرر إذا كان يعمل بالفعل على نفس الإعداد
   if (liveTimerInterval && lastTimerConfigKey === configKey) {
     return;
   }
@@ -5817,14 +6067,16 @@ function syncAndRunLiveTimer(timerState, onTimeout = null) {
   }
   lastTimerConfigKey = configKey;
 
-  // 3. العد التنازلي الحقيقي المزامن سحابياً بالملي ثانية بدقة 100ms
   if (timerPill) {
     timerPill.classList.remove("timer-infinite", "timer-frozen");
   }
 
+  let heartbeatCounter = 0;
+
   const updateTick = () => {
-    const now = Date.now();
-    const remainingMs = Math.max(0, endsAt - now);
+    // الوقت المصحح بدقة المشرف المطلقة
+    const calibratedNow = Date.now() + supervisorClockOffset;
+    const remainingMs = Math.max(0, endsAt - calibratedNow);
     const remainingSecs = Math.ceil(remainingMs / 1000);
     liveTimeRemaining = remainingSecs;
 
@@ -5838,20 +6090,23 @@ function syncAndRunLiveTimer(timerState, onTimeout = null) {
       }
     }
 
+    // إذا كان المستخدم الحالي هو المشرف: يبث نبضة مزامنة دورية خفيفة كل ثانيتين لضمان تطابق الجميع
+    if (isSupervisorUser && currentLiveRoom?.id && remainingSecs > 0) {
+      heartbeatCounter++;
+      if (heartbeatCounter % 20 === 0) { // كل 2 ثانية (100ms * 20)
+        updateDoc(doc(db, "live_rooms", currentLiveRoom.id), {
+          "timerState.remainingSeconds": remainingSecs,
+          "timerState.updatedAt": Date.now(),
+          lastUpdated: serverTimestamp()
+        }).catch(() => {});
+      }
+    }
+
     if (remainingMs <= 0) {
       clearInterval(liveTimerInterval);
       liveTimerInterval = null;
       lastTimerConfigKey = "";
       timerDisplay.textContent = "0";
-
-      // فحص المخول بالحل أو قائد/مشرف الغرفة
-      const isLeader = currentUser && (
-        currentUser.name === currentLiveRoom?.leaderName ||
-        currentUser.name === currentLiveRoom?.creatorName ||
-        currentUser.role === "supervisor" ||
-        isSupervisor(currentUser.name)
-      );
-      const isAllowedSolver = checkIsSolverAllowed(currentLiveRoom);
 
       // تشغيل انتهاء الوقت فوراً عند نفاد الوقت دون توقف أو قيود
       if (!isQuestionTransitionRunning) {
@@ -6348,6 +6603,9 @@ function loadStageQuestion(idx) {
   }
 
   currentQuestionIndex = idx;
+  lastSeenOrderingTimestamp = 0;
+  lastSeenOrderingVerifyTimestamp = 0;
+  lastSeenMatchingVerifyTimestamp = 0;
   const q = allQuestions[idx];
   stageQuestionNumber.textContent = `السؤال ${idx + 1} من ${allQuestions.length}`;
   stageSectionName.textContent = q.sectionName;
@@ -6982,7 +7240,7 @@ function loadStageQuestion(idx) {
     renderMatchingBoard();
     bringQuestionCardIntoView();
 
-  // ── Ordering: ترتيب تفاعلي للجمل والكلمات ──
+  // ── Ordering: ترتيب تفاعلي للجمل والكلمات بالتزامن الكامل وإيقاف التايمر أثناء التصحيح ──
   } else if (q.type === "ordering") {
     const isSup = currentUser && (currentUser.role === "supervisor" || isSupervisor(currentUser.name));
     let earnedPoints = q.points || 5;
@@ -6996,14 +7254,24 @@ function loadStageQuestion(idx) {
     const lockTwoActive = !!(activeCardEffect?.effect?.lockTwoItems);
 
     let placedWords = [];
-    let bankWords = shuffleArray(originalItems.map((word, idx) => ({ id: `word_${idx}_${Math.random().toString(36).slice(2, 6)}`, text: word, origIdx: idx, locked: false })));
+    let bankWords = shuffleArray(originalItems.map((word, wIdx) => ({ id: `word_${wIdx}_${Math.random().toString(36).slice(2, 6)}`, text: word, origIdx: wIdx, locked: false })));
     // التأكد من أن الكلمات مبعثرة ومبهدلة بالكامل للتفكير
     if (bankWords.length > 1 && bankWords.every((w, i) => w.origIdx === i)) {
       bankWords.reverse();
     }
 
+    // إذا كانت هناك حالة ترتيب سابقة لنفس السؤال محملة من الغرفة (للمنضمين والجمهور والمشرفين)
+    if (currentLiveRoom?.orderingState && currentLiveRoom.orderingState.questionIdx === idx) {
+      if (Array.isArray(currentLiveRoom.orderingState.placedWords) && currentLiveRoom.orderingState.placedWords.length > 0) {
+        placedWords = [...currentLiveRoom.orderingState.placedWords];
+        if (Array.isArray(currentLiveRoom.orderingState.bankWords)) {
+          bankWords = [...currentLiveRoom.orderingState.bankWords];
+        }
+      }
+    }
+
     // إذا كانت بطاقة "حصانة الترتيب" نشطة: تثبيت أول عنصرين تلقائياً في موقعهما الصحيح
-    if (lockTwoActive && originalItems.length >= 2) {
+    if (lockTwoActive && originalItems.length >= 2 && placedWords.length === 0) {
       for (let i = 0; i < 2; i++) {
         const targetWord = originalItems[i];
         const bIdx = bankWords.findIndex(w => w.text === targetWord && w.origIdx === i);
@@ -7016,28 +7284,199 @@ function loadStageQuestion(idx) {
       showToast("🛡️ حصانة الترتيب: تم تثبيت أول عنصرين في موقعهما الصحيح!", "fa-lock", 3000);
     }
 
+    let isOrderingVerifyingRunning = false;
+
+    // بث حالة الكلمات الحالية عبر السحابة لحظياً
     function broadcastOrderingState() {
       if (!currentLiveRoom || !currentLiveRoom.id) return;
       const placedPayload = placedWords.map(w => ({ id: w.id, text: w.text, locked: !!w.locked, origIdx: w.origIdx }));
       const bankPayload = bankWords.map(w => ({ id: w.id, text: w.text, locked: !!w.locked, origIdx: w.origIdx }));
+      const now = Date.now();
       updateDoc(doc(db, "live_rooms", currentLiveRoom.id), {
         orderingState: {
           questionIdx: idx,
           placedWords: placedPayload,
           bankWords: bankPayload,
+          verifying: false,
           updatedBy: currentUser?.name || "المتسابق",
-          timestamp: Date.now()
+          timestamp: now
         },
         lastUpdated: serverTimestamp()
       }).catch(err => console.warn("Broadcast orderingState err:", err));
     }
 
+    // بث بدء التصحيح المتزامن وإيقاف التايمر للجميع سحابياً
+    function broadcastOrderingVerificationState() {
+      if (!currentLiveRoom || !currentLiveRoom.id) return;
+      const placedPayload = placedWords.map(w => ({ id: w.id, text: w.text, locked: !!w.locked, origIdx: w.origIdx }));
+      const bankPayload = bankWords.map(w => ({ id: w.id, text: w.text, locked: !!w.locked, origIdx: w.origIdx }));
+      const now = Date.now();
+      const curTimer = currentLiveRoom?.timerState || {};
+      const remainingSecs = Math.max(1, Math.ceil(Math.max(0, (curTimer.endsAt || (now + 30000)) - now) / 1000));
+
+      const pausedTimer = {
+        ...curTimer,
+        isFrozen: true,
+        isCorrectionPaused: true,
+        freezeRemaining: remainingSecs,
+        remainingSeconds: remainingSecs,
+        updatedAt: now,
+        supervisorAuthoritative: true
+      };
+      currentLiveRoom.timerState = pausedTimer;
+
+      updateDoc(doc(db, "live_rooms", currentLiveRoom.id), {
+        orderingState: {
+          questionIdx: idx,
+          placedWords: placedPayload,
+          bankWords: bankPayload,
+          verifying: true,
+          startedAt: now,
+          updatedBy: currentUser?.name || "المتسابق",
+          timestamp: now
+        },
+        timerState: pausedTimer,
+        lastUpdated: serverTimestamp()
+      }).catch(err => console.warn("Broadcast ordering verification state err:", err));
+    }
+
+    // مزامنة واجهة ترتيب الكلمات عند وصول تحديث خارجي
     window.syncExternalOrderingUI = function(extPlaced, extBank) {
-      if (currentQuestionIndex !== idx) return;
+      if (currentQuestionIndex !== idx || isOrderingVerifyingRunning) return;
       if (Array.isArray(extPlaced) && Array.isArray(extBank)) {
         placedWords = extPlaced;
         bankWords = extBank;
         renderOrderingBoard();
+      }
+    };
+
+    // تشغيل أنيميشن التصحيح المتسلسل خطوة بخطوة وإيقاف التايمر للجميع بالتزامن
+    function startSequentialOrderingVerification(isInitiator = true) {
+      if (isOrderingVerifyingRunning) return;
+      isOrderingVerifyingRunning = true;
+
+      // 1. إيقاف التايمر فوراً عند الجميع بالتزامن أثناء التصحيح
+      const curTimer = currentLiveRoom?.timerState || {};
+      const now = Date.now();
+      const remainingSecs = Math.max(1, Math.ceil(Math.max(0, (curTimer.endsAt || (now + 30000)) - now) / 1000));
+      pauseLiveTimerForCorrection(remainingSecs);
+
+      // قفل أزرار التحكم وإظهار رسالة الفحص التزامنية
+      const submitBtn = document.getElementById("btnSubmitOrdering");
+      const supVerifyBtn = document.getElementById("btnSupervisorVerifyOrdering");
+      const resetBtn = document.getElementById("btnResetOrdering");
+      const manualBtn = document.getElementById("btnManualAcceptOrdering");
+
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> جاري فحص الكلمات بالتزامن...`;
+      }
+      if (supVerifyBtn) {
+        supVerifyBtn.disabled = true;
+        supVerifyBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> جاري التحقق بالتزامن...`;
+      }
+      if (resetBtn) resetBtn.disabled = true;
+      if (manualBtn) manualBtn.disabled = true;
+
+      // تعطيل التفاعل مع الرقائق أثناء التحقق
+      const chips = stageInteractiveArea.querySelectorAll(".ordering-chip");
+      chips.forEach(c => { c.style.pointerEvents = "none"; });
+
+      let wordCheckIdx = 0;
+      let correctWordsCount = 0;
+
+      function checkNextWord() {
+        if (wordCheckIdx >= placedWords.length) {
+          // انتهى فحص جميع الكلمات
+          const allCorrect = (correctWordsCount === originalItems.length && placedWords.length === originalItems.length);
+
+          setTimeout(() => {
+            if (allCorrect) {
+              try { soundFX.celebrate(); } catch (e) {}
+              showToast(`🌟 ما شاء الله! جميع الكلمات مرتبة بإتقان تام (+${earnedPoints} درجات)`, "fa-circle-check", 3500);
+              activeCardEffect = null;
+              if (isInitiator) {
+                advanceToNext(earnedPoints, false, true);
+              }
+            } else {
+              try { soundFX.wrong(); } catch (e) {}
+              if (activeCardEffect?.effect?.secondChance) {
+                showToast("🔄 فرصة ثانية: الترتيب غير صحيح، أعد ترتيب الكلمات!", "fa-arrow-rotate-left", 3500);
+                activeCardEffect = null;
+                isOrderingVerifyingRunning = false;
+                // استئناف المؤقت بعد الفرصة الثانية
+                resumeLiveTimerAfterCorrection(remainingSecs);
+                renderOrderingBoard();
+                return;
+              }
+
+              if (hasImmunity) {
+                showToast("🛡️ درع الأمان: الترتيب غير دقيق ولكن تم إحباط أي خصم!", "fa-shield-halved", 3000);
+                activeCardEffect = null;
+                if (isInitiator) {
+                  advanceToNext(0, false, false);
+                }
+              } else if (penaltyOnWrong > 0) {
+                showToast(`❌ ترتيب غير دقيق — المخاطرة الكبرى: خصم ${penaltyOnWrong} درجات!`, "fa-fire-flame-curved", 3000);
+                activeCardEffect = null;
+                if (isInitiator) {
+                  advanceToNext(-penaltyOnWrong, true, false);
+                }
+              } else {
+                const wrongPenalty = 3;
+                showToast(`❌ الترتيب غير دقيق (${correctWordsCount} من ${originalItems.length} صحيحة) — خصم 3 درجات ❌`, "fa-circle-xmark", 3000);
+                activeCardEffect = null;
+                if (isInitiator) {
+                  advanceToNext(-wrongPenalty, true, false);
+                }
+              }
+            }
+          }, 1200);
+          return;
+        }
+
+        const currentWordObj = placedWords[wordCheckIdx];
+        const chipEl = stageInteractiveArea.querySelector(`[data-placed-id="${currentWordObj.id}"]`);
+
+        // تمييز الكلمة الخاضعة للفحص بنبض ذهبي
+        if (chipEl) chipEl.classList.add("order-verifying-current");
+
+        setTimeout(() => {
+          if (chipEl) chipEl.classList.remove("order-verifying-current");
+
+          const isWordCorrect = (currentWordObj.text === originalItems[wordCheckIdx]);
+          if (isWordCorrect) {
+            correctWordsCount++;
+            if (chipEl) {
+              chipEl.classList.add("order-correct-reveal");
+              const xIcon = chipEl.querySelector(".fa-xmark, .fa-lock");
+              if (xIcon) xIcon.className = "fa-solid fa-check";
+            }
+            try { soundFX.correct(); } catch (e) {}
+          } else {
+            if (chipEl) {
+              chipEl.classList.add("order-wrong-reveal");
+              const xIcon = chipEl.querySelector(".fa-xmark, .fa-lock");
+              if (xIcon) xIcon.className = "fa-solid fa-xmark";
+            }
+            try { soundFX.wrong(); } catch (e) {}
+          }
+
+          wordCheckIdx++;
+          setTimeout(checkNextWord, 650);
+        }, 500);
+      }
+
+      checkNextWord();
+    }
+
+    // نقطة الدخول العامة لمزامنة التصحيح عند وصول حدث سحابي
+    window.runExternalOrderingVerification = function(extPlaced) {
+      if (currentQuestionIndex !== idx) return;
+      if (Array.isArray(extPlaced) && extPlaced.length > 0) {
+        placedWords = extPlaced;
+        renderOrderingBoard();
+        startSequentialOrderingVerification(false);
       }
     };
 
@@ -7053,27 +7492,27 @@ function loadStageQuestion(idx) {
         ` : ''}
         <div class="ordering-play-area ${!isAllowedToSolve ? 'stage-viewer-locked' : ''}">
           <div style="text-align:center;font-size:14px;color:#475569;font-weight:800;">
-            <i class="fa-solid fa-arrow-down-short-wide"></i> اضغط على الكلمات المبعثرة بالترتيب الصحيح لتكوين الجملة:
+            <i class="fa-solid fa-arrow-down-short-wide"></i> ${isAllowedToSolve ? 'اضغط على الكلمات المبعثرة بالترتيب الصحيح لتكوين الجملة:' : 'المتسابق يرتب الكلمات لتكوين الجملة:'}
           </div>
 
           <!-- حاوية الترتيب -->
           <div class="ordering-slots-container ${placedWords.length === 0 ? '' : 'active-target'}" id="stageOrderingSlots">
             ${placedWords.length === 0 ? `
-              <div class="ordering-empty-hint"><i class="fa-solid fa-hand-pointer"></i> اضغط على الكلمات بالأسفل لإضافتها هنا بالترتيب...</div>
+              <div class="ordering-empty-hint"><i class="fa-solid fa-hand-pointer"></i> ${isAllowedToSolve ? 'اضغط على الكلمات بالأسفل لإضافتها هنا بالترتيب...' : 'في انتظار وضع الكلمات في خانات الترتيب...'}</div>
             ` : placedWords.map((w, pIdx) => `
               <div class="ordering-chip font-${q.font || 'quran'} placed ${w.locked ? 'locked' : ''}" data-placed-id="${w.id}">
                 <span class="chip-num">${pIdx + 1}</span>
                 <span>${w.text}</span>
-                ${w.locked ? '<i class="fa-solid fa-lock" style="font-size:12px;color:#ca8a04;"></i>' : '<i class="fa-solid fa-xmark" style="font-size:12px;opacity:0.6;"></i>'}
+                ${w.locked ? '<i class="fa-solid fa-lock" style="font-size:12px;color:#ca8a04;"></i>' : (isAllowedToSolve ? '<i class="fa-solid fa-xmark" style="font-size:12px;opacity:0.6;"></i>' : '')}
               </div>
             `).join("")}
           </div>
 
           <!-- بنك الكلمات المبعثرة -->
-          <div class="ordering-bank-title"><i class="fa-solid fa-layer-group"></i> الكلمات المتاحة (اضغط للترتيب):</div>
+          <div class="ordering-bank-title"><i class="fa-solid fa-layer-group"></i> ${isAllowedToSolve ? 'الكلمات المتاحة (اضغط للترتيب):' : 'الكلمات المتبقية بالبنك:'}</div>
           <div class="ordering-bank-container" id="stageOrderingBank">
             ${bankWords.length === 0 ? `
-              <div style="font-size:13px;color:#16a34a;font-weight:700;"><i class="fa-solid fa-check"></i> تم وضع جميع الكلمات! اضغط «اعتماد وتحقق» بالأسفل</div>
+              <div style="font-size:13px;color:#16a34a;font-weight:700;"><i class="fa-solid fa-check"></i> تم وضع جميع الكلمات في خانات الترتيب!</div>
             ` : bankWords.map(w => `
               <div class="ordering-chip font-${q.font || 'quran'}" data-bank-id="${w.id}">
                 ${w.text}
@@ -7096,6 +7535,9 @@ function loadStageQuestion(idx) {
               </div>
             `}
             ${isSup ? `
+              <button type="button" class="btn-duo-green btn-sm" id="btnSupervisorVerifyOrdering" title="فحص وتصحيح الترتيب فوراً للجميع">
+                <i class="fa-solid fa-circle-check"></i> فحص وتصحيح الترتيب الآن
+              </button>
               <button type="button" class="btn-duo-yellow btn-sm" id="btnManualAcceptOrdering" title="قبول فوري من المشرف">
                 <i class="fa-solid fa-crown"></i> قبول مباشر (${earnedPoints} درجات)
               </button>
@@ -7104,24 +7546,38 @@ function loadStageQuestion(idx) {
         </div>
       `;
 
+      // ربط أزرار المشرف (متاح سواء كان المشرف يحل أو يشاهد)
+      if (isSup) {
+        document.getElementById("btnSupervisorVerifyOrdering")?.addEventListener("click", () => {
+          if (isOrderingVerifyingRunning) return;
+          if (placedWords.length !== originalItems.length) {
+            showToast("⚠️ لم يتم وضع جميع الكلمات في الترتيب بعد!", "fa-triangle-exclamation");
+            return;
+          }
+          broadcastOrderingVerificationState();
+          startSequentialOrderingVerification(true);
+        });
+
+        document.getElementById("btnManualAcceptOrdering")?.addEventListener("click", () => {
+          activeCardEffect = null;
+          advanceToNext(earnedPoints, false, true);
+        }, { once: true });
+      }
+
+      // إذا كان المشاهد غير مصرح له بالحل، نتوقف هنا بعد ربط أزرار المشرف
       if (!isAllowedToSolve) {
-        if (isSup) {
-          document.getElementById("btnManualAcceptOrdering")?.addEventListener("click", () => {
-            activeCardEffect = null;
-            advanceToNext(earnedPoints, false, true);
-          }, { once: true });
-        }
         return;
       }
 
       // إضافة كلمة من البنك إلى خانات الترتيب
       stageInteractiveArea.querySelectorAll("[data-bank-id]").forEach(el => {
         el.addEventListener("click", () => {
+          if (isOrderingVerifyingRunning) return;
           const bId = el.getAttribute("data-bank-id");
-          const idx = bankWords.findIndex(w => w.id === bId);
-          if (idx >= 0) {
-            placedWords.push(bankWords[idx]);
-            bankWords.splice(idx, 1);
+          const bIdx = bankWords.findIndex(w => w.id === bId);
+          if (bIdx >= 0) {
+            placedWords.push(bankWords[bIdx]);
+            bankWords.splice(bIdx, 1);
             try { soundFX.btnClick(); } catch (e) {}
             renderOrderingBoard();
             broadcastOrderingState();
@@ -7132,11 +7588,12 @@ function loadStageQuestion(idx) {
       // إزالة كلمة من خانات الترتيب وإرجاعها للبنك
       stageInteractiveArea.querySelectorAll("[data-placed-id]").forEach(el => {
         el.addEventListener("click", () => {
+          if (isOrderingVerifyingRunning) return;
           const pId = el.getAttribute("data-placed-id");
-          const idx = placedWords.findIndex(w => w.id === pId);
-          if (idx >= 0 && !placedWords[idx].locked) {
-            bankWords.push(placedWords[idx]);
-            placedWords.splice(idx, 1);
+          const pIdx = placedWords.findIndex(w => w.id === pId);
+          if (pIdx >= 0 && !placedWords[pIdx].locked) {
+            bankWords.push(placedWords[pIdx]);
+            placedWords.splice(pIdx, 1);
             try { soundFX.btnClick(); } catch (e) {}
             renderOrderingBoard();
             broadcastOrderingState();
@@ -7146,6 +7603,7 @@ function loadStageQuestion(idx) {
 
       // إعادة ضبط
       document.getElementById("btnResetOrdering")?.addEventListener("click", () => {
+        if (isOrderingVerifyingRunning) return;
         const unlockeds = placedWords.filter(w => !w.locked);
         placedWords = placedWords.filter(w => w.locked);
         bankWords.push(...unlockeds);
@@ -7153,141 +7611,9 @@ function loadStageQuestion(idx) {
         broadcastOrderingState();
       });
 
-      let isOrderingVerifyingRunning = false;
-
-      function broadcastOrderingVerificationState() {
-        if (!currentLiveRoom || !currentLiveRoom.id) return;
-        const placedPayload = placedWords.map(w => ({ id: w.id, text: w.text, locked: !!w.locked, origIdx: w.origIdx }));
-        const bankPayload = bankWords.map(w => ({ id: w.id, text: w.text, locked: !!w.locked, origIdx: w.origIdx }));
-        updateDoc(doc(db, "live_rooms", currentLiveRoom.id), {
-          orderingState: {
-            questionIdx: idx,
-            placedWords: placedPayload,
-            bankWords: bankPayload,
-            verifying: true,
-            startedAt: Date.now(),
-            updatedBy: currentUser?.name || "المتسابق",
-            timestamp: Date.now()
-          },
-          lastUpdated: serverTimestamp()
-        }).catch(err => console.warn("Broadcast ordering verification state err:", err));
-      }
-
-      // تشغيل أنيميشن التصحيح المتسلسل خطوة بخطوة للكلمات واحدة تلو الأخرى زي سؤال التوصيل
-      function startSequentialOrderingVerification(isInitiator = true) {
-        if (isOrderingVerifyingRunning) return;
-        isOrderingVerifyingRunning = true;
-
-        // قفل الأزرار وإظهار رسالة الفحص
-        const submitBtn = document.getElementById("btnSubmitOrdering");
-        const resetBtn = document.getElementById("btnResetOrdering");
-        if (submitBtn) {
-          submitBtn.disabled = true;
-          submitBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> جاري فحص الكلمات بالتزامن...`;
-        }
-        if (resetBtn) resetBtn.disabled = true;
-
-        // تعطيل التفاعل مع الرقائق أثناء التحقق
-        const chips = stageInteractiveArea.querySelectorAll(".ordering-chip");
-        chips.forEach(c => { c.style.pointerEvents = "none"; });
-
-        let wordCheckIdx = 0;
-        let correctWordsCount = 0;
-
-        function checkNextWord() {
-          if (wordCheckIdx >= placedWords.length) {
-            // انتهى فحص جميع الكلمات
-            const allCorrect = (correctWordsCount === originalItems.length);
-
-            setTimeout(() => {
-              if (allCorrect) {
-                try { soundFX.celebrate(); } catch (e) {}
-                showToast(`🌟 ما شاء الله! جميع الكلمات مرتبة بإتقان تام (+${earnedPoints} درجات)`, "fa-circle-check", 3500);
-                activeCardEffect = null;
-                if (isInitiator) {
-                  advanceToNext(earnedPoints, false, true);
-                }
-              } else {
-                try { soundFX.wrong(); } catch (e) {}
-                if (activeCardEffect?.effect?.secondChance) {
-                  showToast("🔄 فرصة ثانية: الترتيب غير صحيح، أعد ترتيب الكلمات!", "fa-arrow-rotate-left", 3500);
-                  activeCardEffect = null;
-                  isOrderingVerifyingRunning = false;
-                  renderOrderingBoard();
-                  return;
-                }
-
-                if (hasImmunity) {
-                  showToast("🛡️ درع الأمان: الترتيب غير دقيق ولكن تم إحباط أي خصم!", "fa-shield-halved", 3000);
-                  activeCardEffect = null;
-                  if (isInitiator) {
-                    advanceToNext(0, false, false);
-                  }
-                } else if (penaltyOnWrong > 0) {
-                  showToast(`❌ ترتيب غير دقيق — المخاطرة الكبرى: خصم ${penaltyOnWrong} درجات!`, "fa-fire-flame-curved", 3000);
-                  activeCardEffect = null;
-                  if (isInitiator) {
-                    advanceToNext(-penaltyOnWrong, true, false);
-                  }
-                } else {
-                  const wrongPenalty = 3;
-                  showToast(`❌ الترتيب غير دقيق (${correctWordsCount} من ${originalItems.length} صحيحة) — خصم 3 درجات ❌`, "fa-circle-xmark", 3000);
-                  activeCardEffect = null;
-                  if (isInitiator) {
-                    advanceToNext(-wrongPenalty, true, false);
-                  }
-                }
-              }
-            }, 1200);
-            return;
-          }
-
-          const currentWordObj = placedWords[wordCheckIdx];
-          const chipEl = stageInteractiveArea.querySelector(`[data-placed-id="${currentWordObj.id}"]`);
-
-          // تمييز الكلمة الخاضعة للفحص بنبض ذهبي
-          if (chipEl) chipEl.classList.add("order-verifying-current");
-
-          setTimeout(() => {
-            if (chipEl) chipEl.classList.remove("order-verifying-current");
-
-            const isWordCorrect = (currentWordObj.text === originalItems[wordCheckIdx]);
-            if (isWordCorrect) {
-              correctWordsCount++;
-              if (chipEl) {
-                chipEl.classList.add("order-correct-reveal");
-                const xIcon = chipEl.querySelector(".fa-xmark, .fa-lock");
-                if (xIcon) xIcon.className = "fa-solid fa-check";
-              }
-              try { soundFX.correct(); } catch (e) {}
-            } else {
-              if (chipEl) {
-                chipEl.classList.add("order-wrong-reveal");
-                const xIcon = chipEl.querySelector(".fa-xmark, .fa-lock");
-                if (xIcon) xIcon.className = "fa-solid fa-xmark";
-              }
-              try { soundFX.wrong(); } catch (e) {}
-            }
-
-            wordCheckIdx++;
-            setTimeout(checkNextWord, 650);
-          }, 500);
-        }
-
-        checkNextWord();
-      }
-
-      window.runExternalOrderingVerification = function(extPlaced) {
-        if (currentQuestionIndex !== idx) return;
-        if (Array.isArray(extPlaced) && extPlaced.length > 0) {
-          placedWords = extPlaced;
-          renderOrderingBoard();
-          startSequentialOrderingVerification(false);
-        }
-      };
-
-      // اعتماد وتحقق
+      // اعتماد وتحقق من المتسابق
       document.getElementById("btnSubmitOrdering")?.addEventListener("click", () => {
+        if (isOrderingVerifyingRunning) return;
         if (placedWords.length !== originalItems.length) {
           showToast("⚠️ يرجى ترتيب جميع الكلمات أولاً!", "fa-triangle-exclamation");
           return;
@@ -7296,12 +7622,6 @@ function loadStageQuestion(idx) {
         broadcastOrderingVerificationState();
         startSequentialOrderingVerification(true);
       });
-
-      // قبول فوري للمشرف
-      document.getElementById("btnManualAcceptOrdering")?.addEventListener("click", () => {
-        activeCardEffect = null;
-        advanceToNext(earnedPoints, false, true);
-      }, { once: true });
     }
 
     renderOrderingBoard();
@@ -7383,19 +7703,32 @@ function loadStageQuestion(idx) {
   const now = Date.now();
   let qTimerState = currentLiveRoom?.timerState;
 
+  // فحص هل المستخدم الحالي هو المشرف أو قائد الغرفة (المشرف هو رأس المؤقت)
+  const isSupervisorOrLeader = currentUser && (
+    currentUser.role === "supervisor" ||
+    isSupervisor(currentUser.name) ||
+    currentUser.name === currentLiveRoom?.leaderName ||
+    currentUser.name === currentLiveRoom?.creatorName
+  );
+
   if (!qTimerState || qTimerState.questionIdx !== idx) {
     qTimerState = {
       questionIdx: idx,
       duration: timeLimit,
       startedAt: now,
       endsAt: now + (timeLimit * 1000),
+      remainingSeconds: timeLimit,
       isFrozen: false,
+      isCorrectionPaused: false,
       noTimeLimit: !!(activeCardEffect?.effect?.noTimeLimit),
+      supervisorAuthoritative: !!isSupervisorOrLeader,
+      supervisorName: isSupervisorOrLeader ? currentUser.name : null,
       updatedAt: now
     };
     if (currentLiveRoom) {
       currentLiveRoom.timerState = qTimerState;
-      if (currentLiveRoom.id && canCurrentUserSolveQuestion()) {
+      // المشرف أو قائد الغرفة هو المصدر الأول للمؤقت. وإذا لم يكن المشرف متواجداً وكان المستخدم مصرحاً له بالحل، يبثه كاحتياط
+      if (currentLiveRoom.id && (isSupervisorOrLeader || canCurrentUserSolveQuestion())) {
         updateDoc(doc(db, "live_rooms", currentLiveRoom.id), {
           timerState: qTimerState,
           lastUpdated: serverTimestamp()
