@@ -797,6 +797,17 @@
 
           <!-- منطقة عرض السؤال الحالي والخط القرآني -->
           <div class="stage-question-card">
+            <!-- غطاء أنيميشن النتيجة الكبير (صح أخضر أو خطأ/انتهاء وقت أحمر طالع من تحت بجمالية فائقة) -->
+            <div id="stageQuestionResultOverlay" class="question-result-overlay hidden">
+              <div class="result-badge-anim-wrap">
+                <div class="result-badge-icon" id="resultOverlayIcon">
+                  <i class="fa-solid fa-circle-check"></i>
+                </div>
+                <div class="result-badge-title" id="resultOverlayTitle">إجابة صحيحة ومتقنة!</div>
+                <div class="result-badge-points" id="resultOverlayPoints">+5 نقاط</div>
+              </div>
+            </div>
+
             <div class="question-header-bar">
               <span class="question-index-tag" id="stageQuestionNumber">السؤال 1 من 10</span>
               <span class="question-section-name" id="stageSectionName">القسم: التجويد والتهجي</span>

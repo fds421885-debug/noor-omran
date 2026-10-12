@@ -6602,5 +6602,161 @@ button:disabled .fa-spin,
   color: #0284c7 !important;
 }
 
+/* ======================================================== */
+/* أنيميشن غطاء النتيجة الكبير (صح أخضر ضخم أو خطأ/انتهاء وقت أحمر) */
+/* يغطي السؤال بالكامل ويطلع من تحت بأنيميشن صعود مبهج ويتلاشى بسلاسة */
+/* ======================================================== */
+.stage-question-card {
+  position: relative !important;
+  overflow: hidden !important;
+}
+
+.question-result-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 99;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-xl);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  pointer-events: none;
+  animation: resultOverlayEntrance 1.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.question-result-overlay.correct {
+  background: radial-gradient(circle at center, rgba(34, 197, 94, 0.94) 0%, rgba(21, 128, 61, 0.98) 100%);
+  box-shadow: 0 0 70px rgba(34, 197, 94, 0.6), inset 0 0 30px rgba(255, 255, 255, 0.3);
+}
+
+.question-result-overlay.wrong {
+  background: radial-gradient(circle at center, rgba(239, 68, 68, 0.94) 0%, rgba(185, 28, 28, 0.98) 100%);
+  box-shadow: 0 0 70px rgba(239, 68, 68, 0.6), inset 0 0 30px rgba(255, 255, 255, 0.3);
+}
+
+.question-result-overlay.timeout {
+  background: radial-gradient(circle at center, rgba(245, 158, 11, 0.95) 0%, rgba(185, 28, 28, 0.98) 100%);
+  box-shadow: 0 0 70px rgba(245, 158, 11, 0.6), inset 0 0 30px rgba(255, 255, 255, 0.3);
+}
+
+.result-badge-anim-wrap {
+  text-align: center;
+  color: #ffffff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  transform-origin: center center;
+}
+
+.result-badge-icon {
+  font-size: 88px;
+  line-height: 1;
+  filter: drop-shadow(0 12px 30px rgba(0, 0, 0, 0.45));
+  animation: pulseIconBounce 0.8s ease infinite alternate;
+}
+
+.result-badge-title {
+  font-size: 26px;
+  font-weight: 900;
+  letter-spacing: -0.5px;
+  text-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+}
+
+.result-badge-points {
+  font-size: 19px;
+  font-weight: 800;
+  background: rgba(255, 255, 255, 0.28);
+  border: 2px solid rgba(255, 255, 255, 0.7);
+  padding: 6px 26px;
+  border-radius: var(--radius-pill);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+  letter-spacing: 0.5px;
+}
+
+@keyframes resultOverlayEntrance {
+  0% {
+    opacity: 0;
+    transform: translateY(70px) scale(0.65);
+  }
+  20% {
+    opacity: 1;
+    transform: translateY(-8px) scale(1.05);
+  }
+  35% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+  75% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-55px) scale(0.92);
+  }
+}
+
+@keyframes pulseIconBounce {
+  0% { transform: scale(0.94); }
+  100% { transform: scale(1.08); }
+}
+
+/* ── أدوات اختيار كم سؤال في كل قسم وتزامنها ── */
+.draw-section-controls-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.draw-section-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #ffffff;
+  border: 1.5px solid var(--border-duo);
+  border-radius: var(--radius-pill);
+  padding: 3px 8px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+}
+
+.draw-step-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1.5px solid #cbd5e1;
+  background: #f8fafc;
+  color: #1e293b;
+  font-size: 13px;
+  font-weight: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 0;
+}
+
+.draw-step-btn:hover:not(:disabled) {
+  background: #e2e8f0;
+  border-color: #64748b;
+  transform: scale(1.1);
+}
+
+.draw-step-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.draw-step-val {
+  min-width: 28px;
+  text-align: center;
+  font-size: 14.5px;
+  font-weight: 900;
+  color: #0f172a;
+}
+
+
 
 

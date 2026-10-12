@@ -1432,7 +1432,12 @@ function updateArenaUIRealtime(room) {
       const perStudent = room.questionsPerStudent || (totalInQuiz || 5);
       const drawn = Array.isArray(room.drawnQuestions) ? room.drawnQuestions : [];
 
-      // مزامنة لحظية لأنيميشن سحب الأسئلة قسم بقسم مع المشرف
+      // مزامنة أعداد الأسئلة المختارة للأقسام سحابياً للجميع
+      if (room.sectionCounts && typeof room.sectionCounts === 'object') {
+        currentLiveRoom.sectionCounts = room.sectionCounts;
+      }
+
+      // مزامنة لحظية لأنيميشن سحب الأسئلة قسم بقسم مع المشرف لجميع المشاركين
       if (room.drawAnimation && room.drawAnimation.timestamp > lastSeenDrawAnimTimestamp) {
         lastSeenDrawAnimTimestamp = room.drawAnimation.timestamp;
         if (!isLead) {
@@ -1444,26 +1449,9 @@ function updateArenaUIRealtime(room) {
       // إذا كان أنيميشن السحب قيد التشغيل حالياً، لا نقاطع العرض
       if (isSectionDrawAnimating) return;
 
-      if (drawSectionsList) {
-        drawSectionsList.innerHTML = secList.map((sec, idx) => {
-          const secTotal = Array.isArray(sec.questions) ? sec.questions.length : 0;
-          const portion = Math.max(1, Math.round((secTotal / (totalInQuiz || 1)) * perStudent));
-          const drawnCount = drawn.filter(dq => dq.sectionName === sec.sectionName).length;
-          const isDrawn = drawn.length > 0 && drawnCount > 0;
-          return `
-            <div class="draw-section-row ${isDrawn ? 'drawn' : ''}" id="drawSecRow_${idx}">
-              <div>
-                <div class="draw-section-name">${sec.sectionName}</div>
-                <div style="font-size:12px;color:#94a3b8;">${secTotal} سؤال متاح</div>
-              </div>
-              <div class="draw-counter-group">
-                <span class="draw-counter-badge ${isDrawn ? 'done' : ''}" id="drawBadge_${idx}">
-                  ${isDrawn ? `${drawnCount} / ${portion} ✓` : `0 / ${portion}`}
-                </span>
-                <i class="fa-solid fa-circle-check draw-done-badge" id="drawDone_${idx}" style="${isDrawn ? 'opacity:1;' : 'opacity:0;'}"></i>
-              </div>
-            </div>`;
-        }).join("");
+      // تحديث واجهة الأقسام مع إمكانية التحديد والتحكم للمشرف والتزامن للجميع
+      if (typeof renderDrawSectionsList === "function") {
+        renderDrawSectionsList();
       }
 
       const drawObserverStatusRow = document.getElementById("drawObserverStatusRow");
@@ -1488,7 +1476,7 @@ function updateArenaUIRealtime(room) {
           }
         } else {
           if (drawObserverStatusText) {
-            drawObserverStatusText.innerHTML = `<i class="fa-solid fa-hourglass-half fa-spin" style="color: #ca8a04;"></i> في انتظار سحب الأسئلة من مشرف الجولة...`;
+            drawObserverStatusText.innerHTML = `<i class="fa-solid fa-hourglass-half fa-spin" style="color: #ca8a04;"></i> في انتظار اختيار الأقسام وسحب الأسئلة من مشرف الجولة...`;
           }
         }
       }
@@ -1533,9 +1521,16 @@ function updateArenaUIRealtime(room) {
     if (room.activeCardsTurn && room.activeCardsTurn.timestamp > lastSeenCardsTurnTimestamp) {
       lastSeenCardsTurnTimestamp = room.activeCardsTurn.timestamp;
       if (room.activeCardsTurn.isOpen && Array.isArray(room.activeCardsTurn.cards)) {
-        showSynchronizedTacticalCardsModal(room.activeCardsTurn.cards);
-      } else if (!room.activeCardsTurn.isOpen && room.activeCardsTurn.chosenCard) {
-        applySynchronizedChosenCard(room.activeCardsTurn.chosenCard, room.activeCardsTurn.chosenBy);
+        showSynchronizedTacticalCardsModal(room.activeCardsTurn.cards, room.activeCardsTurn.nextIdx);
+      } else if (!room.activeCardsTurn.isOpen) {
+        if (room.activeCardsTurn.chosenCard) {
+          applySynchronizedChosenCard(room.activeCardsTurn.chosenCard, room.activeCardsTurn.chosenBy, room.activeCardsTurn.nextIdx);
+        } else if (room.activeCardsTurn.skipped) {
+          clearInterval(cardsTimerInterval);
+          tacticalCardsModal?.classList.add("hidden");
+          showToast(`⏭️ تم تخطي البطاقات وإضافة +15 ثانية للوقت من قبل (${room.activeCardsTurn.chosenBy || 'المتسابق'})!`, "fa-hourglass-start", 3000);
+          loadStageQuestion(room.activeCardsTurn.nextIdx ?? (room.currentQuestionIdx || 0));
+        }
       }
     }
 
@@ -1575,7 +1570,8 @@ function updateArenaUIRealtime(room) {
           isFinished: (ev.questionIdx + 1) >= allQuestions.length,
           allQuestions: allQuestions,
           currentIdx: ev.questionIdx,
-          isLeaderUser: false
+          isLeaderUser: false,
+          isTimeout: !!ev.isTimeout
         });
         return;
       }
@@ -5235,39 +5231,25 @@ async function selectContestant(student) {
 // =========================================================
 function enterPhaseQuestionDraw() {
   showArenaPhase("draw");
-  const quiz = quizzesCache.find(q => q.id === currentLiveRoom.quizId);
+  const quiz = quizzesCache.find(q => q.id === currentLiveRoom?.quizId);
   currentQuizData = quiz || quizzesCache[0];
 
   if (drawPhaseStudentLabel)
-    drawPhaseStudentLabel.textContent = `المتسابق: ${currentLiveRoom.contestantName || '--'}`;
+    drawPhaseStudentLabel.textContent = `المتسابق: ${currentLiveRoom?.contestantName || '--'}`;
 
   if (!currentQuizData) return;
 
+  renderDrawSectionsList();
+}
+
+function renderDrawSectionsList() {
+  if (!currentQuizData || !drawSectionsList) return;
   const secList = Array.isArray(currentQuizData.sections) ? currentQuizData.sections : [];
+  if (secList.length === 0) return;
+
   const totalInQuiz = secList.reduce((a, s) => a + (Array.isArray(s?.questions) ? s.questions.length : 0), 0);
-  const perStudent = currentLiveRoom.questionsPerStudent || (totalInQuiz || 5);
+  const perStudent = currentLiveRoom?.questionsPerStudent || (totalInQuiz || 5);
 
-  // بناء عرض الأقسام
-  drawSectionsList.innerHTML = secList.map((sec, idx) => {
-    const secTotal = Array.isArray(sec.questions) ? sec.questions.length : 0;
-    const portion = Math.max(1, Math.round((secTotal / (totalInQuiz || 1)) * perStudent));
-    return `
-      <div class="draw-section-row" id="drawSecRow_${idx}">
-        <div>
-          <div class="draw-section-name">${sec.sectionName}</div>
-          <div style="font-size:12px;color:#94a3b8;">${secTotal} سؤال متاح</div>
-        </div>
-        <div class="draw-counter-group">
-          <span class="draw-counter-badge" id="drawBadge_${idx}">0 / ${portion}</span>
-          <i class="fa-solid fa-circle-check draw-done-badge" id="drawDone_${idx}"></i>
-        </div>
-      </div>`;
-  }).join("");
-
-  drawActionsRow?.classList.remove("hidden");
-  drawResultActions?.classList.add("hidden");
-
-  // المشرف أو قائد الغرفة يرى زر السحب
   const canControl = currentUser && (
     currentUser.role === "supervisor" || 
     isSupervisor(currentUser.name) ||
@@ -5277,15 +5259,102 @@ function enterPhaseQuestionDraw() {
       (Array.isArray(currentLiveRoom.users) && currentLiveRoom.users[0] === currentUser.name)
     ))
   );
-  if (!canControl) {
-    drawActionsRow?.classList.add("hidden");
+
+  if (!currentLiveRoom.sectionCounts || typeof currentLiveRoom.sectionCounts !== "object") {
+    currentLiveRoom.sectionCounts = {};
+  }
+
+  const drawn = Array.isArray(currentLiveRoom?.drawnQuestions) ? currentLiveRoom.drawnQuestions : [];
+
+  // بناء عرض الأقسام مع أدوات اختيار كم سؤال في كل قسم للمشرف والتزامن للجميع
+  drawSectionsList.innerHTML = secList.map((sec, idx) => {
+    const secTotal = Array.isArray(sec.questions) ? sec.questions.length : 0;
+    const defaultPortion = Math.max(1, Math.round((secTotal / (totalInQuiz || 1)) * perStudent));
+    if (currentLiveRoom.sectionCounts[sec.sectionName] === undefined) {
+      currentLiveRoom.sectionCounts[sec.sectionName] = defaultPortion;
+    }
+    const currentVal = Math.min(secTotal, Math.max(0, currentLiveRoom.sectionCounts[sec.sectionName]));
+    const drawnCount = drawn.filter(dq => dq.sectionName === sec.sectionName).length;
+    const isDrawn = drawn.length > 0 && drawnCount > 0;
+
+    return `
+      <div class="draw-section-row ${isDrawn ? 'drawn' : ''}" id="drawSecRow_${idx}">
+        <div>
+          <div class="draw-section-name">${sec.sectionName}</div>
+          <div style="font-size:12px;color:#94a3b8;">${secTotal} سؤال متاح بالقسم</div>
+        </div>
+        <div class="draw-section-controls-group">
+          ${canControl ? `
+            <div class="draw-section-stepper">
+              <button type="button" class="draw-step-btn" data-sec-step="dec" data-sec-idx="${idx}" ${currentVal <= 0 ? 'disabled' : ''}>-</button>
+              <span class="draw-step-val" id="drawSecVal_${idx}">${currentVal}</span>
+              <button type="button" class="draw-step-btn" data-sec-step="inc" data-sec-idx="${idx}" ${currentVal >= secTotal ? 'disabled' : ''}>+</button>
+            </div>
+          ` : `
+            <div class="draw-section-stepper" style="background:#f1f5f9;border-color:#cbd5e1;">
+              <span style="font-size:11.5px;color:#64748b;font-weight:700;">المحدد:</span>
+              <span class="draw-step-val" id="drawSecVal_${idx}">${currentVal}</span>
+            </div>
+          `}
+          <div class="draw-counter-group">
+            <span class="draw-counter-badge ${isDrawn ? 'done' : ''}" id="drawBadge_${idx}">
+              ${isDrawn ? `${drawnCount} / ${currentVal} ✓` : `0 / ${currentVal}`}
+            </span>
+            <i class="fa-solid fa-circle-check draw-done-badge" id="drawDone_${idx}" style="${isDrawn ? 'opacity:1;' : 'opacity:0;'}"></i>
+          </div>
+        </div>
+      </div>`;
+  }).join("");
+
+  if (canControl) {
+    drawSectionsList.querySelectorAll("[data-sec-step]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const idx = parseInt(btn.getAttribute("data-sec-idx"));
+        const step = btn.getAttribute("data-sec-step");
+        const sec = secList[idx];
+        if (!sec) return;
+        const secTotal = Array.isArray(sec.questions) ? sec.questions.length : 0;
+        let val = currentLiveRoom.sectionCounts[sec.sectionName] ?? 1;
+        if (step === "inc") val = Math.min(secTotal, val + 1);
+        if (step === "dec") val = Math.max(0, val - 1);
+        currentLiveRoom.sectionCounts[sec.sectionName] = val;
+
+        renderDrawSectionsList();
+
+        // بث فوري سحابي لعدد الأسئلة المختارة لكل قسم ليتزامن عند الجميع
+        if (currentLiveRoom.id) {
+          updateDoc(doc(db, "live_rooms", currentLiveRoom.id), {
+            sectionCounts: currentLiveRoom.sectionCounts,
+            lastUpdated: serverTimestamp()
+          }).catch(e => console.warn("Sync sectionCounts err:", e));
+        }
+      });
+    });
+  }
+
+  const drawActionsRow = document.getElementById("drawActionsRow");
+  const drawResultActions = document.getElementById("drawResultActions");
+  const drawObserverStatusRow = document.getElementById("drawObserverStatusRow");
+
+  if (canControl) {
+    if (drawn.length > 0) {
+      drawActionsRow?.classList.add("hidden");
+      drawResultActions?.classList.remove("hidden");
+    } else {
+      drawActionsRow?.classList.remove("hidden");
+      drawResultActions?.classList.add("hidden");
+    }
+    drawObserverStatusRow?.classList.add("hidden");
   } else {
-    drawActionsRow?.classList.remove("hidden");
+    drawActionsRow?.classList.add("hidden");
+    drawResultActions?.classList.add("hidden");
+    drawObserverStatusRow?.classList.remove("hidden");
   }
 }
 
 // =========================================================
-// السحب العشوائي المتزامن للأسئلة قسم بقسم لجميع الأدوار (مشرف، معلمين، عارض)
+// السحب العشوائي المتزامن للأسئلة قسم بقسم لجميع الأدوار (مشرف، معلمين، عارض، طلاب)
+// مع أنيميشن الأعداد التفاعلي السلس للجميع بالتزامن
 // =========================================================
 function playSynchronizedSectionDraw(quizData, drawnQuestions, isLeadUser = false, onFinish = null) {
   if (!quizData || !drawSectionsList) return;
@@ -5300,19 +5369,29 @@ function playSynchronizedSectionDraw(quizData, drawnQuestions, isLeadUser = fals
   if (currentDrawTimeout) clearTimeout(currentDrawTimeout);
   isSectionDrawAnimating = true;
 
-  // إعادة بناء واجهة الأقسام مع تصفير العدادات
+  // إعادة بناء واجهة الأقسام مع تصفير العدادات تمهيداً للأنيميشن
   drawSectionsList.innerHTML = secList.map((sec, idx) => {
     const secTotal = Array.isArray(sec.questions) ? sec.questions.length : 0;
-    const portion = Math.max(1, Math.round((secTotal / (totalInQuiz || 1)) * perStudent));
+    const defaultPortion = Math.max(1, Math.round((secTotal / (totalInQuiz || 1)) * perStudent));
+    const portion = (currentLiveRoom?.sectionCounts && currentLiveRoom.sectionCounts[sec.sectionName] !== undefined)
+      ? currentLiveRoom.sectionCounts[sec.sectionName]
+      : defaultPortion;
+
     return `
       <div class="draw-section-row" id="drawSecRow_${idx}">
         <div>
           <div class="draw-section-name">${sec.sectionName}</div>
-          <div style="font-size:12px;color:#94a3b8;">${secTotal} سؤال متاح</div>
+          <div style="font-size:12px;color:#94a3b8;">${secTotal} سؤال متاح بالقسم</div>
         </div>
-        <div class="draw-counter-group">
-          <span class="draw-counter-badge" id="drawBadge_${idx}">0 / ${portion}</span>
-          <i class="fa-solid fa-circle-check draw-done-badge" id="drawDone_${idx}" style="opacity: 0;"></i>
+        <div class="draw-section-controls-group">
+          <div class="draw-section-stepper" style="background:#f1f5f9;border-color:#cbd5e1;">
+            <span style="font-size:11.5px;color:#64748b;font-weight:700;">المطلوب:</span>
+            <span class="draw-step-val">${portion}</span>
+          </div>
+          <div class="draw-counter-group">
+            <span class="draw-counter-badge" id="drawBadge_${idx}">0 / ${portion}</span>
+            <i class="fa-solid fa-circle-check draw-done-badge" id="drawDone_${idx}" style="opacity: 0;"></i>
+          </div>
         </div>
       </div>`;
   }).join("");
@@ -5331,7 +5410,7 @@ function playSynchronizedSectionDraw(quizData, drawnQuestions, isLeadUser = fals
     drawResultActions?.classList.add("hidden");
     drawObserverStatusRow?.classList.remove("hidden");
     if (drawObserverStatusText) {
-      drawObserverStatusText.innerHTML = `<i class="fa-solid fa-spinner fa-spin" style="color: #eab308;"></i> جاري سحب الأسئلة لحظياً لكل قسم بالتزامن مع المشرف...`;
+      drawObserverStatusText.innerHTML = `<i class="fa-solid fa-dice fa-bounce" style="color: #eab308;"></i> جاري سحب الأسئلة لحظياً لكل قسم بالتزامن مع المشرف...`;
     }
   }
 
@@ -5356,7 +5435,10 @@ function playSynchronizedSectionDraw(quizData, drawnQuestions, isLeadUser = fals
 
     const sec = secList[secIdx];
     const secTotal = Array.isArray(sec.questions) ? sec.questions.length : 0;
-    const portion = Math.max(1, Math.round((secTotal / (totalInQuiz || 1)) * perStudent));
+    const defaultPortion = Math.max(1, Math.round((secTotal / (totalInQuiz || 1)) * perStudent));
+    const portion = (currentLiveRoom?.sectionCounts && currentLiveRoom.sectionCounts[sec.sectionName] !== undefined)
+      ? currentLiveRoom.sectionCounts[sec.sectionName]
+      : defaultPortion;
     const secDrawn = drawnQuestions.filter(q => q.sectionName === sec.sectionName);
     const targetCount = secDrawn.length;
 
@@ -5404,9 +5486,13 @@ function runQuestionDraw(silent = false) {
 
   secList.forEach(sec => {
     const secTotal = Array.isArray(sec.questions) ? sec.questions.length : 0;
-    const portion = Math.max(1, Math.round((secTotal / (totalInQuiz || 1)) * perStudent));
+    const defaultPortion = Math.max(1, Math.round((secTotal / (totalInQuiz || 1)) * perStudent));
+    const chosenCount = (currentLiveRoom?.sectionCounts && currentLiveRoom.sectionCounts[sec.sectionName] !== undefined)
+      ? currentLiveRoom.sectionCounts[sec.sectionName]
+      : defaultPortion;
+    const finalCount = Math.min(secTotal, Math.max(0, chosenCount));
     const shuffled = [...(sec.questions || [])].sort(() => 0.5 - Math.random());
-    const picked = shuffled.slice(0, Math.min(portion, secTotal));
+    const picked = shuffled.slice(0, finalCount);
     picked.forEach(q => drawnQuestions.push({ ...q, sectionName: sec.sectionName }));
   });
 
@@ -5419,13 +5505,14 @@ function runQuestionDraw(silent = false) {
   currentLiveRoom.drawnQuestions = drawnQuestions;
   currentLiveRoom.drawAnimation = animPayload;
 
-  // حفظ سحابي فوري في فايربيس لبث الأنيميشن المتزامن لجميع المعلمين والعارض
+  // حفظ سحابي فوري في فايربيس لبث الأنيميشن المتزامن لجميع المعلمين والعارض والطلاب
   if (currentLiveRoom.id) {
     try {
       const roomRef = doc(db, "live_rooms", currentLiveRoom.id);
       updateDoc(roomRef, {
         drawnQuestions: drawnQuestions,
         drawAnimation: animPayload,
+        sectionCounts: currentLiveRoom.sectionCounts || {},
         lastUpdated: serverTimestamp()
       }).catch(err => console.warn("Sync drawAnimation error:", err));
     } catch (e) {}
@@ -5505,13 +5592,11 @@ function bringQuestionCardIntoView(cardEl) {
 
 // =========================================================
 // المؤقت اللحظي السحابي الموحد والمزامن عبر Firestore لجميع المتسابقين والعارض والمشرف
+// سريع واستجابة فائقة الدقة لكل 100 ملي ثانية لمنع البطء والتقطيع
 // =========================================================
-function syncAndRunLiveTimer(timerState, onTimeout = null) {
-  if (liveTimerInterval) {
-    clearInterval(liveTimerInterval);
-    liveTimerInterval = null;
-  }
+let lastTimerConfigKey = "";
 
+function syncAndRunLiveTimer(timerState, onTimeout = null) {
   const timerDisplay = stageTimerSeconds;
   const timerPill = document.getElementById("stageTimerPill");
   if (!timerDisplay) return;
@@ -5525,6 +5610,8 @@ function syncAndRunLiveTimer(timerState, onTimeout = null) {
 
   // 1. فحص ميزة "بلا حد زمني" (بطاقة تكتيكية)
   if (timerState.noTimeLimit) {
+    if (liveTimerInterval) { clearInterval(liveTimerInterval); liveTimerInterval = null; }
+    lastTimerConfigKey = "";
     timerDisplay.textContent = "∞";
     liveTimeRemaining = 9999;
     if (timerPill) {
@@ -5536,6 +5623,8 @@ function syncAndRunLiveTimer(timerState, onTimeout = null) {
 
   // 2. فحص حالة التجميد (بطاقة تجميد الوقت)
   if (timerState.isFrozen) {
+    if (liveTimerInterval) { clearInterval(liveTimerInterval); liveTimerInterval = null; }
+    lastTimerConfigKey = "";
     const frozenSecs = Math.max(0, Math.ceil(timerState.freezeRemaining || 0));
     timerDisplay.textContent = `${frozenSecs} ❄️`;
     liveTimeRemaining = frozenSecs;
@@ -5546,14 +5635,29 @@ function syncAndRunLiveTimer(timerState, onTimeout = null) {
     return;
   }
 
-  // 3. العد التنازلي الحقيقي المزامن سحابياً بالملي ثانية
+  const qIdx = timerState.questionIdx ?? 0;
+  const endsAt = timerState.endsAt || (Date.now() + 30000);
+  const configKey = `${qIdx}_${endsAt}`;
+
+  // منع إعادة إنشاء العداد بشكل مستمر عند وصول تحديثات متكررة من السحابة إذا كان يعمل بالفعل على نفس السؤال
+  if (liveTimerInterval && lastTimerConfigKey === configKey) {
+    return;
+  }
+
+  if (liveTimerInterval) {
+    clearInterval(liveTimerInterval);
+    liveTimerInterval = null;
+  }
+  lastTimerConfigKey = configKey;
+
+  // 3. العد التنازلي الحقيقي المزامن سحابياً بالملي ثانية بدقة 100ms
   if (timerPill) {
     timerPill.classList.remove("timer-infinite", "timer-frozen");
   }
 
   const updateTick = () => {
     const now = Date.now();
-    const remainingMs = Math.max(0, (timerState.endsAt || (now + 30000)) - now);
+    const remainingMs = Math.max(0, endsAt - now);
     const remainingSecs = Math.ceil(remainingMs / 1000);
     liveTimeRemaining = remainingSecs;
 
@@ -5570,29 +5674,181 @@ function syncAndRunLiveTimer(timerState, onTimeout = null) {
     if (remainingMs <= 0) {
       clearInterval(liveTimerInterval);
       liveTimerInterval = null;
+      lastTimerConfigKey = "";
       timerDisplay.textContent = "0";
 
-      // المشرف أو قائد الغرفة فقط ينفذ انتهاء الوقت لمنع التكرار من المتسابقين
+      // فحص المخول بالحل أو قائد/مشرف الغرفة
       const isLeader = currentUser && (
         currentUser.name === currentLiveRoom?.leaderName ||
         currentUser.name === currentLiveRoom?.creatorName ||
         currentUser.role === "supervisor" ||
         isSupervisor(currentUser.name)
       );
+      const isAllowedSolver = checkIsSolverAllowed(currentLiveRoom);
 
-      if (isLeader && !isQuestionTransitionRunning) {
+      // أي شخص مخول بالحل أو قائد الغرفة ينفذ انتهاء الوقت فوراً بدون أي تعليق
+      if ((isAllowedSolver || isLeader) && !isQuestionTransitionRunning) {
         if (typeof onTimeout === "function") {
           onTimeout();
         } else {
-          showToast("⚠️ انتهى الوقت المحدد للسؤال! خصم 3 درجات والانتقال للسؤال التالي", "fa-clock", 3500);
-          advanceToNext(-3, true);
+          handleLiveQuestionTimeout();
         }
       }
     }
   };
 
   updateTick();
-  liveTimerInterval = setInterval(updateTick, 250);
+  liveTimerInterval = setInterval(updateTick, 100);
+}
+
+// --------------------------------------------------------
+// معالجة انتهاء وقت السؤال تلقائياً وخصم نصف النقاط والانتقال للوحة الشرف
+// --------------------------------------------------------
+function handleLiveQuestionTimeout() {
+  if (isQuestionTransitionRunning) return;
+
+  const allQ = (currentLiveRoom?.drawnQuestions && currentLiveRoom.drawnQuestions.length > 0)
+    ? currentLiveRoom.drawnQuestions
+    : (currentQuizData?.sections?.flatMap(s => s.questions || []) || []);
+  const curQ = allQ[currentLiveRoom?.currentQuestionIdx || 0] || {};
+  const qPoints = curQ.points || 5;
+  // خصم نصف النقاط التي كان المفروض أن يأخذها لو جاوب صح
+  const penalty = Math.round((qPoints / 2) * 10) / 10;
+
+  showToast(`⏰ انتهى الوقت المحدد للسؤال! خصم نصف الدرجة (${penalty} درجات) والانتقال للوحة الشرف`, "fa-clock", 3500);
+
+  // إيقاف العداد كلياً وتمرير انتهاء الوقت
+  if (typeof advanceToNext === "function") {
+    advanceToNext(-penalty, true, false, null, true);
+  }
+}
+
+// =========================================================
+// غطاء النتيجة الكبير يغطي السؤال بالكامل ويطلع من تحت بأنيميشن صعود مبهج ويتلاشى
+// صح أخضر كبير عند الإجابة الصحيحة أو X أحمر كبير عند الخطأ أو انتهاء الوقت
+// =========================================================
+function showBigQuestionResultOverlay({ isCorrect, isTimeout = false, scoreDelta = 0 }) {
+  const overlay = document.getElementById("stageQuestionResultOverlay");
+  const iconEl = document.getElementById("resultOverlayIcon");
+  const titleEl = document.getElementById("resultOverlayTitle");
+  const pointsEl = document.getElementById("resultOverlayPoints");
+  if (!overlay || !iconEl || !titleEl || !pointsEl) return;
+
+  overlay.classList.remove("hidden", "correct", "wrong", "timeout");
+  void overlay.offsetWidth; // إعادة تشغيل الأنيميشن من البداية
+
+  if (isCorrect) {
+    overlay.classList.add("correct");
+    iconEl.innerHTML = `<i class="fa-solid fa-circle-check"></i>`;
+    titleEl.textContent = "إجابة صحيحة ومتقنة! 🌟";
+    pointsEl.textContent = `+${scoreDelta} درجات`;
+    try { soundFX.correct(); } catch (e) {}
+  } else if (isTimeout) {
+    overlay.classList.add("timeout");
+    iconEl.innerHTML = `<i class="fa-solid fa-circle-xmark"></i>`;
+    titleEl.textContent = "انتهى الوقت المحدد للسؤال! ⏰";
+    pointsEl.textContent = `${scoreDelta} درجات (خصم نصف الدرجة)`;
+    try { soundFX.wrong(); } catch (e) {}
+  } else {
+    overlay.classList.add("wrong");
+    iconEl.innerHTML = `<i class="fa-solid fa-circle-xmark"></i>`;
+    titleEl.textContent = "إجابة غير صحيحة! ❌";
+    pointsEl.textContent = scoreDelta !== 0 ? `${scoreDelta} درجات` : "ركّز في السؤال القادم 💪";
+    try { soundFX.wrong(); } catch (e) {}
+  }
+
+  overlay.classList.remove("hidden");
+
+  // يتلاشى ويختفي بعد انتهاء الأنيميشن الجميل
+  setTimeout(() => {
+    overlay.classList.add("hidden");
+  }, 1600);
+}
+
+// =========================================================
+// دورة الانتقال السينمائية بين الأسئلة: تقييم الإجابة -> تلاشي السؤال -> ظهور لوحة الشرف -> البطاقات التكتيكية -> ظهور السؤال التالي
+// =========================================================
+function playQuestionTransitionSequence({ isCorrect, scoreDelta, isPenalty, nextIdx, isFinished, allQuestions, currentIdx, isLeaderUser = true, isTimeout = false }) {
+  isQuestionTransitionRunning = true;
+
+  // 1. إظهار غطاء النتيجة الكبير الذي يغطي السؤال بالكامل ويطلع من تحت بأنيميشن صعود مبهج
+  showBigQuestionResultOverlay({ isCorrect, isTimeout, scoreDelta });
+
+  // 2. إظهار شريط نتيجة الإجابة الفورية أسفل الخيارات أيضاً
+  const existingFeedback = stageInteractiveArea.querySelector(".answer-feedback-banner");
+  if (!existingFeedback) {
+    const fb = document.createElement("div");
+    fb.className = `answer-feedback-banner ${isCorrect ? "correct" : "wrong"}`;
+    if (isCorrect) {
+      fb.innerHTML = `
+        <div style="display:flex;align-items:center;gap:12px;">
+          <i class="fa-solid fa-circle-check" style="font-size:30px;color:#16a34a;"></i>
+          <div>
+            <div style="font-weight:900;font-size:16.5px;color:#14532d;">أحسنت! إجابة صحيحة ومتقنة 🌟</div>
+            <div style="font-size:13px;color:#15803d;font-weight:700;">+${scoreDelta} درجات تم احتسابها لرصيدك سحابياً</div>
+          </div>
+        </div>
+        <div class="score-increase-badge" style="font-size:16px;">+${scoreDelta}</div>
+      `;
+    } else {
+      fb.innerHTML = `
+        <div style="display:flex;align-items:center;gap:12px;">
+          <i class="fa-solid fa-circle-xmark" style="font-size:30px;color:#dc2626;"></i>
+          <div>
+            <div style="font-weight:900;font-size:16.5px;color:#7f1d1d;">${isTimeout ? "انتهى الوقت المحدد للسؤال! ⏰" : "إجابة غير صحيحة! ركّز في السؤال القادم 💪"}</div>
+            <div style="font-size:13px;color:#991b1b;font-weight:700;">${isTimeout ? `تم خصم نصف الدرجة (${scoreDelta} درجات)` : "المثابرة والمراجعة هما سر التفوق والتميّز"}</div>
+          </div>
+        </div>
+        ${isPenalty ? `<div class="score-penalty-badge" style="font-size:16px;">${scoreDelta}</div>` : ''}
+      `;
+    }
+    stageInteractiveArea.appendChild(fb);
+  }
+
+  // 2. الانتظار 1.6 ثانية لمشاهدة التقييم وشارة الصح/الخطأ بوضوح
+  setTimeout(() => {
+    // 3. تلاشي السؤال الحركي الجذاب بسلاسة
+    const questionCardEl = document.querySelector(".stage-question-card");
+    if (questionCardEl) {
+      questionCardEl.classList.remove("question-enter-anim");
+      questionCardEl.classList.add("question-exit-anim");
+    }
+
+    // 4. بعد انتهاء تلاشي السؤال (420ms)، ظهور لوحة الشرف بأنيميشن جميل
+    setTimeout(() => {
+      showHonorBoardModal(false, () => {
+        // 5. بعد تلاشي لوحة الشرف بنجاح، الانتقال للبطاقات التكتيكية أو السؤال التالي أو إنهاء المسابقة
+        isQuestionTransitionRunning = false;
+
+        if (isFinished) {
+          finishContestant();
+        } else {
+          // المشرف أو المنفذ يحدث رقم السؤال السحابي لضمان تماشي جميع الشاشات بالتزامن
+          if (isLeaderUser && currentLiveRoom) {
+            currentLiveRoom.currentQuestionIdx = nextIdx;
+            currentLiveRoom.contestantScore = contestantScore;
+            saveRooms(currentLiveRoom);
+          }
+
+          // نظام البطاقات التكتيكية: كل ربع الأسئلة (مثلاً 20 سؤال تظهر فيها 5 مرات)
+          const totalQ = allQuestions.length || 20;
+          const cardStep = Math.max(1, Math.round(totalQ / 5)); // للـ 20 سؤال: 20/5 = 4
+          const isCardTurn = (currentLiveRoom?.tacticalCardsEnabled !== false) && 
+            ((currentIdx + 1) % cardStep === 0) &&
+            (nextIdx < allQuestions.length);
+
+          if (isCardTurn) {
+            const canGenerate = isLeaderUser || checkIsSolverAllowed(currentLiveRoom);
+            if (canGenerate) {
+              triggerTacticalCardsModal(() => loadStageQuestion(nextIdx), nextIdx);
+            }
+          } else {
+            loadStageQuestion(nextIdx);
+          }
+        }
+      }, currentContestant?.name, scoreDelta, isPenalty);
+    }, 420);
+  }, 1600);
 }
 
 async function broadcastTimerModification(options = {}) {
@@ -5719,89 +5975,6 @@ function initLiveStage() {
   if (!currentLiveRoom) return;
   // الآن initLiveStage تُستدعى فقط إذا كانت phase=competing مسبقاً (عند إعادة الدخول)
   enterPhaseStage();
-}
-
-// =========================================================
-// دورة الانتقال السينمائية بين الأسئلة: تقييم الإجابة -> تلاشي السؤال -> ظهور لوحة الشرف -> تلاشي لوحة الشرف -> ظهور السؤال التالي
-// =========================================================
-function playQuestionTransitionSequence({ isCorrect, scoreDelta, isPenalty, nextIdx, isFinished, allQuestions, currentIdx, isLeaderUser = true }) {
-  isQuestionTransitionRunning = true;
-
-  // 1. إظهار شريط نتيجة الإجابة الفورية (أخضر مع علامة صح أو أحمر مع خطأ وبدقة)
-  const existingFeedback = stageInteractiveArea.querySelector(".answer-feedback-banner");
-  if (!existingFeedback) {
-    const fb = document.createElement("div");
-    fb.className = `answer-feedback-banner ${isCorrect ? "correct" : "wrong"}`;
-    if (isCorrect) {
-      fb.innerHTML = `
-        <div style="display:flex;align-items:center;gap:12px;">
-          <i class="fa-solid fa-circle-check" style="font-size:30px;color:#16a34a;"></i>
-          <div>
-            <div style="font-weight:900;font-size:16.5px;color:#14532d;">أحسنت! إجابة صحيحة ومتقنة 🌟</div>
-            <div style="font-size:13px;color:#15803d;font-weight:700;">+${scoreDelta} درجات تم احتسابها لرصيدك سحابياً</div>
-          </div>
-        </div>
-        <div class="score-increase-badge" style="font-size:16px;">+${scoreDelta}</div>
-      `;
-      try { soundFX.correct(); } catch (e) {}
-    } else {
-      fb.innerHTML = `
-        <div style="display:flex;align-items:center;gap:12px;">
-          <i class="fa-solid fa-circle-xmark" style="font-size:30px;color:#dc2626;"></i>
-          <div>
-            <div style="font-weight:900;font-size:16.5px;color:#7f1d1d;">إجابة غير صحيحة! ركّز في السؤال القادم 💪</div>
-            <div style="font-size:13px;color:#991b1b;font-weight:700;">المثابرة والمراجعة هما سر التفوق والتميّز</div>
-          </div>
-        </div>
-        ${isPenalty ? `<div class="score-penalty-badge" style="font-size:16px;">${scoreDelta}</div>` : ''}
-      `;
-      try { soundFX.wrong(); } catch (e) {}
-    }
-    stageInteractiveArea.appendChild(fb);
-  }
-
-  // 2. الانتظار 1.5 ثانية لمشاهدة التقييم والتعلم منه بوضوح
-  setTimeout(() => {
-    // 3. تلاشي السؤال الحركي الجذاب بسلاسة
-    const questionCardEl = document.querySelector(".stage-question-card");
-    if (questionCardEl) {
-      questionCardEl.classList.remove("question-enter-anim");
-      questionCardEl.classList.add("question-exit-anim");
-    }
-
-    // 4. بعد انتهاء تلاشي السؤال (420ms)، ظهور لوحة الشرف بأنيميشن جميل
-    setTimeout(() => {
-      showHonorBoardModal(false, () => {
-        // 5. بعد تلاشي لوحة الشرف بنجاح، الانتقال للسؤال التالي أو إنهاء المسابقة
-        isQuestionTransitionRunning = false;
-
-        if (isFinished) {
-          finishContestant();
-        } else {
-          // المشرف يحدث رقم السؤال السحابي الآن فقط لضمان تماشي جميع الشاشات بالتزامن
-          if (isLeaderUser && currentLiveRoom) {
-            currentLiveRoom.currentQuestionIdx = nextIdx;
-            currentLiveRoom.contestantScore = contestantScore;
-            saveRooms(currentLiveRoom);
-          }
-
-          const quarterStep = Math.max(2, Math.round(allQuestions.length / 4));
-          const isCardTurn = currentLiveRoom?.tacticalCardsEnabled && 
-            ((currentIdx + 1) % quarterStep === 0) && 
-            (nextIdx < allQuestions.length);
-
-          if (isCardTurn) {
-            if (isLeaderUser) {
-              triggerTacticalCardsModal(() => loadStageQuestion(nextIdx));
-            }
-            // ملاحظة: غير المصرح له لا يولد بطاقات منفصلة، بل يستقبل نفس البطاقات الثلاث عبر Firestore
-          } else {
-            loadStageQuestion(nextIdx);
-          }
-        }
-      }, currentContestant?.name, scoreDelta, isPenalty);
-    }, 420);
-  }, 1500);
 }
 
 // --------------------------------------------------------
@@ -5978,7 +6151,7 @@ function loadStageQuestion(idx) {
   stageInteractiveArea.querySelectorAll(".answer-feedback-banner").forEach(fb => fb.remove());
 
   // الانتقال للسؤال التالي مع عرض كرت نتيجة الإجابة أولاً ثم خروج السؤال ثم لوحة الشرف
-  function advanceToNext(scoreDelta = 0, isPenalty = false, isCorrect = true, chosenChoiceIdx = null) {
+  function advanceToNext(scoreDelta = 0, isPenalty = false, isCorrect = true, chosenChoiceIdx = null, isTimeout = false) {
     clearInterval(liveTimerInterval);
     addContestantScore(scoreDelta);
 
@@ -6002,6 +6175,7 @@ function loadStageQuestion(idx) {
         questionIdx: idx,
         chosenChoiceIdx: chosenChoiceIdx,
         isCorrect: isCorrect,
+        isTimeout: isTimeout,
         scoreDelta: scoreDelta,
         isPenalty: isPenalty,
         contestantScore: contestantScore,
@@ -6040,7 +6214,8 @@ function loadStageQuestion(idx) {
       isFinished,
       allQuestions,
       currentIdx: idx,
-      isLeaderUser: true
+      isLeaderUser: true,
+      isTimeout
     });
   }
 
@@ -7122,7 +7297,7 @@ let cardsTimerInterval = null;
 
 let tacticalCardsCallback = null;
 
-function triggerTacticalCardsModal(onComplete = null) {
+function triggerTacticalCardsModal(onComplete = null, nextQuestionIdx = null) {
   if (!tacticalCardsModal || !cards3DRow) {
     if (typeof onComplete === 'function') onComplete();
     return;
@@ -7131,33 +7306,40 @@ function triggerTacticalCardsModal(onComplete = null) {
 
   // اختيار 3 بطاقات عشوائية فريدة من بنك الـ 40 بطاقة في cards-data.js
   const selected3 = getRandomTacticalCards(3);
+  const targetNextIdx = nextQuestionIdx !== null ? nextQuestionIdx : ((currentLiveRoom?.currentQuestionIdx || 0) + 1);
 
   // بث الكروت الثلاثة لجميع المشاركين في الغرفة لضمان ظهور نفس البطاقات للجميع
-  if (currentLiveRoom?.id && checkIsSolverAllowed(currentLiveRoom)) {
+  if (currentLiveRoom?.id) {
     updateDoc(doc(db, "live_rooms", currentLiveRoom.id), {
       activeCardsTurn: {
         isOpen: true,
         cards: selected3.map(c => c.id),
         triggeredBy: currentUser?.name || "المتسابق",
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        nextIdx: targetNextIdx
       },
       lastUpdated: serverTimestamp()
     }).catch(err => console.warn("Broadcast tactical cards notice:", err));
   }
 
-  showSynchronizedTacticalCardsModal(selected3.map(c => c.id));
+  showSynchronizedTacticalCardsModal(selected3.map(c => c.id), targetNextIdx);
 }
 
-function showSynchronizedTacticalCardsModal(cardIds) {
+function showSynchronizedTacticalCardsModal(cardIds, nextIdx = null) {
   if (!tacticalCardsModal || !cards3DRow) return;
-  const selected3 = (Array.isArray(cardIds) ? cardIds : [])
-    .map(id => TACTICAL_CARDS.find(c => c.id === id))
+  const ids = Array.isArray(cardIds) ? cardIds : [];
+  let selected3 = ids
+    .map(id => TACTICAL_CARDS.find(c => String(c.id) === String(id)))
     .filter(Boolean);
 
-  if (selected3.length === 0) return;
+  if (selected3.length === 0) {
+    selected3 = getRandomTacticalCards(3);
+  }
+
+  const targetNextIdx = nextIdx !== null ? nextIdx : (currentLiveRoom?.activeCardsTurn?.nextIdx ?? ((currentLiveRoom?.currentQuestionIdx || 0) + 1));
 
   cards3DRow.innerHTML = selected3.map((card, idx) => `
-    <div class="card-3d-wrapper" data-card-idx="${idx}" style="animation-delay: ${idx * 0.2}s;">
+    <div class="card-3d-wrapper" data-card-idx="${idx}" style="animation-delay: ${idx * 0.18}s;">
       <div class="card-3d-inner">
         <!-- الظهر (قبل القلب) -->
         <div class="card-3d-back">
@@ -7180,18 +7362,22 @@ function showSynchronizedTacticalCardsModal(cardIds) {
   `).join("");
 
   tacticalCardsModal.classList.remove("hidden");
+  try { soundFX.btnClick(); } catch (e) {}
 
   // قلب البطاقات تباعاً بتأثير ثلاثي الأبعاد جميل
   const wrappers = cards3DRow.querySelectorAll(".card-3d-wrapper");
   wrappers.forEach((w, i) => {
     setTimeout(() => {
       w.classList.add("flipped");
-    }, 700 + (i * 350));
+      try { soundFX.btnClick(); } catch (e) {}
+    }, 600 + (i * 300));
 
     w.addEventListener("click", () => {
       // فقط المصرح له بالاختيار يمكنه اختيار البطاقة وتطبيقها للجميع
       if (checkIsSolverAllowed(currentLiveRoom)) {
-        chooseCard(selected3[i], true);
+        w.style.transform = "scale(1.08)";
+        w.style.boxShadow = "0 0 35px #facc15";
+        chooseCard(selected3[i], true, targetNextIdx);
       } else {
         showToast("المتسابق أو المشرف هو المخوّل باختيار البطاقة للجميع", "fa-lock");
       }
@@ -7209,7 +7395,7 @@ function showSynchronizedTacticalCardsModal(cardIds) {
     if (cardsTimeLeft <= 0) {
       clearInterval(cardsTimerInterval);
       if (checkIsSolverAllowed(currentLiveRoom)) {
-        skipTacticalCards(true);
+        skipTacticalCards(true, targetNextIdx);
       } else {
         tacticalCardsModal.classList.add("hidden");
       }
@@ -7217,20 +7403,22 @@ function showSynchronizedTacticalCardsModal(cardIds) {
   }, 1000);
 }
 
-function applySynchronizedChosenCard(cardIdOrObj, chosenBy) {
-  const card = typeof cardIdOrObj === "object" ? cardIdOrObj : TACTICAL_CARDS.find(c => c.id === cardIdOrObj);
+function applySynchronizedChosenCard(cardIdOrObj, chosenBy, nextIdx = null) {
+  const card = typeof cardIdOrObj === "object" ? cardIdOrObj : TACTICAL_CARDS.find(c => String(c.id) === String(cardIdOrObj));
   if (!card) return;
   clearInterval(cardsTimerInterval);
   tacticalCardsModal?.classList.add("hidden");
   showToast(`✨ تم اختيار بطاقة: «${card.title}» من قبل (${chosenBy || 'المتسابق'})!`, card.icon || "fa-bolt", 3500);
-  executeCardEffect(card);
+  executeCardEffect(card, nextIdx);
 }
 
 btnTriggerTacticalCards?.addEventListener("click", () => triggerTacticalCardsModal());
 
-function chooseCard(card, broadcast = true) {
+function chooseCard(card, broadcast = true, nextIdx = null) {
   clearInterval(cardsTimerInterval);
   tacticalCardsModal.classList.add("hidden");
+
+  const targetNextIdx = nextIdx !== null ? nextIdx : (currentLiveRoom?.activeCardsTurn?.nextIdx ?? (currentLiveRoom?.currentQuestionIdx || 0));
 
   if (broadcast && currentLiveRoom?.id) {
     updateDoc(doc(db, "live_rooms", currentLiveRoom.id), {
@@ -7238,16 +7426,18 @@ function chooseCard(card, broadcast = true) {
         isOpen: false,
         chosenCard: card.id,
         chosenBy: currentUser?.name || "المتسابق",
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        nextIdx: targetNextIdx
       },
+      currentQuestionIdx: targetNextIdx,
       lastUpdated: serverTimestamp()
     }).catch(err => console.warn("Broadcast chosen card notice:", err));
   }
 
-  executeCardEffect(card);
+  executeCardEffect(card, targetNextIdx);
 }
 
-function executeCardEffect(card) {
+function executeCardEffect(card, targetNextIdx = null) {
   const eff = card.effect || {};
 
   // ── تأثيرات فورية وتوليد الشارة العائمة المبهجة ──
@@ -7443,24 +7633,45 @@ function executeCardEffect(card) {
     const cb = tacticalCardsCallback;
     tacticalCardsCallback = null;
     cb();
+  } else if (targetNextIdx !== null && targetNextIdx !== undefined) {
+    loadStageQuestion(targetNextIdx);
   } else if (currentLiveRoom && currentLiveRoom.phase === "competing") {
     loadStageQuestion(currentLiveRoom.currentQuestionIdx || 0);
   }
 }
 
-function skipTacticalCards() {
+function skipTacticalCards(broadcast = true, nextIdx = null) {
   clearInterval(cardsTimerInterval);
   tacticalCardsModal.classList.add("hidden");
   broadcastTimerModification({ deltaSeconds: 15 });
   showToast("تم تخطي البطاقات وإضافة +15 ثانية لوقت السؤال!", "fa-hourglass-start");
+
+  const targetNextIdx = nextIdx !== null ? nextIdx : (currentLiveRoom?.activeCardsTurn?.nextIdx ?? (currentLiveRoom?.currentQuestionIdx || 0));
+
+  if (broadcast && currentLiveRoom?.id) {
+    updateDoc(doc(db, "live_rooms", currentLiveRoom.id), {
+      activeCardsTurn: {
+        isOpen: false,
+        skipped: true,
+        chosenBy: currentUser?.name || "المتسابق",
+        timestamp: Date.now(),
+        nextIdx: targetNextIdx
+      },
+      currentQuestionIdx: targetNextIdx,
+      lastUpdated: serverTimestamp()
+    }).catch(err => console.warn("Broadcast skip cards notice:", err));
+  }
+
   if (tacticalCardsCallback) {
     const cb = tacticalCardsCallback;
     tacticalCardsCallback = null;
     cb();
+  } else {
+    loadStageQuestion(targetNextIdx);
   }
 }
 
-btnSkipCards?.addEventListener("click", skipTacticalCards);
+btnSkipCards?.addEventListener("click", () => skipTacticalCards(true));
 
 // --------------------------------------------------------
 // لوحة الشرف (Honor Board - 3 ثواني)
