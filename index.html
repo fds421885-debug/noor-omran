@@ -1458,12 +1458,27 @@
           </div>
           <div class="tactical-info-box">
             <strong>نظام البطاقات التكتيكية (40 بطاقة)</strong>
-            <p>تفعيل ظهور البطاقات التكتيكية تلقائياً كل ربع المسابقة لإضفاء الحماس والتحدي</p>
+            <p>تفعيل ظهور البطاقات التكتيكية تلقائياً لدعم المتسابق وإشعال الحماس</p>
           </div>
           <label class="duo-checkbox-container">
             <input type="checkbox" id="roomTacticalCardsToggle" checked>
             <span class="duo-checkbox-checkmark"></span>
           </label>
+        </div>
+
+        <!-- تكرار ظهور البطاقات التكتيكية: كل سؤال أو كل كم سؤال -->
+        <div class="input-group" id="roomCardFrequencyGroup" style="margin-top: 10px; margin-bottom: 5px;">
+          <label class="input-label" style="font-weight: 800; color: #1e293b;">
+            <i class="fa-solid fa-repeat" style="color: #8b5cf6;"></i> تكرار ظهور البطاقات التكتيكية
+          </label>
+          <select id="roomCardFrequencySelect" class="form-control form-select" style="font-weight: 800;">
+            <option value="quarter" selected>كل ربع المسابقة (الافتراضي: 4-5 مرات للمسابقة)</option>
+            <option value="every_1">كل سؤال (بعد كل سؤال مباشرة)</option>
+            <option value="every_2">كل سؤالين (كل 2 أسئلة)</option>
+            <option value="every_3">كل 3 أسئلة</option>
+            <option value="every_4">كل 4 أسئلة</option>
+            <option value="every_5">كل 5 أسئلة</option>
+          </select>
         </div>
 
         <div class="modal-actions-flex">
@@ -1629,6 +1644,20 @@
             <input type="checkbox" id="settingsTacticalCardsToggle" checked>
             <span class="duo-checkbox-checkmark"></span>
           </label>
+        </div>
+
+        <div class="input-group" id="settingsCardFrequencyGroup" style="margin-top: 10px;">
+          <label class="input-label" style="font-weight: 800; color: #1e293b;">
+            <i class="fa-solid fa-repeat" style="color: #8b5cf6;"></i> تكرار ظهور البطاقات التكتيكية
+          </label>
+          <select id="settingsCardFrequencySelect" class="form-control form-select" style="font-weight: 800;">
+            <option value="quarter" selected>كل ربع المسابقة (الافتراضي: 4-5 مرات للمسابقة)</option>
+            <option value="every_1">كل سؤال (بعد كل سؤال مباشرة)</option>
+            <option value="every_2">كل سؤالين (كل 2 أسئلة)</option>
+            <option value="every_3">كل 3 أسئلة</option>
+            <option value="every_4">كل 4 أسئلة</option>
+            <option value="every_5">كل 5 أسئلة</option>
+          </select>
         </div>
 
         <div class="input-group" style="margin-top: 15px;">

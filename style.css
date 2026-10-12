@@ -6757,6 +6757,86 @@ button:disabled .fa-spin,
   color: #0f172a;
 }
 
+/* ── أنيميشن لوحة الشرف: عداد روليت الأرقام السريع والتجاوز السلس للأعلى ── */
+.honor-score-val {
+  display: inline-block;
+  min-width: 70px;
+  text-align: left;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  transition: color 0.3s ease;
+}
+
+.honor-score-rolling {
+  color: #eab308 !important;
+  text-shadow: 0 0 10px rgba(234, 179, 8, 0.6);
+  animation: rollTension 0.12s infinite alternate;
+}
+
+@keyframes rollTension {
+  0% { transform: scale(1); }
+  100% { transform: scale(1.08); }
+}
+
+/* أنيميشن القفز والتجاوز السلس فوق المتسابقين الآخرين */
+.honor-rank-card {
+  transition: transform 0.65s cubic-bezier(0.34, 1.56, 0.64, 1), 
+              box-shadow 0.4s ease, 
+              background-color 0.4s ease,
+              border-color 0.4s ease;
+  will-change: transform;
+}
+
+.honor-rank-card.rank-leap-up {
+  animation: leapUpAndSettle 0.85s cubic-bezier(0.2, 0.8, 0.2, 1) forwards !important;
+  z-index: 10 !important;
+}
+
+.honor-rank-card.rank-settle-down {
+  animation: settleDownRow 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) forwards !important;
+}
+
+@keyframes leapUpAndSettle {
+  0% {
+    transform: translateY(0) scale(1);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+  }
+  35% {
+    transform: translateY(-24px) scale(1.06);
+    box-shadow: 0 16px 32px rgba(34, 197, 94, 0.35);
+    border-color: #22c55e !important;
+  }
+  70% {
+    transform: translateY(-4px) scale(1.02);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    border-color: #22c55e !important;
+  }
+}
+
+@keyframes settleDownRow {
+  0% {
+    transform: translateY(-12px);
+    opacity: 0.8;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* التنسيق التلقائي والتكبير/التصغير الذكي للسؤال والخيارات لظهورها كاملة بوسط الشاشة */
+.stage-question-card.auto-scale-fit {
+  transform-origin: top center;
+  transition: transform 0.3s ease;
+}
+
+.interactive-question-area {
+  max-height: none !important;
+  transition: font-size 0.2s ease, gap 0.2s ease;
+}
+
 
 
 
