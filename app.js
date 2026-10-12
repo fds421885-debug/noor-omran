@@ -23,7 +23,7 @@ import {
 } from "./firebase-config.js";
 
 import { soundFX } from "./audio-fx.js";
-import { TACTICAL_CARDS } from "./cards-data.js";
+import { TACTICAL_CARDS, getRandomTacticalCards } from "./cards-data.js";
 import { generateTestWithAI } from "./ai-service.js";
 
 // --------------------------------------------------------
@@ -4322,7 +4322,7 @@ createRoomForm?.addEventListener("submit", async (e) => {
   const roomName = newRoomNameInput.value.trim() || `مسابقة نور البيان الكبرى - ${new Date().toLocaleDateString('ar-EG')}`;
   const quizId = roomQuizSelect.value || (quizzesCache[0]?.id || "quiz_default_1");
   const cardFreqSelect = document.getElementById("roomCardFrequencySelect");
-  const cardFreq = cardFreqSelect ? cardFreqSelect.value : "1";
+  const cardFreq = cardFreqSelect ? cardFreqSelect.value : "4";
   const cardsEnabled = (cardFreq !== "off") && (roomTacticalCardsToggle ? roomTacticalCardsToggle.checked : true);
   const roomId = "ROOM-" + Math.floor(1000 + Math.random() * 9000);
 
@@ -4770,7 +4770,7 @@ function openRoomSettingsModal() {
   }
   const freqSelect = document.getElementById("settingsCardFrequencySelect");
   if (freqSelect) {
-    freqSelect.value = currentLiveRoom.cardFrequency || "1";
+    freqSelect.value = currentLiveRoom.cardFrequency || "4";
   }
   roomSettingsModal.classList.remove("hidden");
 }
@@ -4782,7 +4782,7 @@ btnSaveRoomSettings?.addEventListener("click", async () => {
   const selectedRadio = document.querySelector("input[name='roomAnsweringPermission']:checked");
   const newPerm = selectedRadio ? selectedRadio.value : "contestant_and_lead";
   const freqSelect = document.getElementById("settingsCardFrequencySelect");
-  const newFreq = freqSelect ? freqSelect.value : (currentLiveRoom.cardFrequency || "1");
+  const newFreq = freqSelect ? freqSelect.value : (currentLiveRoom.cardFrequency || "4");
   const newCardsToggle = (newFreq !== "off") && (settingsTacticalCardsToggle ? settingsTacticalCardsToggle.checked : true);
   const newTimer = settingsQuestionTimerInput ? Math.max(5, parseInt(settingsQuestionTimerInput.value) || 30) : 30;
 
@@ -5603,44 +5603,59 @@ function bringQuestionCardIntoView(cardEl) {
   if (!cardEl) cardEl = document.querySelector(".stage-question-card");
   if (!cardEl) return;
 
+  const arenaEl = document.getElementById("arenaStage");
+  if (arenaEl) arenaEl.classList.add("is-question-active");
+
   const fitAndCenter = () => {
     try {
-      // 1. إعادة ضبط التكبير والهوامش لقياس الارتفاع الطبيعي بدقة
+      // 1. إعادة ضبط مؤقت للتأكد من القياس الحقيقي
       cardEl.style.transform = '';
       cardEl.style.marginBottom = '';
+      cardEl.style.transformOrigin = 'top center';
       cardEl.classList.remove("auto-scale-fit");
 
       const headerEl = document.querySelector(".main-header");
       const headerH = headerEl ? headerEl.offsetHeight : 64;
-      const contestantBanner = document.querySelector(".current-contestant-banner");
-      const bannerH = (contestantBanner && !contestantBanner.classList.contains("hidden")) ? contestantBanner.offsetHeight : 0;
-
       const viewportH = window.innerHeight;
-      // المساحة الرأسية المتاحة لبطاقة السؤال مع ترك متسع مريح أعلى وأسفل
-      const availableH = viewportH - headerH - Math.min(50, bannerH) - 25;
-      const naturalH = cardEl.offsetHeight;
+      const viewportW = window.innerWidth;
 
-      // إذا كان السؤال مع خياراته وتفاصيله (خصوصاً التوصيل، الترتيب، الشفهي) طويلاً
-      // نصغر حجم البطاقة بسلاسة ونضبط توازنها لتظهر كاملة في وسط الشاشة بدون حاجة للنزول بالإصبع
+      // الارتفاع الحقيقي لبطاقة السؤال مع كافة خياراتها وتفاصيلها
+      const naturalH = cardEl.offsetHeight || cardEl.scrollHeight;
+
+      // حساب المساحة الرأسية المتاحة لبطاقة السؤال بالكامل داخل الشاشة
+      const safePadding = 20;
+      const availableH = viewportH - headerH - safePadding;
+
       let scale = 1;
-      if (naturalH > availableH && availableH > 260) {
-        scale = Math.max(0.68, Math.min(0.98, (availableH - 12) / naturalH));
+
+      // إذا كان السؤال مع خياراته (خصوصاً التوصيل، الترتيب، الشفهي) أكبر من المساحة المعروضة
+      // نصغره بنسبة ذكية متوازنة ليتسع كاملاً بدون اقتطاع أي خيار أو زر بالأسفل
+      if (naturalH > (availableH - 16) && naturalH > 0) {
+        scale = Math.max(0.60, Math.min(1, (availableH - 24) / naturalH));
         cardEl.classList.add("auto-scale-fit");
         cardEl.style.transform = `scale(${scale.toFixed(3)})`;
         cardEl.style.transformOrigin = "top center";
-        // تقليص الهامش السفلي لعدم ترك فراغ فارغ تحت البطاقة
         const diffH = Math.round(naturalH * (1 - scale));
         cardEl.style.marginBottom = `-${diffH}px`;
+      } else if (naturalH < (availableH * 0.52) && viewportW > 768) {
+        // إذا كان السؤال قصيراً على شاشة واسعة، نكبره قليلاً لمظهر جذاب
+        scale = 1.04;
+        cardEl.style.transform = `scale(${scale.toFixed(3)})`;
+        cardEl.style.transformOrigin = "top center";
+        const extraH = Math.round(naturalH * (scale - 1));
+        cardEl.style.marginBottom = `${extraH}px`;
       }
 
-      // 2. التمرير التلقائي السلس إلى وسط الشاشة تماماً
+      // 2. التمرير التلقائي السلس إلى وسط الشاشة تماماً لظهور السؤال وجميع الإجابات بوسط العين
       const rect = cardEl.getBoundingClientRect();
-      const cardAbsoluteTop = window.pageYOffset + rect.top;
+      const currentScrollY = window.pageYOffset || document.documentElement.scrollTop;
+      const cardAbsoluteTop = currentScrollY + rect.top;
       const scaledH = rect.height;
-      const idealCenterTop = cardAbsoluteTop - headerH - Math.max(10, (viewportH - headerH - scaledH) / 2);
+
+      const idealCenterScrollY = cardAbsoluteTop - headerH - Math.max(8, (availableH - scaledH) / 2);
 
       window.scrollTo({
-        top: Math.max(0, idealCenterTop),
+        top: Math.max(0, Math.round(idealCenterScrollY)),
         behavior: "smooth"
       });
     } catch (e) {
@@ -5652,9 +5667,9 @@ function bringQuestionCardIntoView(cardEl) {
 
   requestAnimationFrame(() => {
     fitAndCenter();
-    setTimeout(fitAndCenter, 120);
-    setTimeout(fitAndCenter, 380);
-    setTimeout(fitAndCenter, 720);
+    setTimeout(fitAndCenter, 100);
+    setTimeout(fitAndCenter, 280);
+    setTimeout(fitAndCenter, 550);
   });
 }
 
@@ -5839,15 +5854,15 @@ function showBigQuestionResultOverlay({ isCorrect, isTimeout = false, scoreDelta
 function shouldTriggerTacticalCards(room, currentIdx, nextIdx, totalQ) {
   if (!room || room.tacticalCardsEnabled === false) return false;
   if (nextIdx >= totalQ) return false;
-  const freq = String(room.cardFrequency || "1");
+  const freq = String(room.cardFrequency || "4");
   if (freq === "off") return false;
   if (freq === "1" || freq === "every_1") return true; // كل سؤال
   if (freq === "2" || freq === "every_2") return ((currentIdx + 1) % 2 === 0);
   if (freq === "3" || freq === "every_3") return ((currentIdx + 1) % 3 === 0);
-  if (freq === "4" || freq === "every_4") return ((currentIdx + 1) % 4 === 0);
+  if (freq === "4" || freq === "every_4") return ((currentIdx + 1) % 4 === 0); // الافتراضي الموصى به: كل 4 أسئلة
   if (freq === "5" || freq === "every_5") return ((currentIdx + 1) % 5 === 0);
   if (freq === "quarter") return ((currentIdx + 1) % Math.max(1, Math.round(totalQ / 4)) === 0);
-  return true;
+  return ((currentIdx + 1) % 4 === 0);
 }
 
 // =========================================================
@@ -7487,7 +7502,7 @@ function showSynchronizedTacticalCardsModal(cardIds, nextIdx = null) {
 
     w.addEventListener("click", () => {
       // فقط المصرح له بالاختيار يمكنه اختيار البطاقة وتطبيقها للجميع
-      if (checkIsSolverAllowed(currentLiveRoom)) {
+      if (!currentLiveRoom || checkIsSolverAllowed(currentLiveRoom)) {
         w.style.transform = "scale(1.08)";
         w.style.boxShadow = "0 0 35px #facc15";
         chooseCard(selected3[i], true, targetNextIdx);
@@ -7507,7 +7522,7 @@ function showSynchronizedTacticalCardsModal(cardIds, nextIdx = null) {
     if (cardsCountdownTimer) cardsCountdownTimer.textContent = cardsTimeLeft;
     if (cardsTimeLeft <= 0) {
       clearInterval(cardsTimerInterval);
-      if (checkIsSolverAllowed(currentLiveRoom)) {
+      if (!currentLiveRoom || checkIsSolverAllowed(currentLiveRoom)) {
         skipTacticalCards(true, targetNextIdx);
       } else {
         tacticalCardsModal.classList.add("hidden");
@@ -7525,7 +7540,9 @@ function applySynchronizedChosenCard(cardIdOrObj, chosenBy, nextIdx = null) {
   executeCardEffect(card, nextIdx);
 }
 
-btnTriggerTacticalCards?.addEventListener("click", () => triggerTacticalCardsModal());
+btnTriggerTacticalCards?.addEventListener("click", () => {
+  triggerTacticalCardsModal(null, currentLiveRoom?.currentQuestionIdx || 0);
+});
 
 function chooseCard(card, broadcast = true, nextIdx = null) {
   clearInterval(cardsTimerInterval);
@@ -7784,7 +7801,13 @@ function skipTacticalCards(broadcast = true, nextIdx = null) {
   }
 }
 
-btnSkipCards?.addEventListener("click", () => skipTacticalCards(true));
+btnSkipCards?.addEventListener("click", () => {
+  if (!currentLiveRoom || checkIsSolverAllowed(currentLiveRoom)) {
+    skipTacticalCards(true);
+  } else {
+    showToast("المتسابق أو المشرف هو المخوّل بتخطي البطاقات", "fa-lock");
+  }
+});
 
 // --------------------------------------------------------
 // لوحة الشرف (Honor Board - 3 ثواني)
@@ -8892,6 +8915,13 @@ setInterval(() => {
     loadCloudData().catch(() => {});
   }
 }, 20000);
+
+// إعادة التمركز والتحجيم التلقائي فوراً عند تغيير حجم الشاشة أو تدوير الهاتف
+window.addEventListener("resize", () => {
+  if (currentLiveRoom && currentLiveRoom.phase === "competing") {
+    bringQuestionCardIntoView();
+  }
+});
 
 if (document.readyState === "loading") {
   window.addEventListener("DOMContentLoaded", initApp);
