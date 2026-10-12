@@ -8,7 +8,7 @@
         "id": { "type": "string", "description": "Unique participant identifier" },
         "name": { "type": "string", "description": "Full Arabic name" },
         "normalizedName": { "type": "string", "description": "Normalized Arabic name for deduplication" },
-        "role": { "type": "string", "enum": ["supervisor", "teacher", "student", "screen"], "description": "System role" },
+        "role": { "type": "string", "enum": ["supervisor", "teacher", "student", "screen", "presenter"], "description": "System role" },
         "school": { "type": "string", "description": "School name" },
         "grade": { "type": "string", "description": "Student grade or category" },
         "loginCount": { "type": "number", "description": "Number of logins" },

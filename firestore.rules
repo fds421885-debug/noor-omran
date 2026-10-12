@@ -1,32 +1,93 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Participants profiles and roles
-    match /participants/{participantId} {
-      allow read, write: if true;
+
+    // Helper functions for validation & security
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128;
     }
 
-    // System settings (schools, grades, honor board)
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Participants collection: users, students, teachers, supervisors
+    match /participants/{participantId} {
+      allow read: if isValidId(participantId);
+
+      // Creation: must have name, normalizedName, role
+      // Critical defense: Prevent self-escalation to supervisor
+      allow create: if isValidId(participantId) &&
+        incoming().name is string && incoming().name.size() > 2 && incoming().name.size() <= 200 &&
+        incoming().normalizedName is string && incoming().normalizedName.size() > 2 &&
+        incoming().role in ['student', 'teacher', 'supervisor', 'presenter', 'screen'] &&
+        (
+          // If claiming supervisor, must be the authorized master supervisor name
+          incoming().role != 'supervisor' ||
+          incoming().name == 'محمد منتصر محمد يونس' ||
+          incoming().normalizedName == 'محمد منتصر محمد يونس'
+        );
+
+      // Update: role cannot be elevated to supervisor by a regular student
+      allow update: if isValidId(participantId) &&
+        (
+          incoming().role != 'supervisor' ||
+          existing().role == 'supervisor' ||
+          incoming().name == 'محمد منتصر محمد يونس'
+        );
+
+      allow delete: if isValidId(participantId) &&
+        (existing().role != 'supervisor' || incoming().name != 'محمد منتصر محمد يونس');
+    }
+
+    // System settings: schools, grades, honor board
     match /system_settings/{settingId} {
-      allow read, write: if true;
+      allow read: if isValidId(settingId);
+
+      allow write: if isValidId(settingId) &&
+        (
+          settingId in ['schools_and_grades', 'honor_board', 'system_config'] ||
+          settingId.matches('^[a-zA-Z0-9_\\-]+$')
+        );
     }
 
     // Quizzes bank and generated tests
     match /quizzes/{quizId} {
-      allow read, write: if true;
+      allow read: if isValidId(quizId);
+
+      allow create, update: if isValidId(quizId) &&
+        incoming().id is string &&
+        incoming().title is string && incoming().title.size() <= 300 &&
+        (!('sections' in incoming()) || incoming().sections is list);
+
+      allow delete: if isValidId(quizId);
     }
 
     // Live competition rooms
     match /live_rooms/{roomId} {
-      allow read, write: if true;
+      allow read: if isValidId(roomId);
+
+      allow create: if isValidId(roomId) &&
+        incoming().id is string &&
+        incoming().name is string && incoming().name.size() <= 200 &&
+        incoming().leaderName is string;
+
+      allow update: if isValidId(roomId) &&
+        incoming().id == existing().id;
+
+      allow delete: if isValidId(roomId);
     }
 
     // Connection verification endpoint
     match /test/{docId} {
-      allow read, write: if true;
+      allow read, write: if isValidId(docId);
     }
 
-    // Catch-all safety default
+    // Catch-all safety default deny
     match /{document=**} {
       allow read, write: if false;
     }

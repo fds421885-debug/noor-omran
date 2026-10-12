@@ -1755,6 +1755,12 @@ function updateArenaUIRealtime(room) {
         lastSeenTeacherHelpTimestamp = room.activeTeacherHelp.timestamp;
         showTeacherHelpModal(room.activeTeacherHelp.helperName, room.activeTeacherHelp.contestantName, room.activeTeacherHelp.cardTitle, room.activeTeacherHelp.cardId || 6);
       }
+    } else {
+      const teacherModal = document.getElementById("teacherHelpModal");
+      if (teacherModal && !teacherModal.classList.contains("hidden")) {
+        teacherModal.classList.add("hidden");
+        activeTeacherConsultationInProgress = false;
+      }
     }
   }
 }
@@ -6967,14 +6973,35 @@ function loadStageQuestion(idx) {
         `;
       }
 
-      if (activeCardEffect.effect?.showRuleHint || activeCardEffect.effect?.hint) {
+      if (activeCardEffect.effect?.showRuleHint || activeCardEffect.effect?.hint || activeCardEffect.effect?.showRuleInfo) {
         cardBannerHtml += `
           <div style="background:#fefce8;border:2px dashed #facc15;border-radius:12px;padding:10px 16px;margin-bottom:12px;color:#854d0e;font-size:13.5px;font-weight:700;display:flex;align-items:center;gap:10px;">
             <i class="fa-solid fa-lightbulb" style="color:#eab308;font-size:18px;"></i>
-            <span>تلميح تجويدي مضيء: ركّز في الحركات ومخرج الحرف والحكم المتصل به قبل الإجابة.</span>
+            <span>تلميح وقاعدة نور البيان: ركّز في الحركات ومخارج الحروف والقاعدة التجويدية المتصلة بالسؤال قبل الإجابة.</span>
           </div>
         `;
       }
+
+      if (activeCardEffect.effect?.showVerseContext) {
+        cardBannerHtml += `
+          <div style="background:#f0fdf4;border:2px dashed #86efac;border-radius:12px;padding:10px 16px;margin-bottom:12px;color:#166534;font-size:13.5px;font-weight:700;display:flex;align-items:center;gap:10px;">
+            <i class="fa-solid fa-compass" style="color:#22c55e;font-size:18px;"></i>
+            <span>سياق الآية الكريمة (عين الحافظ): استذكر الآيات السابقة واللاحقة للتدبّر وضبط بداية ونهاية المقطع.</span>
+          </div>
+        `;
+      }
+    }
+
+    // عرض توجيه المعلم المعتمد إن وجد في الغرفة الحية
+    if (currentLiveRoom?.lastTeacherTip?.hint) {
+      cardBannerHtml += `
+        <div style="background:#eff6ff;border:2px solid #93c5fd;border-radius:12px;padding:10px 16px;margin-bottom:12px;color:#1e40af;font-size:13.5px;font-weight:700;display:flex;align-items:center;gap:10px;">
+          <i class="fa-solid fa-comment-dots" style="color:#3b82f6;font-size:18px;"></i>
+          <div>
+            <strong>توجيه الأستاذ (${escapeHtml(currentLiveRoom.lastTeacherTip.teacherName || 'المعلم')}):</strong> «${escapeHtml(currentLiveRoom.lastTeacherTip.hint)}»
+          </div>
+        </div>
+      `;
     }
 
     if (activeCardEffect.effect) {
@@ -7043,6 +7070,13 @@ function loadStageQuestion(idx) {
           const basePoints = (choiceIdx === q.correct) ? (q.points || 5) : 0;
           let actualCardBonus = 0;
           if (choiceIdx === q.correct) {
+            if (activeCardEffect?.effect?.balanceAccuracyAndSpeed || hasActiveEffect(36)) {
+              const qDuration = currentLiveRoom?.questionTimer || 30;
+              const speedRatio = Math.max(0, Math.min(1, (qDuration - elapsedSec) / qDuration));
+              const speedBonusPts = Math.round(speedRatio * 2.5 * 10) / 10;
+              actualCardBonus += speedBonusPts;
+              showToast(`⚖️ توازن الحكماء: 2.5 دقة + ${speedBonusPts} سرعة!`, "fa-scale-balanced", 2500);
+            }
             if (doublePointsActive) actualCardBonus += basePoints;
             actualCardBonus += cardBonusPoints;
             // مكافأة السرعة: إن أجاب في أقل من 5 ثوانٍ
@@ -7156,20 +7190,25 @@ function loadStageQuestion(idx) {
       activeConnections = [...currentLiveRoom.matchingState.connections];
     }
 
-    // إذا كانت بطاقة "توصيل الحكمة" نشطة: توصيل أول زوج تلقائياً
-    if (autoMatchOneActive && leftItems.length > 0 && activeConnections.length === 0) {
-      const matchR = rightItems.find(r => r.pairIdx === leftItems[0].pairIdx);
-      if (matchR) {
-        activeConnections.push({
-          leftId: leftItems[0].id,
-          rightId: matchR.id,
-          leftPairIdx: leftItems[0].pairIdx,
-          rightPairIdx: matchR.pairIdx,
-          leftNum: leftItems[0].num,
-          rightLetter: matchR.letter
-        });
-        showToast("✨ توصيل الحكمة: تم ربط أول زوج تلقائياً!", "fa-link", 3000);
+    // إذا كانت بطاقة "توصيل الحكمة" (البطاقة 18) نشطة: توصيل أول زوجين صحيحين تلقائياً وفق مفتاح الإجابة
+    const autoMatchActive = !!(activeCardEffect?.effect?.autoMatchPairs || activeCardEffect?.effect?.autoMatchOne || hasActiveEffect(18));
+    if (autoMatchActive && leftItems.length > 0 && activeConnections.length === 0) {
+      const maxToConnect = Math.min(2, leftItems.length);
+      for (let pi = 0; pi < maxToConnect; pi++) {
+        const itemLeft = leftItems[pi];
+        const matchR = rightItems.find(r => r.pairIdx === itemLeft.pairIdx);
+        if (matchR) {
+          activeConnections.push({
+            leftId: itemLeft.id,
+            rightId: matchR.id,
+            leftPairIdx: itemLeft.pairIdx,
+            rightPairIdx: matchR.pairIdx,
+            leftNum: itemLeft.num,
+            rightLetter: matchR.letter
+          });
+        }
       }
+      showToast("✨ توصيل الحكمة: تم ربط أول زوجين صحيحين تلقائياً وفق مفتاح الإجابة!", "fa-link", 3500);
     }
 
     let selectedLeftId = null;
@@ -7447,7 +7486,7 @@ function loadStageQuestion(idx) {
       ? [...q.items] 
       : (q.targetSentence ? q.targetSentence.split(/\s+/).filter(Boolean) : ["كلمة 1", "كلمة 2"]);
     
-    const lockTwoActive = !!(activeCardEffect?.effect?.lockTwoItems);
+    const lockTwoActive = !!(activeCardEffect?.effect?.lockOrderingItems || activeCardEffect?.effect?.lockTwoItems || hasActiveEffect(17));
 
     let placedWords = [];
     let bankWords = shuffleArray(originalItems.map((word, wIdx) => ({ id: `word_${wIdx}_${Math.random().toString(36).slice(2, 6)}`, text: word, origIdx: wIdx, locked: false })));
@@ -7861,19 +7900,50 @@ function loadStageQuestion(idx) {
     // ربط متوسط التقييم بزر القبول
     const avgDisplay = document.getElementById("oralAvgDisplay");
     if (avgDisplay) {
-      const observer = new MutationObserver(() => {
-        if (avgDisplay && evalCurrentScoreDisplay)
+      const updateAvgText = () => {
+        if (avgDisplay && evalCurrentScoreDisplay) {
           avgDisplay.textContent = evalCurrentScoreDisplay.textContent;
-      });
-      if (evalCurrentScoreDisplay) observer.observe(evalCurrentScoreDisplay, { childList: true });
+        }
+      };
+      updateAvgText();
+      const observer = new MutationObserver(updateAvgText);
+      if (evalCurrentScoreDisplay) observer.observe(evalCurrentScoreDisplay, { childList: true, characterData: true, subtree: true });
     }
 
     document.getElementById("btnOralAccept")?.addEventListener("click", () => {
       const ratings = Object.values(roomTeachersRatings);
       let avg = ratings.length > 0 ? (ratings.reduce((a, b) => a + b, 0) / ratings.length) : 5;
-      // تطبيق الحد الأدنى من بطاقة "درع المعلمين" إن وجدت
-      if (minRatingVal > 0) avg = Math.max(avg, minRatingVal);
-      const baseEarned = Math.round((rounded / 5) * (q.points || 5));
+
+      // بطاقة 22 (درع التقييم): فرض حد أدنى 4 من 5
+      if (hasActiveEffect(22) || activeCardEffect?.effect?.minOralRating || minRatingVal > 0) {
+        avg = Math.max(avg, 4);
+      }
+
+      const rounded = Math.round(avg * 4) / 4;
+      const basePointsVal = q.points || 5;
+      let baseEarned = Math.round((rounded / 5) * basePointsVal);
+      let pts = baseEarned;
+
+      // بطاقة 11 (نجمة التلاوة): إضافة +1 نقطة بحد أقصى 5
+      if (hasActiveEffect(11) || activeCardEffect?.effect?.oralBonus) {
+        pts = Math.min(5, pts + 1);
+      }
+
+      // بطاقة 7 (السؤال الذهبي): مضاعفة الدرجات بحد أقصى 10
+      if (doublePointsActive) {
+        pts = Math.min(10, pts * 2);
+      }
+
+      // بطاقة 25 (قلب الموازين): سقف 7 نقاط
+      if (hasActiveEffect(25) || activeCardEffect?.effect?.bonusCapPoints === 7) {
+        pts = Math.max(pts, 7);
+      }
+
+      // بطاقة 40 (ختام المسك): لآخر سؤال
+      if (isFinalQuestion && (hasActiveEffect(40) || activeCardEffect?.effect?.finaleBonusCap)) {
+        pts = Math.max(pts, 5);
+      }
+
       const actualCardBonus = Math.max(0, pts - baseEarned);
       const btn = document.getElementById("btnOralAccept");
       if (btn) btn.disabled = true;
@@ -7955,14 +8025,29 @@ function loadStageQuestion(idx) {
 // انتهاء مسابقة الطالب بالكامل
 function finishContestant() {
   clearInterval(liveTimerInterval);
-  const finalScore = contestantScore; // حفظ النتيجة النهائية قبل التصفير
+  let finalScore = Math.max(0, contestantScore); // حفظ النتيجة النهائية قبل التصفير
+
+  // تطبيق بطاقة 37 (صمام الأمان النهائي): عدم هبوط النتيجة عن القمة المعتمدة
+  const hasSafetyValve = hasActiveEffect(37) || currentLiveRoom?.activeCardEffects?.some(e => e.cardId === 37);
+  if (hasSafetyValve && currentLiveRoom?.highestLockedScore) {
+    if (finalScore < currentLiveRoom.highestLockedScore) {
+      finalScore = currentLiveRoom.highestLockedScore;
+      showToast(`🗄️ صمام الأمان النهائي: تطبيق أعلى نتيجة مسجلة (${finalScore} نقطة) كحد أدنى مضمون!`, "fa-vault", 4500);
+    }
+  }
+
+  // تطبيق بطاقة 35 (وسام الشرف القرآني): +1 نقطة شرف دائمة في نهاية المسابقة
+  const hasHonorMedal = hasActiveEffect(35) || currentLiveRoom?.activeCardEffects?.some(e => e.cardId === 35);
+  if (hasHonorMedal) {
+    finalScore += 1;
+  }
+
   if (currentContestant) {
     recordHonorScore(currentContestant.name, finalScore);
     showToast(`🏆 اكتملت مسابقة المتسابق (${currentContestant.name})! المجموع النهائي: ${finalScore} نقطة`, "fa-trophy", 4000);
   }
 
   // تصفير نقاط الجلسة بعد الحفظ وقبل عرض لوحة الشرف
-  // لمنع الحساب المزدوج: لوحة الشرف كانت تحسب (المحفوظ + الجلسة) + الجلسة = ضعف!
   contestantScore = 0;
   if (stageStudentScore) stageStudentScore.textContent = "0";
 
@@ -7982,16 +8067,20 @@ async function backToStudentSelect() {
     currentLiveRoom.drawnQuestions = null;
     currentLiveRoom.currentQuestionIdx = 0;
     currentLiveRoom.contestantScore = 0;
+    currentLiveRoom.highestLockedScore = 0;
     await saveRooms(currentLiveRoom);
   }
   enterPhaseStudentSelect();
 }
 
 function addContestantScore(pts) {
-  contestantScore = contestantScore + pts;
+  contestantScore = Math.max(0, contestantScore + pts);
   if (stageStudentScore) stageStudentScore.textContent = String(contestantScore);
-  // مزامنة النقاط مع بيانات الغرفة السحابية لضمان التطابق
-  if (currentLiveRoom) currentLiveRoom.contestantScore = contestantScore;
+  // تحديث أعلى نتيجة مسجلة لصمام الأمان النهائي (البطاقة 37)
+  if (currentLiveRoom) {
+    currentLiveRoom.contestantScore = contestantScore;
+    currentLiveRoom.highestLockedScore = Math.max(currentLiveRoom.highestLockedScore || 0, contestantScore);
+  }
 
   // تحديث رصيد الطالب التراكمي فورياً في الذاكرة والسحابة ولوحة الشرف لمنع ضياع أي خسارة أو نقاط عند الخروج
   if (currentContestant) {
@@ -8105,36 +8194,42 @@ function showTeacherHelpModal(helperName, contestantName, cardTitle = "استش�
   const descEl = document.getElementById("teacherHelpDescription");
   const targetEl = document.getElementById("teacherHelpContestantTarget");
   const listEl = document.getElementById("teacherConsultTeachersList");
+  const hintInput = document.getElementById("teacherHintInput");
   if (!modal) return;
 
   const isSupervisorUser = currentUser && (currentUser.role === "supervisor" || isSupervisor(currentUser.name));
   const isPresenter = currentUser && currentUser.role === "presenter";
-  const isMe = currentUser && (currentUser.name === helperName);
 
   if (targetEl) targetEl.innerHTML = `<i class="fa-solid fa-graduation-cap"></i> المتسابق المستفيد: <strong>${escapeHtml(contestantName || "المتسابق")}</strong>`;
 
-  // 1. حصر المعلمين والمشرفين المتصلين فقط في الغرفة الحالية
+  // 1. حصر المعلمين والمشرفين المتصلين المؤهلين فقط (منع الطلاب نهائياً وفق القاعدة 5.3)
   const roomUsers = Array.isArray(currentLiveRoom?.users) ? currentLiveRoom.users : [];
   const qualifiedList = [];
   roomUsers.forEach(u => {
-    if (u === contestantName) return;
+    if (u === contestantName) return; // استبعاد المتسابق نفسه
     const p = participantsCache.find(x => x.name === u || (x.normalizedName && x.normalizedName === normalizeArabic(u)));
     if (p && (p.role === "teacher" || p.role === "supervisor" || isSupervisor(u))) {
       qualifiedList.push({ name: u, role: p.role || "teacher" });
     }
   });
 
-  // إذا لم يتواجد معلمون آخرون متصلون، نضع المشرف أو قائد الغرفة المتصل
+  // إذا لم يتواجد معلم متصل، التحقق من قائد الغرفة أو المشرف العام
   if (qualifiedList.length === 0) {
-    const onlineOthers = roomUsers.filter(u => u !== contestantName);
-    if (onlineOthers.length > 0) {
-      onlineOthers.forEach(u => qualifiedList.push({ name: u, role: "teacher" }));
-    } else {
-      qualifiedList.push({ name: currentLiveRoom?.leaderName || MASTER_SUPERVISOR_NAME, role: "supervisor" });
+    const leader = currentLiveRoom?.leaderName || MASTER_SUPERVISOR_NAME;
+    if (leader && leader !== contestantName) {
+      qualifiedList.push({ name: leader, role: "supervisor" });
     }
   }
 
-  // اختيار عشوائي فوري من المعلمين المتصلين فقط
+  // إذا انعدم وجود أي معلم أو مشرف مؤهل تماماً، عرض تنبيه للمشرف ومنع الاستشارة الوهمية (القاعدة 5.4)
+  if (qualifiedList.length === 0) {
+    showToast("⚠️ لا يوجد أي معلّم أو مشرف مؤهل متصل في الغرفة حالياً لتقديم الاستشارة.", "fa-triangle-exclamation", 4500);
+    modal.classList.add("hidden");
+    activeTeacherConsultationInProgress = false;
+    return;
+  }
+
+  // اختيار معلم مؤهل واحد عشوائياً أو استخدام المعلم المحدد
   let currentChosen = helperName;
   if (!currentChosen && qualifiedList.length > 0) {
     const randPick = qualifiedList[Math.floor(Math.random() * qualifiedList.length)];
@@ -8152,6 +8247,8 @@ function showTeacherHelpModal(helperName, contestantName, cardTitle = "استش�
   if (!currentChosen) currentChosen = qualifiedList[0]?.name || MASTER_SUPERVISOR_NAME;
   if (nameEl) nameEl.textContent = currentChosen;
 
+  const isMe = currentUser && (currentUser.name === currentChosen);
+
   if (descEl) {
     if (isMe) {
       descEl.innerHTML = `<span style="color:#16a34a;font-weight:900;font-size:16px;">🌟 أنت المعلم المختار!</span><br>وقع الاختيار عليك لمساعدة الطالب <strong>«${escapeHtml(contestantName)}»</strong> وتوجيهه بالإشارة أو النصيحة المفيدة.`;
@@ -8161,6 +8258,22 @@ function showTeacherHelpModal(helperName, contestantName, cardTitle = "استش�
       descEl.innerHTML = `تنبيه المشرف: تم تفعيل استشارة المعلم <strong>«${escapeHtml(currentChosen)}»</strong> للمتسابق <strong>«${escapeHtml(contestantName)}»</strong> مع تجميد الوقت وإضافة +15 ثانية عند الاستئناف.`;
     } else {
       descEl.innerHTML = `تم اختيار الأستاذ <strong>«${escapeHtml(currentChosen)}»</strong> لمساعدة المتسابق <strong>«${escapeHtml(contestantName)}»</strong> وتقديم نصيحة توضيحية له.`;
+    }
+  }
+
+  // ضبط حقل التلميح
+  if (hintInput) {
+    if (currentLiveRoom?.activeTeacherHelp?.hintText) {
+      hintInput.value = currentLiveRoom.activeTeacherHelp.hintText;
+    }
+    // إتاحة الكتابة للمعلم المختار أو المشرف فقط
+    if (isMe || isSupervisorUser) {
+      hintInput.readOnly = false;
+      hintInput.style.background = "#ffffff";
+    } else {
+      hintInput.readOnly = true;
+      hintInput.style.background = "#f8fafc";
+      hintInput.placeholder = "في انتظار كتابة المعلم المساعد للتوجيه...";
     }
   }
 
@@ -8181,7 +8294,6 @@ function showTeacherHelpModal(helperName, contestantName, cardTitle = "استش�
       `;
     }).join("");
 
-    // إتاحة النقر للمشرف لاختيار المعلم يدوياً
     if (isSupervisorUser) {
       listEl.querySelectorAll(".teacher-consult-card").forEach(c => {
         c.addEventListener("click", () => {
@@ -8201,9 +8313,10 @@ function showTeacherHelpModal(helperName, contestantName, cardTitle = "استش�
     }
   }
 
-  // زر الاختيار العشوائي
+  // زر الاختيار العشوائي (للمشرف فقط)
   const btnRandom = document.getElementById("btnTeacherHelpPickRandom");
   if (btnRandom) {
+    btnRandom.style.display = isSupervisorUser ? "inline-block" : "none";
     btnRandom.onclick = () => {
       if (qualifiedList.length > 0) {
         const rand = qualifiedList[Math.floor(Math.random() * qualifiedList.length)];
@@ -8229,9 +8342,10 @@ function showTeacherHelpModal(helperName, contestantName, cardTitle = "استش�
     };
   }
 
-  // زر إلغاء الاستشارة
+  // زر إلغاء الاستشارة (للمشرف فقط)
   const btnCancel = document.getElementById("btnCancelTeacherHelpModal");
   if (btnCancel) {
+    btnCancel.style.display = isSupervisorUser ? "inline-block" : "none";
     btnCancel.onclick = () => {
       modal.classList.add("hidden");
       activeTeacherConsultationInProgress = false;
@@ -8247,24 +8361,28 @@ function showTeacherHelpModal(helperName, contestantName, cardTitle = "استش�
     };
   }
 
-  // زر اعتماد التوجيه واستئناف المؤقت
+  // زر اعتماد التوجيه واستئناف المؤقت ("صح" المتاح للمعلم والمشرف والمصرح لهم)
   const btnDone = document.getElementById("btnCloseTeacherHelpModal");
   if (btnDone) {
     btnDone.onclick = () => {
       modal.classList.add("hidden");
       activeTeacherConsultationInProgress = false;
       const pauseRemaining = currentLiveRoom?.activeTeacherHelp?.pauseRemaining || liveTimeRemaining || 15;
-      // إضافة 15 ثانية إلى الوقت المتبقي قبل الاستشارة
-      const newRemaining = (cardId === 33) ? pauseRemaining : (pauseRemaining + 15);
-      if (cardId === 33) {
-        showToast(`✅ تم توجيه الطالب واستئناف المؤقت بـ ${newRemaining} ثانية!`, "fa-clock", 3500);
+      const writtenHint = hintInput ? hintInput.value.trim() : "";
+      const isCard33 = (cardId === 33);
+      const newRemaining = isCard33 ? pauseRemaining : (pauseRemaining + 15);
+
+      if (writtenHint) {
+        showToast(`💡 توجيه الأستاذ (${currentChosen}): «${writtenHint}»`, "fa-comment-dots", 5000);
       } else {
-        showToast(`✅ تم توجيه الطالب واستئناف المؤقت بـ ${newRemaining} ثانية (${pauseRemaining}ث سابقة + 15ث إضافية)!`, "fa-clock", 4000);
+        showToast(isCard33 ? `✅ تم توجيه الطالب واستئناف المؤقت (${newRemaining}ث)` : `✅ تم توجيه الطالب واستئناف المؤقت بـ ${newRemaining} ثانية (+15ث إضافية)!`, "fa-clock", 4000);
       }
+
       resumeLiveTimerAfterWalletSelection(newRemaining);
       if (currentLiveRoom?.id) {
         updateDoc(doc(db, "live_rooms", currentLiveRoom.id), {
           activeTeacherHelp: null,
+          lastTeacherTip: writtenHint ? { teacherName: currentChosen, hint: writtenHint, timestamp: Date.now() } : null,
           lastUpdated: serverTimestamp()
         }).catch(() => {});
       }
@@ -8805,16 +8923,34 @@ function syncRoomActiveEffects(room) {
   }).catch(err => console.warn("Sync activeCardEffects notice:", err));
 }
 
-// فحص وجود تأثير نشط لبطاقة معينة
-function hasActiveEffect(cardId) {
+// فحص وجود تأثير نشط لبطاقة معينة ينطبق على السؤال الحالي
+function hasActiveEffect(cardId, targetQIdx = null) {
   if (!currentLiveRoom || !Array.isArray(currentLiveRoom.activeCardEffects)) return false;
-  return currentLiveRoom.activeCardEffects.some(e => e.cardId === Number(cardId) && e.status === "active");
+  const qIdx = targetQIdx !== null ? targetQIdx : currentQuestionIndex;
+  const contestantName = currentContestant?.name || currentLiveRoom?.contestantName;
+  return currentLiveRoom.activeCardEffects.some(e => {
+    if (e.cardId !== Number(cardId) || e.status !== "active") return false;
+    if (e.targetContestant && contestantName && e.targetContestant !== contestantName) return false;
+    if (e.scope === "instant" || !e.scope) {
+      return (e.questionIdx === undefined || e.questionIdx === null || e.questionIdx === qIdx);
+    }
+    return true;
+  });
 }
 
 // جلب كائن التأثير النشط لبطاقة معينة
-function getActiveEffect(cardId) {
+function getActiveEffect(cardId, targetQIdx = null) {
   if (!currentLiveRoom || !Array.isArray(currentLiveRoom.activeCardEffects)) return null;
-  return currentLiveRoom.activeCardEffects.find(e => e.cardId === Number(cardId) && e.status === "active") || null;
+  const qIdx = targetQIdx !== null ? targetQIdx : currentQuestionIndex;
+  const contestantName = currentContestant?.name || currentLiveRoom?.contestantName;
+  return currentLiveRoom.activeCardEffects.find(e => {
+    if (e.cardId !== Number(cardId) || e.status !== "active") return false;
+    if (e.targetContestant && contestantName && e.targetContestant !== contestantName) return false;
+    if (e.scope === "instant" || !e.scope) {
+      return (e.questionIdx === undefined || e.questionIdx === null || e.questionIdx === qIdx);
+    }
+    return true;
+  }) || null;
 }
 
 // إنهاء التأثيرات الفورية (instant) عند انتهاء السؤال الحالي
@@ -8823,14 +8959,18 @@ function expireInstantCardEffects() {
   if (!currentLiveRoom || !Array.isArray(currentLiveRoom.activeCardEffects)) return;
   let changed = false;
   const expiredTitles = [];
+  const currentQ = currentQuestionIndex;
   
   currentLiveRoom.activeCardEffects.forEach(eff => {
     if (eff.status === "active" && (eff.scope === "instant" || !eff.scope)) {
-      eff.status = "expired";
-      eff.expiredAt = Date.now();
-      changed = true;
-      expiredTitles.push(eff.title);
-      logCardEvent(eff.cardId, eff.title, eff.targetContestant, "expire", "انتهى التأثير بانتهاء السؤال الحالي.");
+      // التأكد من إنهاء التأثير الفوري للسؤال المستهدف
+      if (eff.questionIdx === undefined || eff.questionIdx === null || eff.questionIdx === currentQ) {
+        eff.status = "expired";
+        eff.expiredAt = Date.now();
+        changed = true;
+        expiredTitles.push(eff.title);
+        logCardEvent(eff.cardId, eff.title, eff.targetContestant, "expire", "انتهى التأثير بانتهاء السؤال الحالي.");
+      }
     }
   });
 
@@ -8875,7 +9015,7 @@ function registerActiveEffect(card, details = {}) {
   const contestantName = currentContestant?.name || currentLiveRoom.contestantName || currentUser?.name || "المتسابق";
   
   const effectObj = {
-    id: `eff_${card.id}_${Date.now()}`,
+    id: `eff_${card.id}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
     cardId: card.id,
     title: card.title,
     icon: card.icon,
@@ -8924,21 +9064,35 @@ function supervisorCancelActiveCardEffect(effectId, reason = null) {
 
 // رسم وإدارة التأثير البصري البنفسجي الإلزامي والشارات النشطة
 function renderActiveCardEffectsUI(room) {
-  const activeEffects = Array.isArray(room?.activeCardEffects)
+  const currentContestantName = currentContestant?.name || room?.contestantName;
+  const currentQIdx = currentQuestionIndex;
+
+  const allActive = Array.isArray(room?.activeCardEffects)
     ? room.activeCardEffects.filter(e => e.status === "active")
     : [];
+
+  // التأثيرات السارية حصرياً على المتسابق الحالي والسؤال الحالي
+  const relevantEffects = allActive.filter(eff => {
+    if (eff.targetContestant && currentContestantName && eff.targetContestant !== currentContestantName) {
+      return false;
+    }
+    if (eff.scope === "instant" || !eff.scope) {
+      return (eff.questionIdx === undefined || eff.questionIdx === null || eff.questionIdx === currentQIdx);
+    }
+    return true; // cycle, permanent, match
+  });
 
   const questionCard = document.getElementById("stageQuestionCardMain") || document.querySelector(".stage-question-card");
   const purpleBar = document.getElementById("stagePurpleActiveCardsBar");
   const isSupervisorUser = currentUser && (currentUser.role === "supervisor" || isSupervisor(currentUser.name));
 
-  if (activeEffects.length > 0) {
+  if (relevantEffects.length > 0) {
     if (questionCard) {
       questionCard.classList.add("card-purple-aura");
     }
     if (purpleBar) {
       purpleBar.classList.remove("hidden");
-      purpleBar.innerHTML = activeEffects.map(eff => `
+      purpleBar.innerHTML = relevantEffects.map(eff => `
         <div class="purple-card-badge" data-effect-id="${eff.id}">
           <i class="fa-solid ${eff.icon || 'fa-bolt'}"></i>
           <span>${escapeHtml(eff.title)} نشط</span>
@@ -8963,7 +9117,7 @@ function renderActiveCardEffectsUI(room) {
     }
 
     // تطبيق الخط العثماني الميسر ووضوح الرؤية (البطاقة 38: تكبير 150%) لجميع الشاشات
-    const zoomEff = activeEffects.find(e => e.cardId === 38 || e.details?.zoomQuranScript);
+    const zoomEff = relevantEffects.find(e => e.cardId === 38 || e.details?.zoomQuranScript);
     const arenaStageEl = document.getElementById("arenaStage");
     if (zoomEff) {
       if (stageQuestionText) {
@@ -8986,7 +9140,7 @@ function renderActiveCardEffectsUI(room) {
     }
 
     // تطبيق إبراز الحركات ونور الصدر (البطاقة 32)
-    const coloredEff = activeEffects.find(e => e.cardId === 32);
+    const coloredEff = relevantEffects.find(e => e.cardId === 32);
     if (coloredEff && stageQuestionText) {
       stageQuestionText.style.textShadow = "0 0 10px rgba(234, 179, 8, 0.45)";
       stageQuestionText.style.letterSpacing = "1.5px";
@@ -9604,6 +9758,7 @@ function executeCardEffect(card, targetNextIdx = null) {
       registerActiveEffect(card, { jointTeacherSupervisorReview: true });
       showFloatingCardPill("السؤال المشترك 👥", "fa-people-arrows", "blue");
       showToast("👥 السؤال المشترك: إتاحة مراجعة وتكييف جزء السؤال المناسب لتقييم الطالب!", "fa-people-arrows", 3500);
+      showTeacherHelpModal(null, currentContestant?.name, card.title, 39);
       break;
 
     case 40: // ختام المسك: 5 نقاط كاملة كحد أقصى لآخر سؤال
