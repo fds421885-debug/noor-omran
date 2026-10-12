@@ -1245,6 +1245,8 @@ let lastSeenMatchingVerifyTimestamp = 0;
 let lastSeenOrderingTimestamp = 0;
 let lastSeenCardsTurnTimestamp = 0;
 let lastSeenCardUsedTimestamp = 0;
+let lastSeenWalletSyncTimestamp = 0;
+let lastSeenCardChosenTimestamp = 0;
 let isQuestionTransitionRunning = false;
 let lastKnownSolverRole = null;
 let currentUserProfileUnsubscribe = null;
@@ -1568,6 +1570,44 @@ function updateArenaUIRealtime(room) {
       if (currentLiveRoom) currentLiveRoom.contestantWallet = room.contestantWallet;
       if (typeof updateContestantWalletUI === "function") {
         updateContestantWalletUI(room.contestantWallet);
+      }
+    }
+
+    // مزامنة فتح وإغلاق محفظة البطاقات التكتيكية لحظياً لجميع الحضور (Wallet Open/Close Sync)
+    if (room.walletSync && room.walletSync.timestamp > lastSeenWalletSyncTimestamp) {
+      lastSeenWalletSyncTimestamp = room.walletSync.timestamp;
+      const ws = room.walletSync;
+      if (ws.isOpen) {
+        if (!currentUser || ws.openedBy !== currentUser.name) {
+          showToast(`🎴 قام (${ws.openedBy}) بفتح محفظة البطاقات التكتيكية للمتسابق!`, "fa-layer-group", 3500);
+          if (typeof openSynchronizedWallet === "function") {
+            openSynchronizedWallet(false, ws.openedBy);
+          }
+        }
+      } else {
+        if (!currentUser || ws.closedBy !== currentUser.name) {
+          if (typeof closeSynchronizedWallet === "function") {
+            closeSynchronizedWallet(false, ws.closedBy);
+          }
+        }
+      }
+    }
+
+    // مزامنة اختيار بطاقة مع أنيميشن جميل لمدة ثانيتين للجميع ثم تفعيلها (2s Card Selection Sync)
+    if (room.activeCardSelection && room.activeCardSelection.timestamp > lastSeenCardChosenTimestamp) {
+      lastSeenCardChosenTimestamp = room.activeCardSelection.timestamp;
+      const sel = room.activeCardSelection;
+      const card = (typeof TACTICAL_CARDS !== "undefined" ? TACTICAL_CARDS.find(c => String(c.id) === String(sel.cardId)) : null) || {
+        id: sel.cardId,
+        title: sel.cardTitle,
+        icon: sel.cardIcon || "fa-bolt",
+        desc: sel.cardDesc,
+        type: sel.cardType || "buff"
+      };
+      if (!currentUser || sel.chosenBy !== currentUser.name) {
+        if (typeof trigger2SecondCardSelectionShowcase === "function") {
+          trigger2SecondCardSelectionShowcase(card, sel.chosenBy, false);
+        }
       }
     }
 
@@ -7694,10 +7734,12 @@ function addCardToContestantWallet(cardId) {
 function updateContestantWalletUI(wallet = null) {
   const list = wallet !== null ? wallet : (currentLiveRoom?.contestantWallet || []);
   const badgeEl = document.getElementById("walletBadgeCount");
+  const barCountEl = document.getElementById("walletBarCount");
   const triggerEl = document.getElementById("contestantCardsWalletTrigger");
 
   const count = Array.isArray(list) ? list.length : 0;
   if (badgeEl) badgeEl.textContent = String(count);
+  if (barCountEl) barCountEl.textContent = String(count);
 
   if (triggerEl) {
     const inArena = views.liveArena && !views.liveArena.classList.contains("hidden");
@@ -7746,7 +7788,7 @@ function renderContestantWalletCards() {
   const isAllowedToUse = checkIsSolverAllowed(currentLiveRoom);
 
   container.innerHTML = cards.map(c => `
-    <div class="wallet-card-item ${c.type}">
+    <div class="wallet-card-item ${c.type}" data-card-id="${c.id}">
       <div style="display:flex;justify-content:space-between;align-items:center;">
         <div class="wallet-card-icon-bubble">
           <i class="fa-solid ${c.icon}"></i>
@@ -7762,14 +7804,59 @@ function renderContestantWalletCards() {
   `).join("");
 
   container.querySelectorAll(".btn-use-card").forEach(btn => {
-    btn.addEventListener("click", () => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
       const cardId = parseInt(btn.getAttribute("data-card-id"));
-      useCardFromWallet(cardId);
+      selectCardFromWallet(cardId);
     });
   });
 }
 
-function useCardFromWallet(cardId) {
+// فتح محفظة البطاقات متزامنة للجميع
+function openSynchronizedWallet(broadcast = true, openedBy = null) {
+  const openerName = openedBy || currentUser?.name || currentContestant?.name || "المشرف";
+  renderContestantWalletCards();
+
+  const syncBanner = document.getElementById("walletSyncLiveBanner");
+  const syncText = document.getElementById("walletSyncLiveText");
+  if (syncBanner && syncText) {
+    syncBanner.classList.remove("hidden");
+    syncText.innerHTML = `مزامنة حية: قام <strong>${openerName}</strong> بفتح محفظة البطاقات التكتيكية 🎴`;
+  }
+
+  walletModal?.classList.remove("hidden");
+  try { soundFX.btnClick(); } catch (e) {}
+
+  if (broadcast && currentLiveRoom?.id) {
+    updateDoc(doc(db, "live_rooms", currentLiveRoom.id), {
+      walletSync: {
+        isOpen: true,
+        openedBy: openerName,
+        timestamp: Date.now()
+      },
+      lastUpdated: serverTimestamp()
+    }).catch(err => console.warn("Broadcast wallet open notice:", err));
+  }
+}
+
+// إغلاق محفظة البطاقات متزامنة للجميع
+function closeSynchronizedWallet(broadcast = true, closedBy = null) {
+  walletModal?.classList.add("hidden");
+
+  if (broadcast && currentLiveRoom?.id) {
+    updateDoc(doc(db, "live_rooms", currentLiveRoom.id), {
+      walletSync: {
+        isOpen: false,
+        closedBy: closedBy || currentUser?.name || "المتسابق",
+        timestamp: Date.now()
+      },
+      lastUpdated: serverTimestamp()
+    }).catch(err => console.warn("Broadcast wallet close notice:", err));
+  }
+}
+
+// اختيار بطاقة من المحفظة مع بث فوري وأنيميشن جميل لمدة ثانيتين للجميع
+function selectCardFromWallet(cardId) {
   if (!currentLiveRoom || !currentLiveRoom.id) {
     showToast("لا توجد غرفة مسابقة حية نشطة حالياً", "fa-circle-exclamation");
     return;
@@ -7781,55 +7868,119 @@ function useCardFromWallet(cardId) {
   const card = TACTICAL_CARDS.find(c => String(c.id) === String(cardId));
   if (!card) return;
 
-  // إغلاق مودال المحفظة فوراً
-  walletModal?.classList.add("hidden");
-
-  // حذف البطاقة من المحفظة محلياً وسحابياً
-  const wallet = Array.isArray(currentLiveRoom.contestantWallet) ? [...currentLiveRoom.contestantWallet] : [];
-  const idx = wallet.indexOf(cardId);
-  if (idx > -1) wallet.splice(idx, 1);
-  currentLiveRoom.contestantWallet = wallet;
-  updateContestantWalletUI(wallet);
-
   const contestantName = currentContestant?.name || currentLiveRoom.contestantName || "المتسابق";
-  const usedByName = currentUser?.name || contestantName;
+  const chosenByName = currentUser?.name || contestantName;
+  const nowTs = Date.now();
+  lastSeenCardChosenTimestamp = nowTs;
 
-  // بث تفعيل البطاقة فوراً لجميع المشاركين في الغرفة
+  // بث اختيار البطاقة فوراً لجميع المشاركين في الغرفة
   updateDoc(doc(db, "live_rooms", currentLiveRoom.id), {
-    activeCardUsed: {
+    activeCardSelection: {
       cardId: card.id,
-      usedBy: usedByName,
+      cardTitle: card.title,
+      cardIcon: card.icon,
+      cardDesc: card.desc,
+      cardType: card.type,
+      chosenBy: chosenByName,
       contestantName: contestantName,
-      timestamp: Date.now()
+      timestamp: nowTs
     },
-    contestantWallet: wallet,
     lastUpdated: serverTimestamp()
-  }).catch(err => console.warn("Broadcast card used notice:", err));
+  }).catch(err => console.warn("Broadcast card selection:", err));
 
-  // تشغيل الأنيميشن المتزامن وتطبيق الأثر على السؤال الحالي
-  playCardAnnouncementOverlay(card, usedByName);
-  executeCardEffect(card, null);
+  // تشغيل أنيميشن الاختيار الجميل لمدة ثانيتين محلياً ثم تفعيل البطاقة
+  trigger2SecondCardSelectionShowcase(card, chosenByName, true);
 }
 
-function playCardAnnouncementOverlay(card, usedByName) {
+// أنيميشن تسليط الضوء والـ 2 ثانية على البطاقة المختارة ثم تفعيلها
+function trigger2SecondCardSelectionShowcase(card, chosenBy, isInitiator) {
+  // 1. تسليط الضوء على البطاقة المختارة داخل مودال المحفظة إن كان مفتوحاً
+  const walletList = document.getElementById("walletCardsList");
+  if (walletList) {
+    walletList.classList.add("has-selection");
+    const cardEl = walletList.querySelector(`.wallet-card-item[data-card-id="${card.id}"]`);
+    if (cardEl) {
+      cardEl.classList.add("is-selected-highlight");
+      const btn = cardEl.querySelector(".btn-use-card");
+      if (btn) {
+        btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> جاري التفعيل... (2 ثانية)`;
+        btn.disabled = true;
+      }
+      if (!cardEl.querySelector(".card-selected-ribbon")) {
+        const ribbon = document.createElement("div");
+        ribbon.className = "card-selected-ribbon";
+        ribbon.innerHTML = `<i class="fa-solid fa-sparkles fa-spin"></i> تم اختيار هذه البطاقة بواسطة ${chosenBy || 'المتسابق'}! ✨`;
+        cardEl.prepend(ribbon);
+      }
+    }
+  }
+
+  // 2. إظهار غطاء الأنميشن السينمائي الموحد لمدة ثانيتين للجميع
+  playCardSelection2SecOverlay(card, chosenBy);
+
+  try { soundFX.btnClick(); } catch(e){}
+  try { soundFX.fanfare(); } catch(e){ try { soundFX.correct(); } catch(err){} }
+
+  // 3. الانتظار لمدة ثانيتين بالضبط (2000 مللي ثانية) ثم تفعيل البطاقة وتأثيراتها
+  setTimeout(() => {
+    // إخفاء غطاء الأنميشن وإغلاق مودال المحفظة
+    const overlay = document.getElementById("activeCardAnnouncementOverlay");
+    overlay?.classList.add("hidden");
+    walletModal?.classList.add("hidden");
+    if (walletList) {
+      walletList.classList.remove("has-selection");
+    }
+
+    // حذف البطاقة من المحفظة محلياً وسحابياً
+    const wallet = Array.isArray(currentLiveRoom?.contestantWallet) ? [...currentLiveRoom.contestantWallet] : [];
+    const idx = wallet.indexOf(card.id);
+    if (idx > -1) wallet.splice(idx, 1);
+    if (currentLiveRoom) currentLiveRoom.contestantWallet = wallet;
+    updateContestantWalletUI(wallet);
+
+    if (isInitiator && currentLiveRoom?.id) {
+      updateDoc(doc(db, "live_rooms", currentLiveRoom.id), {
+        contestantWallet: wallet,
+        walletSync: {
+          isOpen: false,
+          closedBy: chosenBy,
+          timestamp: Date.now()
+        },
+        activeCardUsed: {
+          cardId: card.id,
+          usedBy: chosenBy,
+          timestamp: Date.now()
+        },
+        lastUpdated: serverTimestamp()
+      }).catch(err => console.warn(err));
+    }
+
+    // تفعيل التأثيرات الحقيقية للبطاقة الآن
+    executeCardEffect(card, null);
+  }, 2000);
+}
+
+function playCardSelection2SecOverlay(card, chosenByName) {
   const overlay = document.getElementById("activeCardAnnouncementOverlay");
   const iconEl = document.getElementById("announcementCardIcon");
   const titleEl = document.getElementById("announcementCardTitle");
   const userEl = document.getElementById("announcementUserName");
   const descEl = document.getElementById("announcementCardDesc");
+  const fillEl = document.getElementById("cardActivatingTimerFill");
   if (!overlay) return;
 
   if (iconEl) iconEl.innerHTML = `<i class="fa-solid ${card.icon || 'fa-bolt'}"></i>`;
   if (titleEl) titleEl.textContent = card.title;
-  if (userEl) userEl.textContent = usedByName || "المتسابق";
+  if (userEl) userEl.textContent = chosenByName || "المتسابق";
   if (descEl) descEl.textContent = card.desc;
 
-  overlay.classList.remove("hidden");
-  try { soundFX.fanfare(); } catch (e) { try { soundFX.correct(); } catch(err){} }
+  if (fillEl) {
+    fillEl.style.animation = "none";
+    fillEl.offsetHeight; // إعادة تهيئة الأنميشن
+    fillEl.style.animation = "shrink2Seconds 2s linear forwards";
+  }
 
-  setTimeout(() => {
-    overlay.classList.add("hidden");
-  }, 2500);
+  overlay.classList.remove("hidden");
 }
 
 function handleSynchronizedCardUsed(cardId, usedBy, contestantName) {
@@ -7842,7 +7993,6 @@ function handleSynchronizedCardUsed(cardId, usedBy, contestantName) {
     updateContestantWalletUI(currentLiveRoom.contestantWallet);
   }
 
-  playCardAnnouncementOverlay(card, usedBy);
   executeCardEffect(card, null);
 }
 
@@ -8290,18 +8440,22 @@ btnSkipCards?.addEventListener("click", () => {
   }
 });
 
-// أحداث محفظة البطاقات التكتيكية
+// أحداث محفظة البطاقات التكتيكية المتزامنة
 walletTriggerBtn?.addEventListener("click", () => {
-  renderContestantWalletCards();
-  walletModal?.classList.remove("hidden");
+  openSynchronizedWallet(true);
+});
+
+const btnOpenWalletFromBar = document.getElementById("btnOpenWalletFromBar");
+btnOpenWalletFromBar?.addEventListener("click", () => {
+  openSynchronizedWallet(true);
 });
 
 btnCloseWalletModal?.addEventListener("click", () => {
-  walletModal?.classList.add("hidden");
+  closeSynchronizedWallet(true);
 });
 
 btnDismissWalletModal?.addEventListener("click", () => {
-  walletModal?.classList.add("hidden");
+  closeSynchronizedWallet(true);
 });
 
 // ========================================================

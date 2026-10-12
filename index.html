@@ -822,11 +822,27 @@
               </div>
             </div>
 
-            <!-- نقاط المتسابق في الجلسة -->
-            <div class="contestant-score-box">
-              <span class="score-label">مجموع الدرجات</span>
-              <span class="score-number" id="stageStudentScore">0</span>
-              <span class="score-sub">نقطة</span>
+            <div class="contestant-banner-hud">
+              <!-- نقاط المتسابق في الجلسة -->
+              <div class="contestant-score-box">
+                <span class="score-label">مجموع الدرجات</span>
+                <span class="score-number" id="stageStudentScore">0</span>
+                <span class="score-sub">نقطة</span>
+              </div>
+
+              <!-- خانة محفظة البطاقات التكتيكية داخل البنر - موقع رئيسي لا يمكن أن يغطي على السؤال أبداً -->
+              <div id="contestantCardsWalletTrigger" class="contestant-cards-wallet-trigger" title="محفظة البطاقات التكتيكية للمتسابق — انقر لفتحها واستعراضها بتزامن كامل">
+                <div class="wallet-badge-red" id="walletBadgeCount">0</div>
+                <div class="wallet-card-inner">
+                  <div class="wallet-card-icon">
+                    <i class="fa-solid fa-layer-group"></i>
+                  </div>
+                  <div class="wallet-card-texts">
+                    <div class="wallet-card-text">محفظة البطاقات</div>
+                    <div class="wallet-card-hint">انقر للاستخدام ⚡</div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -838,6 +854,9 @@
               </button>
               <button id="btnTriggerTacticalCards" class="btn-duo-purple btn-sm" title="فتح البطاقات التكتيكية الـ 40 الآن للمتسابق">
                 <i class="fa-solid fa-bolt"></i> البطاقات التكتيكية
+              </button>
+              <button id="btnOpenWalletFromBar" class="btn-duo-yellow btn-sm" title="استعراض وفتح محفظة بطاقات المتسابق بتزامن كامل">
+                <i class="fa-solid fa-layer-group"></i> محفظة البطاقات (<span id="walletBarCount">0</span>)
               </button>
               <button id="btnOpenRoomSettingsModal" class="btn-duo-yellow btn-sm" title="إعدادات الغرفة وصلاحيات الحل">
                 <i class="fa-solid fa-gear"></i> إعدادات المسابقة
@@ -921,18 +940,6 @@
               </div>
             </div>
 
-          </div>
-
-          <!-- خانة على اليمين شكلها بطاقة: محفظة البطاقات وعليها إشعار أحمر بالعدد بالأبيض -->
-          <div id="contestantCardsWalletTrigger" class="contestant-cards-wallet-trigger hidden" title="محفظة البطاقات التكتيكية للمتسابق">
-            <div class="wallet-badge-red" id="walletBadgeCount">0</div>
-            <div class="wallet-card-inner">
-              <div class="wallet-card-icon">
-                <i class="fa-solid fa-layer-group"></i>
-              </div>
-              <div class="wallet-card-text">محفظة البطاقات</div>
-              <div class="wallet-card-hint">انقر للاستخدام ⚡</div>
-            </div>
           </div>
 
         </div>
@@ -1658,6 +1665,13 @@
         </button>
       </div>
 
+      <!-- بنر المزامنة المباشرة: يظهر للجميع من قام بفتح المحفظة -->
+      <div id="walletSyncLiveBanner" class="wallet-sync-live-banner hidden">
+        <span class="sync-live-pulse-dot"></span>
+        <i class="fa-solid fa-users-viewfinder" style="color: #0284c7;"></i>
+        <span id="walletSyncLiveText">مزامنة مباشرة: يتم استعراض المحفظة الآن</span>
+      </div>
+
       <!-- قائمة البطاقات في المحفظة -->
       <div id="walletCardsList" class="wallet-cards-grid">
         <!-- يتم تعبئتها ديناميكياً بواسطة جافاسكربت -->
@@ -1666,7 +1680,7 @@
       <div class="wallet-modal-footer">
         <div class="wallet-footer-tip">
           <i class="fa-solid fa-lightbulb" style="color: #f59e0b;"></i>
-          <span>البطاقات تُحفظ معك طوال جولة المتسابق، ويمكنك تفعيلها في أي سؤال بالضغط على «استخدم هذه البطاقة الآن ⚡».</span>
+          <span>البطاقات تُحفظ معك طوال جولة المتسابق، وعند اختيار أي بطاقة تظهر للجميع بأنيميشن لمدة ثانيتين ثم تتفعل!</span>
         </div>
         <button id="btnDismissWalletModal" class="btn-duo-outline btn-sm">
           إغلاق المحفظة
@@ -1683,14 +1697,23 @@
           <i class="fa-solid fa-bolt"></i>
         </div>
       </div>
-      <div class="announcement-card-tag" id="announcementCardTag">⚡ تفعيل بطاقة تكتيكية!</div>
+      <div class="announcement-card-tag" id="announcementCardTag">⚡ تم اختيار بطاقة تكتيكية!</div>
       <h2 class="announcement-card-title" id="announcementCardTitle">اسم البطاقة</h2>
       <div class="announcement-user-pill" id="announcementUserPill">
-        <i class="fa-solid fa-user-graduate"></i> <span id="announcementUserName">المتسابق</span> قام بتفعيل هذه البطاقة
+        <i class="fa-solid fa-user-graduate"></i> <span id="announcementUserName">المتسابق</span> قام باختيار هذه البطاقة
       </div>
       <p class="announcement-card-desc" id="announcementCardDesc">
         وصف وتأثير البطاقة...
       </p>
+      <!-- شريط مؤقت الأنميشن لمدة ثانيتين بالضبط -->
+      <div class="card-activating-timer-container">
+        <div class="card-activating-timer-bar">
+          <div class="card-activating-timer-fill" id="cardActivatingTimerFill"></div>
+        </div>
+        <div class="card-activating-timer-label">
+          <i class="fa-solid fa-bolt fa-beat" style="color:#eab308;"></i> جاري تفعيل تأثيرات البطاقة على السؤال... (2 ثانية)
+        </div>
+      </div>
     </div>
   </div>
 
