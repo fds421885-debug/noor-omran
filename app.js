@@ -1708,8 +1708,20 @@ function updateArenaUIRealtime(room) {
       }
     }
 
-    // إذا كانت هناك حركة انتقال جارية لدى المعلم أو العارض، نتركها تكمل بسلاسة
-    if (isQuestionTransitionRunning) return;
+    // إذا كانت هناك حركة انتقال جارية، نتركها تكمل بسلاسة ما لم تتجاوز المهلة الآمنة (4.5 ثوانٍ)
+    if (isQuestionTransitionRunning) {
+      if (Date.now() - transitionStartTime > 4500) {
+        isQuestionTransitionRunning = false;
+        isAdvancingQuestion = false;
+      } else {
+        return;
+      }
+    }
+
+    // مزامنة حالة التأثيرات والبطاقات النشطة فورياً للجميع (بما فيها تكبير الخط القرآني 150%)
+    if (typeof renderActiveCardEffectsUI === "function") {
+      renderActiveCardEffectsUI(room);
+    }
 
     const newIdx = room.currentQuestionIdx || 0;
     const stageActive = arenaStage && !arenaStage.classList.contains("hidden");
@@ -1734,7 +1746,7 @@ function updateArenaUIRealtime(room) {
     if (room.activeTeacherHelp && room.activeTeacherHelp.timestamp) {
       if (lastSeenTeacherHelpTimestamp !== room.activeTeacherHelp.timestamp) {
         lastSeenTeacherHelpTimestamp = room.activeTeacherHelp.timestamp;
-        showTeacherHelpModal(room.activeTeacherHelp.helperName, room.activeTeacherHelp.contestantName, room.activeTeacherHelp.cardTitle);
+        showTeacherHelpModal(room.activeTeacherHelp.helperName, room.activeTeacherHelp.contestantName, room.activeTeacherHelp.cardTitle, room.activeTeacherHelp.cardId || 6);
       }
     }
   }
@@ -6165,12 +6177,27 @@ function syncAndRunLiveTimer(timerState, onTimeout = null) {
       lastTimerConfigKey = "";
       timerDisplay.textContent = "0";
 
-      // تشغيل انتهاء الوقت فوراً عند نفاد الوقت دون توقف أو قيود
-      if (!isQuestionTransitionRunning) {
+      const executeTimeout = () => {
         if (typeof onTimeout === "function") {
           onTimeout();
         } else {
           handleLiveQuestionTimeout();
+        }
+      };
+
+      if (!isQuestionTransitionRunning) {
+        executeTimeout();
+      } else {
+        if (Date.now() - transitionStartTime > 3500) {
+          isQuestionTransitionRunning = false;
+          executeTimeout();
+        } else {
+          setTimeout(() => {
+            if (!isAdvancingQuestion) {
+              isQuestionTransitionRunning = false;
+              executeTimeout();
+            }
+          }, 600);
         }
       }
     }
@@ -6184,9 +6211,22 @@ function syncAndRunLiveTimer(timerState, onTimeout = null) {
 // معالجة انتهاء وقت السؤال تلقائياً كإجابة خاطئة مع إظهار X والخصم
 // --------------------------------------------------------
 let currentStageAdvanceToNext = null;
+let isAdvancingQuestion = false;
+let transitionStartTime = 0;
+let questionTransitionWatchdog = null;
 
 function handleLiveQuestionTimeout() {
-  if (isQuestionTransitionRunning) return;
+  if (isAdvancingQuestion) return;
+  if (isQuestionTransitionRunning) {
+    if (Date.now() - transitionStartTime > 3500) {
+      isQuestionTransitionRunning = false;
+    } else {
+      setTimeout(() => {
+        if (!isAdvancingQuestion) handleLiveQuestionTimeout();
+      }, 500);
+      return;
+    }
+  }
 
   const allQ = (currentLiveRoom?.drawnQuestions && currentLiveRoom.drawnQuestions.length > 0)
     ? currentLiveRoom.drawnQuestions
@@ -6295,6 +6335,54 @@ function shouldTriggerTacticalCards(room, currentIdx, nextIdx, totalQ) {
 // =========================================================
 function playQuestionTransitionSequence({ isCorrect, scoreDelta, isPenalty, nextIdx, isFinished, allQuestions, currentIdx, isLeaderUser = true, isTimeout = false }) {
   isQuestionTransitionRunning = true;
+  transitionStartTime = Date.now();
+
+  let transitionFinished = false;
+  const finishTransitionSafely = () => {
+    if (transitionFinished) return;
+    transitionFinished = true;
+    if (questionTransitionWatchdog) {
+      clearTimeout(questionTransitionWatchdog);
+      questionTransitionWatchdog = null;
+    }
+    isQuestionTransitionRunning = false;
+    isAdvancingQuestion = false;
+
+    // إنهاء أي بطاقات فورية للسؤال المنتهي فوراً
+    expireInstantCardEffects();
+
+    if (isFinished) {
+      finishContestant();
+    } else {
+      if (isLeaderUser && currentLiveRoom) {
+        currentLiveRoom.currentQuestionIdx = nextIdx;
+        currentLiveRoom.contestantScore = contestantScore;
+        saveRooms(currentLiveRoom);
+      }
+
+      const totalQ = allQuestions.length || 20;
+      const isCardTurn = shouldTriggerTacticalCards(currentLiveRoom, currentIdx, nextIdx, totalQ);
+
+      if (isCardTurn) {
+        expireCycleCardEffects();
+        const canGenerate = isLeaderUser || checkIsSolverAllowed(currentLiveRoom);
+        if (canGenerate) {
+          triggerTacticalCardsModal(() => loadStageQuestion(nextIdx), nextIdx);
+        }
+      } else {
+        loadStageQuestion(nextIdx);
+      }
+    }
+  };
+
+  // صمام أمان حاسم: يمنع تعليق الانتقال إطلاقاً إذا حدث أي تأخير أو عائق في المودال
+  if (questionTransitionWatchdog) clearTimeout(questionTransitionWatchdog);
+  questionTransitionWatchdog = setTimeout(() => {
+    if (!transitionFinished) {
+      console.warn("Safety Watchdog: forced release of question transition at question", nextIdx);
+      finishTransitionSafely();
+    }
+  }, 5800);
 
   // 1. إظهار غطاء النتيجة الكبير الذي يغطي السؤال بالكامل ويطلع من تحت بأنيميشن صعود مبهج
   showBigQuestionResultOverlay({ isCorrect, isTimeout, scoreDelta });
@@ -6341,35 +6429,14 @@ function playQuestionTransitionSequence({ isCorrect, scoreDelta, isPenalty, next
 
     // 4. بعد انتهاء تلاشي السؤال (420ms)، ظهور لوحة الشرف بأنيميشن جميل
     setTimeout(() => {
-      showHonorBoardModal(false, () => {
-        // 5. بعد تلاشي لوحة الشرف بنجاح، الانتقال للبطاقات التكتيكية أو السؤال التالي أو إنهاء المسابقة
-        isQuestionTransitionRunning = false;
-
-        if (isFinished) {
-          finishContestant();
-        } else {
-          // المشرف أو المنفذ يحدث رقم السؤال السحابي لضمان تماشي جميع الشاشات بالتزامن
-          if (isLeaderUser && currentLiveRoom) {
-            currentLiveRoom.currentQuestionIdx = nextIdx;
-            currentLiveRoom.contestantScore = contestantScore;
-            saveRooms(currentLiveRoom);
-          }
-
-          // نظام البطاقات التكتيكية التفاعلي المتزامن للجميع
-          const totalQ = allQuestions.length || 20;
-          const isCardTurn = shouldTriggerTacticalCards(currentLiveRoom, currentIdx, nextIdx, totalQ);
-
-          if (isCardTurn) {
-            const canGenerate = isLeaderUser || checkIsSolverAllowed(currentLiveRoom);
-            if (canGenerate) {
-              triggerTacticalCardsModal(() => loadStageQuestion(nextIdx), nextIdx);
-            }
-            // في حال كان المستخدم متفرجاً أو شاشة عرض، ينتظر بث البطاقات عبر activeCardsTurn
-          } else {
-            loadStageQuestion(nextIdx);
-          }
-        }
-      }, currentContestant?.name, scoreDelta, isPenalty);
+      try {
+        showHonorBoardModal(false, () => {
+          finishTransitionSafely();
+        }, currentContestant?.name, scoreDelta, isPenalty);
+      } catch (err) {
+        console.warn("Honor board display notice:", err);
+        finishTransitionSafely();
+      }
     }, 420);
   }, 1600);
 }
@@ -6660,6 +6727,8 @@ function loadStageQuestion(idx) {
   }
 
   currentQuestionIndex = idx;
+  isAdvancingQuestion = false;
+  isQuestionTransitionRunning = false;
   lastSeenOrderingTimestamp = 0;
   lastSeenOrderingVerifyTimestamp = 0;
   lastSeenMatchingVerifyTimestamp = 0;
@@ -6684,10 +6753,16 @@ function loadStageQuestion(idx) {
 
   // الانتقال للسؤال التالي مع عرض كرت نتيجة الإجابة أولاً ثم خروج السؤال ثم لوحة الشرف
   function advanceToNext(scoreDelta = 0, isPenalty = false, isCorrect = true, chosenChoiceIdx = null, isTimeout = false) {
+    if (isAdvancingQuestion) return;
+    isAdvancingQuestion = true;
     clearInterval(liveTimerInterval);
     liveTimerInterval = null;
     lastTimerConfigKey = "";
     addContestantScore(scoreDelta);
+
+    // إنهاء أي بطاقة فورية سارية على هذا السؤال فوراً
+    expireInstantCardEffects();
+    activeCardEffect = null;
 
     const nextIdx = idx + 1;
     const isFinished = nextIdx >= allQuestions.length;
@@ -6744,7 +6819,13 @@ function loadStageQuestion(idx) {
 
   // معالجة انتهاء وقت السؤال الحالي كإجابة خاطئة مع ظهور X أحمر
   function handleStageQuestionTimeout() {
-    if (isQuestionTransitionRunning) return;
+    if (isAdvancingQuestion) return;
+    if (isQuestionTransitionRunning) {
+      setTimeout(() => {
+        if (!isAdvancingQuestion) handleStageQuestionTimeout();
+      }, 500);
+      return;
+    }
 
     // فحص بطاقة الحصانة (درع الأمان)
     const hasImmunity = !!(activeCardEffect?.effect?.immunity);
@@ -6805,6 +6886,27 @@ function loadStageQuestion(idx) {
     return;
   }
 
+  // 1. تنظيف أي بطاقات فورية لسؤال سابق
+  expireInstantCardEffects();
+
+  // 2. استخلاص التأثير الساري الدقيق للسؤال الحالي
+  const currentEffects = Array.isArray(currentLiveRoom?.activeCardEffects)
+    ? currentLiveRoom.activeCardEffects.filter(e => e.status === "active")
+    : [];
+
+  const thisQuestionInstant = currentEffects.find(e => (e.scope === "instant" || !e.scope) && e.questionIdx === idx);
+  const activeCycleEffect = currentEffects.find(e => e.scope === "cycle" || e.scope === "permanent" || e.scope === "match");
+
+  if (thisQuestionInstant) {
+    const def = getCardById(thisQuestionInstant.cardId);
+    activeCardEffect = def ? { ...def, ...thisQuestionInstant } : thisQuestionInstant;
+  } else if (activeCycleEffect) {
+    const def = getCardById(activeCycleEffect.cardId);
+    activeCardEffect = def ? { ...def, ...activeCycleEffect } : activeCycleEffect;
+  } else {
+    activeCardEffect = null;
+  }
+
   // تطبيق ميزة البطاقة التكتيكية إن وجدت
   let cardBonusPoints = 0;
   let hasImmunity = false;
@@ -6814,6 +6916,12 @@ function loadStageQuestion(idx) {
   let speedBonusExtra = 0;      // نقاط إضافية إن أجاب في أقل من 5 ثوان
   let cardBannerHtml = "";
   const questionStartTime = Date.now(); // لحساب سرعة الإجابة
+
+  // بطاقة 40: ختام المسك لآخر سؤال
+  const isFinalQuestion = (idx >= allQuestions.length - 1);
+  if (isFinalQuestion && (activeCardEffect?.id === 40 || activeCardEffect?.effect?.finaleBonusCap || hasActiveEffect(40))) {
+    cardBonusPoints = Math.max(cardBonusPoints, Math.max(0, 5 - (q.points || 5)));
+  }
 
   if (activeCardEffect) {
     if (activeCardEffect.title) {
@@ -7972,30 +8080,43 @@ function showTeacherHelpModal(helperName, contestantName, cardTitle = "استش�
 
   if (targetEl) targetEl.innerHTML = `<i class="fa-solid fa-graduation-cap"></i> المتسابق المستفيد: <strong>${escapeHtml(contestantName || "المتسابق")}</strong>`;
 
-  // حصر كافة المعلمين والمشرفين المتصلين المؤهلين (حتى 10 أو أكثر)
+  // 1. حصر المعلمين والمشرفين المتصلين فقط في الغرفة الحالية
   const roomUsers = Array.isArray(currentLiveRoom?.users) ? currentLiveRoom.users : [];
   const qualifiedList = [];
   roomUsers.forEach(u => {
-    const p = participantsCache.find(x => x.name === u);
+    if (u === contestantName) return;
+    const p = participantsCache.find(x => x.name === u || (x.normalizedName && x.normalizedName === normalizeArabic(u)));
     if (p && (p.role === "teacher" || p.role === "supervisor" || isSupervisor(u))) {
       qualifiedList.push({ name: u, role: p.role || "teacher" });
     }
   });
 
-  // إذا لم نجد في الغرفة، نستعين بقائمة المعلمين المعتمدين في النظام كاحتياط
+  // إذا لم يتواجد معلمون آخرون متصلون، نضع المشرف أو قائد الغرفة المتصل
   if (qualifiedList.length === 0) {
-    participantsCache.filter(p => p.role === "teacher" || p.role === "supervisor" || isSupervisor(p.name)).forEach(p => {
-      qualifiedList.push({ name: p.name, role: p.role });
-    });
+    const onlineOthers = roomUsers.filter(u => u !== contestantName);
+    if (onlineOthers.length > 0) {
+      onlineOthers.forEach(u => qualifiedList.push({ name: u, role: "teacher" }));
+    } else {
+      qualifiedList.push({ name: currentLiveRoom?.leaderName || MASTER_SUPERVISOR_NAME, role: "supervisor" });
+    }
   }
 
-  // التأكد من وجود المشرف العام في القائمة
-  if (!qualifiedList.some(q => q.name === MASTER_SUPERVISOR_NAME)) {
-    qualifiedList.unshift({ name: MASTER_SUPERVISOR_NAME, role: "supervisor" });
+  // اختيار عشوائي فوري من المعلمين المتصلين فقط
+  let currentChosen = helperName;
+  if (!currentChosen && qualifiedList.length > 0) {
+    const randPick = qualifiedList[Math.floor(Math.random() * qualifiedList.length)];
+    currentChosen = randPick.name;
+    if (currentLiveRoom?.id) {
+      updateDoc(doc(db, "live_rooms", currentLiveRoom.id), {
+        "activeTeacherHelp.helperName": currentChosen,
+        "activeTeacherHelp.cardId": cardId,
+        "activeTeacherHelp.cardTitle": cardTitle,
+        "activeTeacherHelp.contestantName": contestantName || "المتسابق",
+        lastUpdated: serverTimestamp()
+      }).catch(() => {});
+    }
   }
-
-  // إذا لم يُحدد معلم بعد، نختار عشوائياً
-  let currentChosen = helperName || (qualifiedList[0] ? qualifiedList[0].name : MASTER_SUPERVISOR_NAME);
+  if (!currentChosen) currentChosen = qualifiedList[0]?.name || MASTER_SUPERVISOR_NAME;
   if (nameEl) nameEl.textContent = currentChosen;
 
   if (descEl) {
@@ -8642,12 +8763,13 @@ function getActiveEffect(cardId) {
 
 // إنهاء التأثيرات الفورية (instant) عند انتهاء السؤال الحالي
 function expireInstantCardEffects() {
+  activeCardEffect = null;
   if (!currentLiveRoom || !Array.isArray(currentLiveRoom.activeCardEffects)) return;
   let changed = false;
   const expiredTitles = [];
   
   currentLiveRoom.activeCardEffects.forEach(eff => {
-    if (eff.status === "active" && eff.scope === "instant") {
+    if (eff.status === "active" && (eff.scope === "instant" || !eff.scope)) {
       eff.status = "expired";
       eff.expiredAt = Date.now();
       changed = true;
@@ -8784,14 +8906,27 @@ function renderActiveCardEffectsUI(room) {
       }
     }
 
-    // تطبيق الخط العثماني الميسر إن كان نشطاً (البطاقة 38)
-    const zoomEff = activeEffects.find(e => e.cardId === 38);
-    if (zoomEff && stageQuestionText) {
-      stageQuestionText.style.fontSize = "36px";
-      stageQuestionText.style.lineHeight = "2.2";
-      stageQuestionText.style.background = "rgba(254, 252, 232, 0.95)";
-      stageQuestionText.style.borderRadius = "14px";
-      stageQuestionText.style.padding = "14px 20px";
+    // تطبيق الخط العثماني الميسر ووضوح الرؤية (البطاقة 38: تكبير 150%) لجميع الشاشات
+    const zoomEff = activeEffects.find(e => e.cardId === 38 || e.details?.zoomQuranScript);
+    const arenaStageEl = document.getElementById("arenaStage");
+    if (zoomEff) {
+      if (stageQuestionText) {
+        stageQuestionText.style.background = "rgba(254, 252, 232, 0.95)";
+        stageQuestionText.style.borderRadius = "14px";
+        stageQuestionText.style.padding = "14px 20px";
+      }
+      if (questionCard) questionCard.classList.add("quran-script-zoomed-150");
+      if (arenaStageEl) arenaStageEl.classList.add("quran-script-zoomed-150");
+      document.body.classList.add("quran-script-zoomed-150");
+    } else {
+      if (questionCard) questionCard.classList.remove("quran-script-zoomed-150");
+      if (arenaStageEl) arenaStageEl.classList.remove("quran-script-zoomed-150");
+      document.body.classList.remove("quran-script-zoomed-150");
+      if (stageQuestionText) {
+        stageQuestionText.style.background = "";
+        stageQuestionText.style.borderRadius = "";
+        stageQuestionText.style.padding = "";
+      }
     }
 
     // تطبيق إبراز الحركات ونور الصدر (البطاقة 32)
@@ -8799,11 +8934,17 @@ function renderActiveCardEffectsUI(room) {
     if (coloredEff && stageQuestionText) {
       stageQuestionText.style.textShadow = "0 0 10px rgba(234, 179, 8, 0.45)";
       stageQuestionText.style.letterSpacing = "1.5px";
+    } else if (stageQuestionText && !coloredEff) {
+      stageQuestionText.style.textShadow = "";
+      stageQuestionText.style.letterSpacing = "";
     }
   } else {
     if (questionCard) {
-      questionCard.classList.remove("card-purple-aura");
+      questionCard.classList.remove("card-purple-aura", "quran-script-zoomed-150");
     }
+    const arenaStageEl = document.getElementById("arenaStage");
+    if (arenaStageEl) arenaStageEl.classList.remove("quran-script-zoomed-150");
+    document.body.classList.remove("quran-script-zoomed-150");
     if (purpleBar) {
       purpleBar.classList.add("hidden");
       purpleBar.innerHTML = "";
@@ -9891,12 +10032,22 @@ function showHonorBoardModal(openNextStudentAfter = false, onDone = null, highli
       if (honorBoxEl) honorBoxEl.classList.remove("honor-board-exit");
       isHonorDismissing = false;
       if (typeof onDone === 'function') {
-        onDone();
+        try {
+          onDone();
+        } catch (err) {
+          console.warn("Honor modal onDone notice:", err);
+        }
       } else if (openNextStudentAfter) {
         openPickStudentModal();
       }
     }, 380);
   }
+
+  honorBoardModal.onclick = (e) => {
+    if (e.target === honorBoardModal) {
+      dismissHonorModal();
+    }
+  };
 
   const closeBtn = honorBoardModal.querySelector("[data-close-modal='honorBoardModal']");
   if (closeBtn) {

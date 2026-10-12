@@ -8330,10 +8330,35 @@ button:disabled .fa-spin,
   font-weight: 600;
 }
 
+/* ========================================================
+   تكبير الخط القرآني بنسبة 150% (بطاقة 38: وضوح الرؤية)
+   تطبيق متزامن بالكامل لشاشة المتسابق، المشرف، وشاشة العارض والمسرح
+   ======================================================== */
+.quran-script-zoomed-150 .font-quran,
+.quran-script-zoomed-150 .font-amiri,
+.quran-script-zoomed-150 .question-text-content,
+.quran-script-zoomed-150 .oral-showcase-content,
+.quran-script-zoomed-150 #stageQuestionText {
+  font-size: 39px !important;
+  line-height: 2.5 !important;
+  text-shadow: 0 0 16px rgba(88, 204, 2, 0.32);
+  background: rgba(254, 252, 232, 0.95);
+  border-radius: 16px;
+  padding: 16px 24px;
+  transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  display: block;
+}
 
-
-
-
-
-
-
+/* تكبير شاشة العارض والمسرح الحي (Presenter Mode) بنسبة متناسقة ومبهرة لجمهور المسرح */
+.role-presenter.quran-script-zoomed-150 .font-quran,
+.role-presenter.quran-script-zoomed-150 .font-amiri,
+.role-presenter.quran-script-zoomed-150 .question-text-content,
+.role-presenter.quran-script-zoomed-150 #stageQuestionText,
+.role-presenter .quran-script-zoomed-150 .font-quran,
+.role-presenter .quran-script-zoomed-150 .question-text-content,
+.role-presenter .quran-script-zoomed-150 #stageQuestionText {
+  font-size: 54px !important;
+  line-height: 2.7 !important;
+  text-shadow: 0 0 26px rgba(88, 204, 2, 0.45);
+  padding: 22px 32px;
+}
