@@ -1533,8 +1533,14 @@ function updateArenaUIRealtime(room) {
       if (room.orderingState.timestamp > lastSeenOrderingTimestamp) {
         lastSeenOrderingTimestamp = room.orderingState.timestamp;
         if (!currentUser || room.orderingState.updatedBy !== currentUser.name) {
-          if (typeof window.syncExternalOrderingUI === "function") {
-            window.syncExternalOrderingUI(room.orderingState.placedWords, room.orderingState.bankWords);
+          if (room.orderingState.verifying) {
+            if (typeof window.runExternalOrderingVerification === "function") {
+              window.runExternalOrderingVerification(room.orderingState.placedWords);
+            }
+          } else {
+            if (typeof window.syncExternalOrderingUI === "function") {
+              window.syncExternalOrderingUI(room.orderingState.placedWords, room.orderingState.bankWords);
+            }
           }
         }
       }
@@ -5300,6 +5306,8 @@ document.getElementById("btnQuickAddStudent")?.addEventListener("click", async (
 // اختيار المتسابق وإبلاغ الجميع عبر Firestore
 async function selectContestant(student) {
   currentContestant = student;
+  const p = participantsCache.find(x => x.name === student.name || x.id === student.id);
+  contestantBaseScore = (p && typeof p.totalScore === "number") ? p.totalScore : (student.totalScore || 0);
   currentLiveRoom.contestantId = student.id;
   currentLiveRoom.contestantName = student.name;
   currentLiveRoom.contestantSchool = student.school || "--";
@@ -6117,6 +6125,8 @@ function enterPhaseStage() {
   currentQuestionIndex = room.currentQuestionIdx || 0;
   // استعادة النقاط من بيانات الغرفة السحابية (لمنع فقدان النقاط عند التحديث أو إعادة الدخول)
   contestantScore = room.contestantScore || 0;
+  const pFound = participantsCache.find(x => x.name === currentContestant.name || x.id === currentContestant.id);
+  contestantBaseScore = (pFound && typeof pFound.totalScore === "number") ? pFound.totalScore : (currentContestant.totalScore || 0);
 
   if (stageStudentName) stageStudentName.textContent = currentContestant.name;
   if (stageStudentSchool) stageStudentSchool.innerHTML = `<i class="fa-solid fa-school"></i> ${currentContestant.school || '--'}`;
@@ -6136,6 +6146,7 @@ let currentContestant = null;
 let currentQuizData = null;
 let currentQuestionIndex = 0;
 let contestantScore = 0;
+let contestantBaseScore = 0;
 
 function initLiveStage() {
   if (!currentLiveRoom) return;
@@ -7102,6 +7113,139 @@ function loadStageQuestion(idx) {
         broadcastOrderingState();
       });
 
+      let isOrderingVerifyingRunning = false;
+
+      function broadcastOrderingVerificationState() {
+        if (!currentLiveRoom || !currentLiveRoom.id) return;
+        const placedPayload = placedWords.map(w => ({ id: w.id, text: w.text, locked: !!w.locked, origIdx: w.origIdx }));
+        const bankPayload = bankWords.map(w => ({ id: w.id, text: w.text, locked: !!w.locked, origIdx: w.origIdx }));
+        updateDoc(doc(db, "live_rooms", currentLiveRoom.id), {
+          orderingState: {
+            questionIdx: idx,
+            placedWords: placedPayload,
+            bankWords: bankPayload,
+            verifying: true,
+            startedAt: Date.now(),
+            updatedBy: currentUser?.name || "المتسابق",
+            timestamp: Date.now()
+          },
+          lastUpdated: serverTimestamp()
+        }).catch(err => console.warn("Broadcast ordering verification state err:", err));
+      }
+
+      // تشغيل أنيميشن التصحيح المتسلسل خطوة بخطوة للكلمات واحدة تلو الأخرى زي سؤال التوصيل
+      function startSequentialOrderingVerification(isInitiator = true) {
+        if (isOrderingVerifyingRunning) return;
+        isOrderingVerifyingRunning = true;
+
+        // قفل الأزرار وإظهار رسالة الفحص
+        const submitBtn = document.getElementById("btnSubmitOrdering");
+        const resetBtn = document.getElementById("btnResetOrdering");
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> جاري فحص الكلمات بالتزامن...`;
+        }
+        if (resetBtn) resetBtn.disabled = true;
+
+        // تعطيل التفاعل مع الرقائق أثناء التحقق
+        const chips = stageInteractiveArea.querySelectorAll(".ordering-chip");
+        chips.forEach(c => { c.style.pointerEvents = "none"; });
+
+        let wordCheckIdx = 0;
+        let correctWordsCount = 0;
+
+        function checkNextWord() {
+          if (wordCheckIdx >= placedWords.length) {
+            // انتهى فحص جميع الكلمات
+            const allCorrect = (correctWordsCount === originalItems.length);
+
+            setTimeout(() => {
+              if (allCorrect) {
+                try { soundFX.celebrate(); } catch (e) {}
+                showToast(`🌟 ما شاء الله! جميع الكلمات مرتبة بإتقان تام (+${earnedPoints} درجات)`, "fa-circle-check", 3500);
+                activeCardEffect = null;
+                if (isInitiator) {
+                  advanceToNext(earnedPoints, false, true);
+                }
+              } else {
+                try { soundFX.wrong(); } catch (e) {}
+                if (activeCardEffect?.effect?.secondChance) {
+                  showToast("🔄 فرصة ثانية: الترتيب غير صحيح، أعد ترتيب الكلمات!", "fa-arrow-rotate-left", 3500);
+                  activeCardEffect = null;
+                  isOrderingVerifyingRunning = false;
+                  renderOrderingBoard();
+                  return;
+                }
+
+                if (hasImmunity) {
+                  showToast("🛡️ درع الأمان: الترتيب غير دقيق ولكن تم إحباط أي خصم!", "fa-shield-halved", 3000);
+                  activeCardEffect = null;
+                  if (isInitiator) {
+                    advanceToNext(0, false, false);
+                  }
+                } else if (penaltyOnWrong > 0) {
+                  showToast(`❌ ترتيب غير دقيق — المخاطرة الكبرى: خصم ${penaltyOnWrong} درجات!`, "fa-fire-flame-curved", 3000);
+                  activeCardEffect = null;
+                  if (isInitiator) {
+                    advanceToNext(-penaltyOnWrong, true, false);
+                  }
+                } else {
+                  const wrongPenalty = 3;
+                  showToast(`❌ الترتيب غير دقيق (${correctWordsCount} من ${originalItems.length} صحيحة) — خصم 3 درجات ❌`, "fa-circle-xmark", 3000);
+                  activeCardEffect = null;
+                  if (isInitiator) {
+                    advanceToNext(-wrongPenalty, true, false);
+                  }
+                }
+              }
+            }, 1200);
+            return;
+          }
+
+          const currentWordObj = placedWords[wordCheckIdx];
+          const chipEl = stageInteractiveArea.querySelector(`[data-placed-id="${currentWordObj.id}"]`);
+
+          // تمييز الكلمة الخاضعة للفحص بنبض ذهبي
+          if (chipEl) chipEl.classList.add("order-verifying-current");
+
+          setTimeout(() => {
+            if (chipEl) chipEl.classList.remove("order-verifying-current");
+
+            const isWordCorrect = (currentWordObj.text === originalItems[wordCheckIdx]);
+            if (isWordCorrect) {
+              correctWordsCount++;
+              if (chipEl) {
+                chipEl.classList.add("order-correct-reveal");
+                const xIcon = chipEl.querySelector(".fa-xmark, .fa-lock");
+                if (xIcon) xIcon.className = "fa-solid fa-check";
+              }
+              try { soundFX.correct(); } catch (e) {}
+            } else {
+              if (chipEl) {
+                chipEl.classList.add("order-wrong-reveal");
+                const xIcon = chipEl.querySelector(".fa-xmark, .fa-lock");
+                if (xIcon) xIcon.className = "fa-solid fa-xmark";
+              }
+              try { soundFX.wrong(); } catch (e) {}
+            }
+
+            wordCheckIdx++;
+            setTimeout(checkNextWord, 650);
+          }, 500);
+        }
+
+        checkNextWord();
+      }
+
+      window.runExternalOrderingVerification = function(extPlaced) {
+        if (currentQuestionIndex !== idx) return;
+        if (Array.isArray(extPlaced) && extPlaced.length > 0) {
+          placedWords = extPlaced;
+          renderOrderingBoard();
+          startSequentialOrderingVerification(false);
+        }
+      };
+
       // اعتماد وتحقق
       document.getElementById("btnSubmitOrdering")?.addEventListener("click", () => {
         if (placedWords.length !== originalItems.length) {
@@ -7109,36 +7253,8 @@ function loadStageQuestion(idx) {
           return;
         }
 
-        const isCorrect = placedWords.every((w, i) => w.text === originalItems[i]);
-
-        if (isCorrect) {
-          try { soundFX.correct(); } catch (e) {}
-          showToast(`✅ أحسنت! الترتيب صحيح ومتقن تماماً (+${earnedPoints} درجات)`, "fa-circle-check");
-          activeCardEffect = null;
-          advanceToNext(earnedPoints, false, true);
-        } else {
-          try { soundFX.wrong(); } catch (e) {}
-          if (activeCardEffect?.effect?.secondChance) {
-            showToast("🔄 فرصة ثانية: الترتيب غير صحيح، أعد ترتيب الكلمات!", "fa-arrow-rotate-left", 3500);
-            activeCardEffect = null;
-            return;
-          }
-
-          if (hasImmunity) {
-            showToast("🛡️ درع الأمان: الترتيب غير صحيح ولكن تم منع أي خصم!", "fa-shield-halved", 3000);
-            activeCardEffect = null;
-            advanceToNext(0, false, false);
-          } else if (penaltyOnWrong > 0) {
-            showToast(`❌ ترتيب غير صحيح — المخاطرة الكبرى: خصم ${penaltyOnWrong} درجات!`, "fa-fire-flame-curved", 3000);
-            activeCardEffect = null;
-            advanceToNext(-penaltyOnWrong, true, false);
-          } else {
-            const wrongPenalty = 3;
-            showToast("❌ الترتيب غير صحيح (خصم 3 درجات ❌)", "fa-circle-xmark", 3000);
-            activeCardEffect = null;
-            advanceToNext(-wrongPenalty, true, false);
-          }
-        }
+        broadcastOrderingVerificationState();
+        startSequentialOrderingVerification(true);
       });
 
       // قبول فوري للمشرف
@@ -7305,6 +7421,41 @@ function addContestantScore(pts) {
   if (stageStudentScore) stageStudentScore.textContent = String(contestantScore);
   // مزامنة النقاط مع بيانات الغرفة السحابية لضمان التطابق
   if (currentLiveRoom) currentLiveRoom.contestantScore = contestantScore;
+
+  // تحديث رصيد الطالب التراكمي فورياً في الذاكرة والسحابة ولوحة الشرف لمنع ضياع أي خسارة أو نقاط عند الخروج
+  if (currentContestant) {
+    const studentUser = participantsCache.find(p => p.name === currentContestant.name || p.id === currentContestant.id);
+    const newTotal = Math.max(0, contestantBaseScore + contestantScore);
+
+    if (studentUser) {
+      studentUser.totalScore = newTotal;
+      saveParticipants();
+      syncParticipantToCloud(studentUser);
+    }
+
+    // تحديث قائمة لوحة الشرف فورياً
+    const exIdx = honorLeaderboardCache.findIndex(x => x.name === currentContestant.name);
+    if (exIdx >= 0) {
+      honorLeaderboardCache[exIdx].score = newTotal;
+      honorLeaderboardCache[exIdx].timestamp = new Date().toISOString();
+    } else {
+      honorLeaderboardCache.push({ name: currentContestant.name, score: newTotal, timestamp: new Date().toISOString() });
+    }
+    honorLeaderboardCache.sort((a, b) => b.score - a.score);
+    localStorage.setItem("nour_honor_board", JSON.stringify(honorLeaderboardCache));
+    syncHonorBoardToCloud();
+
+    if (currentUser && currentUser.name === currentContestant.name) {
+      currentUser.totalScore = newTotal;
+      localStorage.setItem("active_quran_user", JSON.stringify(currentUser));
+      localStorage.setItem("nour_saved_user", JSON.stringify(currentUser));
+      const scoreEl = document.getElementById("studentTotalScoreDisplay");
+      if (scoreEl) scoreEl.textContent = `${newTotal} نقطة`;
+    }
+
+    try { renderAccountsTable(); } catch (e) {}
+    try { renderHonorLeaderboardTab(); } catch (e) {}
+  }
 }
 
 function startQuestionTimer(seconds, onTimeout = null) {
@@ -7472,6 +7623,7 @@ function renderStudentPickerList() {
       const found = participantsCache.find(p => p.id === sId);
       if (found) {
         currentContestant = found;
+        contestantBaseScore = typeof found.totalScore === "number" ? found.totalScore : 0;
         stageStudentName.textContent = found.name;
         stageStudentSchool.innerHTML = `<i class="fa-solid fa-school"></i> ${found.school || '--'}`;
         stageStudentGrade.innerHTML = `<i class="fa-solid fa-layer-group"></i> ${found.grade || '--'}`;
@@ -8363,7 +8515,8 @@ function recordHonorScore(studentName, sessionFinalScore) {
         return entry ? entry.score : 0;
       })();
 
-  const newTotal = Math.max(0, currentSaved + Math.max(0, sessionFinalScore));
+  const base = (typeof contestantBaseScore === "number" && contestantBaseScore > 0) ? contestantBaseScore : currentSaved;
+  const newTotal = Math.max(0, base + sessionFinalScore);
 
   // 1. تحديث قائمة لوحة الشرف
   const existingIdx = honorLeaderboardCache.findIndex(x => x.name === studentName);
