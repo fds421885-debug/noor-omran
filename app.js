@@ -2394,16 +2394,11 @@ async function checkDirectUrlAuthentication(overrideToken = null) {
   }
 
   if (user) {
-    // إذا كان هناك جلسة نشطة للمشرف العام والمستخدم الجديد ليس مشرفاً، نحفظ جلسة المشرف للعودة السريعة
-    const activeSaved = localStorage.getItem("active_quran_user");
-    if (activeSaved) {
-      try {
-        const activeObj = JSON.parse(activeSaved);
-        if (activeObj && activeObj.role === "supervisor" && user.role !== "supervisor") {
-          localStorage.setItem("nour_previous_supervisor", JSON.stringify(activeObj));
-        }
-      } catch (e) {}
-    }
+    // إزالة وحذف أي جلسة إشراف سابقة تماماً عند فتح الرابط المباشر
+    // لحماية حساب المشرف ومنع ظهور شريط "العودة لحساب المشرف العام" لأولياء الأمور والطلاب نهائياً
+    localStorage.removeItem("nour_previous_supervisor");
+    const existingBanner = document.getElementById("impersonationNoticeBar");
+    if (existingBanner) existingBanner.remove();
 
     user.lastLoginAt = new Date().toISOString();
     user.loginCount = (user.loginCount || 1) + 1;
@@ -2549,6 +2544,8 @@ loginForm?.addEventListener("submit", async (e) => {
   }
 
   validationAlert.classList.add("hidden");
+  localStorage.removeItem("nour_previous_supervisor");
+  document.getElementById("impersonationNoticeBar")?.remove();
   btnSubmitLogin.disabled = true;
   btnSubmitLogin.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> جاري التحقق...`;
   showGlobalLoader("جاري تسجيل الدخول وجلب البيانات...", "يرجى الانتظار، يتم جلب حسابك ومزامنة البيانات السحابية لحظياً");
