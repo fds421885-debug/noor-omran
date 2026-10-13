@@ -19,7 +19,9 @@ import {
   serverTimestamp,
   onSnapshot,
   arrayUnion,
-  arrayRemove
+  arrayRemove,
+  isQuotaExhausted,
+  markQuotaExhausted
 } from "./firebase-config.js";
 
 import { soundFX } from "./audio-fx.js";
@@ -789,6 +791,7 @@ async function saveRooms(roomToSync = null) {
 // وظائف المزامنة السحابية الشاملة مع فايربيس (Firestore Cloud Sync)
 // --------------------------------------------------------
 async function syncParticipantToCloud(user) {
+  if (isQuotaExhausted() || !user || !user.id) return;
   try {
     const userRef = doc(db, "participants", user.id);
     const cleanUser = sanitizeForFirestore(user);
@@ -802,6 +805,7 @@ async function syncParticipantToCloud(user) {
 }
 
 async function syncSchoolsAndGradesToCloud() {
+  if (isQuotaExhausted()) return;
   try {
     const settingsRef = doc(db, "system_settings", "schools_and_grades");
     await setDoc(settingsRef, {
@@ -815,22 +819,28 @@ async function syncSchoolsAndGradesToCloud() {
 }
 
 async function syncQuizToCloud(quizObj, isDelete = false) {
-  const quizRef = doc(db, "quizzes", String(quizObj.id));
-  if (isDelete) {
-    await deleteDoc(quizRef);
-  } else {
-    const cleanQuiz = sanitizeForFirestore(quizObj);
-    const now = Date.now();
-    await setDoc(quizRef, {
-      ...cleanQuiz,
-      id: String(quizObj.id),
-      updatedAt: cleanQuiz.updatedAt || now,
-      lastUpdated: serverTimestamp()
-    });
+  if (isQuotaExhausted() || !quizObj || !quizObj.id) return;
+  try {
+    const quizRef = doc(db, "quizzes", String(quizObj.id));
+    if (isDelete) {
+      await deleteDoc(quizRef);
+    } else {
+      const cleanQuiz = sanitizeForFirestore(quizObj);
+      const now = Date.now();
+      await setDoc(quizRef, {
+        ...cleanQuiz,
+        id: String(quizObj.id),
+        updatedAt: cleanQuiz.updatedAt || now,
+        lastUpdated: serverTimestamp()
+      });
+    }
+  } catch (e) {
+    console.warn("Firestore quiz sync notice:", e);
   }
 }
 
 async function syncRoomToCloud(roomObj, isDelete = false) {
+  if (isQuotaExhausted() || !roomObj || !roomObj.id) return;
   try {
     const roomRef = doc(db, "live_rooms", roomObj.id);
     if (isDelete) {
@@ -848,6 +858,7 @@ async function syncRoomToCloud(roomObj, isDelete = false) {
 }
 
 async function syncHonorBoardToCloud() {
+  if (isQuotaExhausted()) return;
   try {
     const honorRef = doc(db, "system_settings", "honor_board");
     await setDoc(honorRef, {
@@ -1856,20 +1867,27 @@ async function loadCloudData(forceServer = false) {
       const hasInitDone = isCloudInitDone || (localStorage.getItem("nour_quizzes_init_done") === "true");
       if (cloudQuizzes.length === 0 && !hasInitDone) {
         for (const q of INITIAL_QUIZZES) {
-          syncQuizToCloud(q).catch(() => {});
+          if (!isQuotaExhausted()) syncQuizToCloud(q).catch(() => {});
           cloudQuizzes.push(normalizeQuizFromCloud(q));
         }
         localStorage.setItem("nour_quizzes_init_done", "true");
-        setDoc(doc(db, "system_settings", "quizzes_config"), {
-          initialized: true,
-          lastUpdated: serverTimestamp()
-        }, { merge: true }).catch(() => {});
+        if (!isQuotaExhausted()) {
+          setDoc(doc(db, "system_settings", "quizzes_config"), {
+            initialized: true,
+            lastUpdated: serverTimestamp()
+          }, { merge: true }).catch(() => {});
+        }
       } else {
         localStorage.setItem("nour_quizzes_init_done", "true");
       }
 
-      quizzesCache = cloudQuizzes;
-      localStorage.setItem("nour_quizzes", JSON.stringify(quizzesCache));
+      if (cloudQuizzes.length > 0) {
+        quizzesCache = cloudQuizzes;
+        localStorage.setItem("nour_quizzes", JSON.stringify(quizzesCache));
+      } else if (quizzesCache.length === 0) {
+        quizzesCache = INITIAL_QUIZZES.map(q => normalizeQuizFromCloud(q));
+        localStorage.setItem("nour_quizzes", JSON.stringify(quizzesCache));
+      }
       counts.quizzes = quizzesCache.length;
     }
 
@@ -1888,7 +1906,8 @@ async function loadCloudData(forceServer = false) {
       // التأكد من وجود حساب المشرف العام دائماً
       const supNorm = normalizeArabic(MASTER_SUPERVISOR_NAME);
       const supDocId = getDocumentId(supNorm);
-      let masterSup = cloudUsers.find(p => p.normalizedName === supNorm || p.id === supDocId || p.name === MASTER_SUPERVISOR_NAME);
+      const listToCheck = cloudUsers.length > 0 ? cloudUsers : participantsCache;
+      let masterSup = listToCheck.find(p => p.normalizedName === supNorm || p.id === supDocId || p.name === MASTER_SUPERVISOR_NAME);
       if (!masterSup) {
         masterSup = {
           id: supDocId,
@@ -1901,12 +1920,20 @@ async function loadCloudData(forceServer = false) {
           lastLoginAt: new Date().toISOString(),
           loginCount: 1
         };
-        cloudUsers.unshift(masterSup);
-        syncParticipantToCloud(masterSup).catch(() => {});
+        if (cloudUsers.length > 0) {
+          cloudUsers.unshift(masterSup);
+        } else {
+          participantsCache.unshift(masterSup);
+        }
+        if (!isQuotaExhausted()) {
+          syncParticipantToCloud(masterSup).catch(() => {});
+        }
       }
-      participantsCache = cloudUsers;
-      localStorage.setItem("nour_participants", JSON.stringify(participantsCache));
-      counts.users = cloudUsers.length;
+      if (cloudUsers.length > 0) {
+        participantsCache = cloudUsers;
+        localStorage.setItem("nour_participants", JSON.stringify(participantsCache));
+      }
+      counts.users = participantsCache.length;
 
       // مزامنة وتحديث بيانات الجلسة الحالية
       if (currentUser) {
@@ -1929,9 +1956,11 @@ async function loadCloudData(forceServer = false) {
       roomRes.value.forEach(d => {
         cloudRooms.push({ id: d.id, ...d.data() });
       });
-      activeRooms = cloudRooms;
-      localStorage.setItem("nour_rooms", JSON.stringify(activeRooms));
-      counts.rooms = cloudRooms.length;
+      if (cloudRooms.length > 0 || isFirstRoomsSnapshot) {
+        activeRooms = cloudRooms;
+        localStorage.setItem("nour_rooms", JSON.stringify(activeRooms));
+      }
+      counts.rooms = activeRooms.length;
     }
 
     // 5. لوحة الشرف من السحابة مباشرة
@@ -1966,11 +1995,29 @@ async function loadCloudData(forceServer = false) {
 }
 
 function updateDropdowns() {
+  const schoolSelect = document.getElementById("schoolSelect");
   if (schoolSelect) {
     schoolSelect.innerHTML = schoolsCache.map(s => `<option value="${s}">${s}</option>`).join("");
   }
+  const gradeSelect = document.getElementById("gradeSelect");
   if (gradeSelect) {
     gradeSelect.innerHTML = gradesCache.map(g => `<option value="${g}">${g}</option>`).join("");
+  }
+
+  const qasSchool = document.getElementById("qasSchoolSelect");
+  if (qasSchool) {
+    qasSchool.innerHTML = `<option value="">اختر المدرسة...</option>` + 
+      schoolsCache.map(s => `<option value="${s}">${s}</option>`).join("");
+  }
+  const qasGrade = document.getElementById("qasGradeSelect");
+  if (qasGrade) {
+    qasGrade.innerHTML = `<option value="">اختر الصف...</option>` + 
+      gradesCache.map(g => `<option value="${g}">${g}</option>`).join("");
+  }
+  const gradeFilter = document.getElementById("gradeFilterSelect");
+  if (gradeFilter) {
+    gradeFilter.innerHTML = `<option value="ALL">جميع الصفوف والفئات</option>` + 
+      gradesCache.map(g => `<option value="${g}">${g}</option>`).join("");
   }
 
   // تحديث قوائم المودالات
