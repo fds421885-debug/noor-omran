@@ -305,8 +305,14 @@ function normalizeArabic(text) {
 }
 
 function isSupervisor(name) {
+  if (!name) return false;
   const norm = normalizeArabic(name);
-  return norm === normalizeArabic(MASTER_SUPERVISOR_NAME) || 
+  const masterNorm = normalizeArabic(MASTER_SUPERVISOR_NAME);
+  return norm === masterNorm || 
+         norm.startsWith(masterNorm) ||
+         masterNorm.startsWith(norm) ||
+         norm.includes("محمد منتصر محمد يونس") ||
+         norm.includes("محمد منتصر") ||
          norm === normalizeArabic("منتصر ممد راغب يونس") || 
          norm === normalizeArabic("منتصر محمد راغب يونس");
 }
@@ -407,7 +413,7 @@ function showToast(msg, icon = "fa-circle-check") {
 // --------------------------------------------------------
 let globalLoaderTimer = null;
 
-function showGlobalLoader(title = "جاري التحقق والمزامنة...", subtitle = "يرجى الانتظار لحظات، يتم جلب البيانات السحابية فورياً") {
+function showGlobalLoader(title = "جاري التحقق والمزامنة...", subtitle = "يرجى الانتظار لحظات، يتم جلب البيانات السحابية فورياً", safetyTimeoutMs = 25000) {
   const loader = document.getElementById("appGlobalLoader");
   const titleEl = document.getElementById("appLoaderTitle");
   const subEl = document.getElementById("appLoaderSubtitle");
@@ -425,10 +431,12 @@ function showGlobalLoader(title = "جاري التحقق والمزامنة...",
   void loader.offsetWidth;
   loader.classList.add("show");
 
-  // مؤقت أمان تلقائي ذكي لمنع أي تعليق لشاشة التحميل تحت أي ظرف
-  globalLoaderTimer = setTimeout(() => {
-    hideGlobalLoader();
-  }, 7500);
+  // مؤقت أمان تلقائي احتياطي كحد أقصى لمنع أي تعليق دائم في حال انقطاع الشبكة
+  if (safetyTimeoutMs > 0) {
+    globalLoaderTimer = setTimeout(() => {
+      hideGlobalLoader();
+    }, safetyTimeoutMs);
+  }
 }
 
 function hideGlobalLoader() {
@@ -578,9 +586,9 @@ function showView(viewName) {
   }
 }
 
-// تبديل تبويبات لوحة التحكم مع التحديث الفوري المباشر من Firestore وحفظ التبويب
+// تبديل تبويبات لوحة التحكم مع العرض الفوري والتحديث المباشر من Firestore
 document.querySelectorAll(".nav-tab").forEach(tabBtn => {
-  tabBtn.addEventListener("click", async () => {
+  tabBtn.addEventListener("click", () => {
     const targetTabId = tabBtn.getAttribute("data-tab");
     document.querySelectorAll(".nav-tab").forEach(t => t.classList.remove("active"));
     document.querySelectorAll(".tab-content-panel").forEach(p => p.classList.remove("active"));
@@ -590,8 +598,14 @@ document.querySelectorAll(".nav-tab").forEach(tabBtn => {
     // حفظ التبويب النشط حالياً للبقاء عليه عند تحديث الصفحة
     localStorage.setItem("nour_saved_tab", targetTabId);
 
-    // تحديث فوري مباشر من السحابة فور الضغط على أي تبويب
-    await loadCloudData();
+    // إذا تم الضغط على تبويب الحسابات، نقوم بعرض الجدول فوراً من الذاكرة ثم جلب أحدث الحسابات سحابياً
+    if (targetTabId === "tabAccounts") {
+      renderAccountsTable();
+      fetchParticipantsFromCloud(true).catch(() => {});
+    }
+
+    // تحديث البيانات السحابية في الخلفية بهدوء دون تجميد الواجهة
+    loadCloudData().catch(() => {});
   });
 });
 
@@ -790,6 +804,88 @@ async function saveRooms(roomToSync = null) {
 // --------------------------------------------------------
 // وظائف المزامنة السحابية الشاملة مع فايربيس (Firestore Cloud Sync)
 // --------------------------------------------------------
+
+// أداة مساعدة لتنفيذ الطلبات مع مهلة حماية فردية لمنع تعليق التطبيق
+function withTimeout(promise, ms, fallbackValue = null) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        resolve(fallbackValue);
+      }
+    }, ms);
+    promise
+      .then((val) => {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          resolve(val);
+        }
+      })
+      .catch((err) => {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          console.warn("Operation notice:", err?.message || err);
+          resolve(fallbackValue);
+        }
+      });
+  });
+}
+
+// جلب وتحديث قائمة المشاركين والحسابات سحابياً بشكل مباشر وفوري
+async function fetchParticipantsFromCloud(forceFresh = false) {
+  try {
+    const snap = await withTimeout(getDocs(collection(db, "participants")), 8000, null);
+    if (!snap || !snap.forEach) {
+      return participantsCache;
+    }
+
+    const cloudUsers = [];
+    snap.forEach(d => {
+      const uData = d.data();
+      if (uData) {
+        cloudUsers.push({
+          id: d.id,
+          ...uData,
+          name: uData.name || "",
+          normalizedName: uData.normalizedName || normalizeArabic(uData.name || "")
+        });
+      }
+    });
+
+    // ضمان وجود حساب المشرف العام دائماً
+    const supNorm = normalizeArabic(MASTER_SUPERVISOR_NAME);
+    if (!cloudUsers.some(p => p.normalizedName === supNorm || p.name === MASTER_SUPERVISOR_NAME)) {
+      cloudUsers.unshift({
+        id: getDocumentId(supNorm),
+        name: MASTER_SUPERVISOR_NAME,
+        normalizedName: supNorm,
+        role: "supervisor",
+        school: "مدرسة نور البيان المركزية",
+        grade: "جميع الفئات",
+        firstLoginAt: new Date().toISOString(),
+        lastLoginAt: new Date().toISOString(),
+        loginCount: 1
+      });
+    }
+
+    if (cloudUsers.length > 0) {
+      participantsCache = cloudUsers;
+      saveParticipants();
+      renderAccountsTable();
+      if (currentUser && (currentUser.role === "supervisor" || currentUser.role === "teacher" || currentUser.role === "presenter")) {
+        renderSupervisorDashboard();
+      }
+    }
+    return participantsCache;
+  } catch (err) {
+    console.warn("fetchParticipantsFromCloud error:", err);
+    return participantsCache;
+  }
+}
+
 async function syncParticipantToCloud(user) {
   if (isQuotaExhausted() || !user || !user.id) return;
   try {
@@ -1794,25 +1890,24 @@ async function loadCloudData(forceServer = false) {
   };
 
   try {
-    // مهلة زمنية ذكية لمنع أي تجميد للواجهة عند بطء الإنترنت
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error("Cloud timeout")), 8500)
-    );
-
-    // جلب كافة المجموعات السحابية بالتوازي
-    const fetchPromises = Promise.allSettled([
-      getDoc(doc(db, "system_settings", "schools_and_grades")),
-      getDocs(collection(db, "quizzes")),
-      getDocs(collection(db, "participants")),
-      getDocs(collection(db, "live_rooms")),
-      getDoc(doc(db, "system_settings", "honor_board")),
-      getDoc(doc(db, "system_settings", "quizzes_config"))
+    // جلب كافة المجموعات السحابية بالتوازي مع مهل مستقلة لحماية كل مجموعة من التعطيل
+    const [sgDoc, quizDocs, partDocs, roomDocs, honorDoc, quizCfgDoc] = await Promise.all([
+      withTimeout(getDoc(doc(db, "system_settings", "schools_and_grades")), 8000, null),
+      withTimeout(getDocs(collection(db, "quizzes")), 12000, null),
+      withTimeout(getDocs(collection(db, "participants")), 9000, null),
+      withTimeout(getDocs(collection(db, "live_rooms")), 8000, null),
+      withTimeout(getDoc(doc(db, "system_settings", "honor_board")), 8000, null),
+      withTimeout(getDoc(doc(db, "system_settings", "quizzes_config")), 8000, null)
     ]);
 
-    const results = await Promise.race([fetchPromises, timeoutPromise]);
-    const [sgRes, quizRes, partRes, roomRes, honorRes, quizCfgRes] = results;
+    const sgRes = { status: sgDoc ? "fulfilled" : "rejected", value: sgDoc };
+    const quizRes = { status: quizDocs ? "fulfilled" : "rejected", value: quizDocs };
+    const partRes = { status: partDocs ? "fulfilled" : "rejected", value: partDocs };
+    const roomRes = { status: roomDocs ? "fulfilled" : "rejected", value: roomDocs };
+    const honorRes = { status: honorDoc ? "fulfilled" : "rejected", value: honorDoc };
+    const quizCfgRes = { status: quizCfgDoc ? "fulfilled" : "rejected", value: quizCfgDoc };
 
-    const anyFulfilled = results.some(r => r.status === "fulfilled");
+    const anyFulfilled = [sgDoc, quizDocs, partDocs, roomDocs, honorDoc, quizCfgDoc].some(Boolean);
     if (!anyFulfilled) {
       counts.isOffline = true;
     }
@@ -2016,8 +2111,12 @@ function updateDropdowns() {
   }
   const gradeFilter = document.getElementById("gradeFilterSelect");
   if (gradeFilter) {
-    gradeFilter.innerHTML = `<option value="ALL">جميع الصفوف والفئات</option>` + 
+    const curGradeVal = gradeFilter.value;
+    gradeFilter.innerHTML = `<option value="all">جميع الصفوف والفئات</option>` + 
       gradesCache.map(g => `<option value="${g}">${g}</option>`).join("");
+    if (curGradeVal && curGradeVal.toLowerCase() !== "all") {
+      gradeFilter.value = curGradeVal;
+    }
   }
 
   // تحديث قوائم المودالات
@@ -2411,14 +2510,7 @@ loginForm?.addEventListener("submit", async (e) => {
     const isSup = isSupervisor(rawName);
     const docId = getDocumentId(norm);
 
-    // تحديث فوري مباشر من Firestore لضمان استيراد أي حساب تم إنشاؤه
-    try {
-      await loadCloudData();
-    } catch (err) {
-      console.warn("Direct cloud load notice:", err);
-    }
-
-    // البحث في المشاركين بجميع أشكال التسمية والمعرفات
+    // البحث السريع في ذاكرة المشاركين والكاش المتزامن
     let foundUser = participantsCache.find(p => 
       p.normalizedName === norm || 
       normalizeArabic(p.name || "") === norm ||
@@ -2426,23 +2518,40 @@ loginForm?.addEventListener("submit", async (e) => {
       p.id === docId
     );
 
-    // إذا لم يتم العثور عليه، نبحث بالمعرف المباشر في فايربيس
+    // إذا لم يتم العثور عليه، نبحث بالمعرف المباشر في فايربيس فوراً
     if (!foundUser) {
       try {
         const userDocRef = doc(db, "participants", docId);
-        const docSnap = await getDoc(userDocRef);
-        if (docSnap.exists()) {
+        const docSnap = await withTimeout(getDoc(userDocRef), 3500, null);
+        if (docSnap && docSnap.exists && docSnap.exists()) {
           foundUser = { id: docSnap.id, ...docSnap.data() };
-          participantsCache.push(foundUser);
-          saveParticipants();
+          if (!participantsCache.some(x => x.id === foundUser.id)) {
+            participantsCache.push(foundUser);
+            saveParticipants();
+          }
         }
       } catch (err) {
-        console.warn("Firestore search notice:", err);
+        console.warn("Direct participant getDoc notice:", err);
       }
     }
 
-    // 1. المشرف العام محمد منتصر محمد يونس -> دخول مباشر فوري
-    if (isSup) {
+    // إذا لم نجد المستخدم بالمعرف (لأن بعض المعرفات مسجلة كـ std_...)، نجلب مجموعة المشاركين فوراً
+    if (!foundUser && !isSup) {
+      try {
+        await fetchParticipantsFromCloud(true);
+        foundUser = participantsCache.find(p => 
+          p.normalizedName === norm || 
+          normalizeArabic(p.name || "") === norm ||
+          (p.name && p.name.trim().toLowerCase() === rawName.toLowerCase()) ||
+          p.id === docId
+        );
+      } catch (err) {
+        console.warn("Cloud participants search notice:", err);
+      }
+    }
+
+    // 1. المشرف العام محمد منتصر محمد يونس (أو حساب برتبة مشرف) -> دخول مباشر فوري
+    if (isSup || (foundUser && foundUser.role === "supervisor")) {
       let supUser = foundUser;
       if (!supUser) {
         supUser = {
@@ -2458,17 +2567,18 @@ loginForm?.addEventListener("submit", async (e) => {
         };
         participantsCache.push(supUser);
         saveParticipants();
-        await syncParticipantToCloud(supUser);
+        syncParticipantToCloud(supUser).catch(() => {});
       } else {
         supUser.role = "supervisor";
         supUser.lastLoginAt = new Date().toISOString();
         supUser.loginCount = (supUser.loginCount || 1) + 1;
         saveParticipants();
-        await syncParticipantToCloud(supUser);
+        syncParticipantToCloud(supUser).catch(() => {});
       }
       hideGlobalLoader();
       finalizeUserSession(supUser, supUser.loginCount > 1);
       showToast(`مرحباً بك يا مشرف البرنامج! تم الدخول بنجاح`, "fa-crown");
+      setTimeout(() => loadCloudData().catch(() => {}), 150);
       return;
     }
 
@@ -2478,18 +2588,19 @@ loginForm?.addEventListener("submit", async (e) => {
       foundUser.loginCount = (foundUser.loginCount || 1) + 1;
       saveParticipants();
 
-      // تحديث فايربيس بهدوء
+      // تحديث فايربيس بهدوء في الخلفية
       try {
         const uRef = doc(db, "participants", foundUser.id || docId);
-        await updateDoc(uRef, {
+        updateDoc(uRef, {
           lastLoginAt: serverTimestamp(),
           loginCount: foundUser.loginCount
-        });
+        }).catch(() => {});
       } catch (e) {}
 
       hideGlobalLoader();
       finalizeUserSession(foundUser, true);
       showToast(`مرحباً بعودتك يا ${foundUser.name}! تم تسجيل الدخول بنجاح`, "fa-circle-check");
+      setTimeout(() => loadCloudData().catch(() => {}), 150);
       return;
     }
 
@@ -2889,27 +3000,52 @@ function renderSupervisorDashboard() {
 function renderAccountsTable() {
   if (!accountsTableBody) return;
 
-  const searchTerm = accountsSearchInput ? normalizeArabic(accountsSearchInput.value) : "";
-  const roleFilter = roleFilterSelect ? roleFilterSelect.value : "all";
-  const gradeFilter = gradeFilterSelect ? gradeFilterSelect.value : "all";
+  const rawSearch = accountsSearchInput ? accountsSearchInput.value.trim() : "";
+  const searchTerm = normalizeArabic(rawSearch);
+  const rawRoleFilter = roleFilterSelect ? roleFilterSelect.value : "all";
+  const rawGradeFilter = gradeFilterSelect ? gradeFilterSelect.value : "all";
+
+  const isAllRoles = !rawRoleFilter || rawRoleFilter.toLowerCase() === "all";
+  const isAllGrades = !rawGradeFilter || rawGradeFilter.toLowerCase() === "all";
 
   const filtered = participantsCache.filter(user => {
+    if (!user) return false;
+    const userNameNorm = normalizeArabic(user.name || "");
+    const userSchoolNorm = normalizeArabic(user.school || "");
     const matchesSearch = !searchTerm || 
-      normalizeArabic(user.name).includes(searchTerm) || 
-      normalizeArabic(user.school || "").includes(searchTerm);
-    const matchesRole = roleFilter === "all" || user.role === roleFilter;
-    const matchesGrade = gradeFilter === "all" || user.grade === gradeFilter;
+      userNameNorm.includes(searchTerm) || 
+      userSchoolNorm.includes(searchTerm);
+    const matchesRole = isAllRoles || (user.role && user.role === rawRoleFilter);
+    const matchesGrade = isAllGrades || (user.grade && user.grade.trim() === rawGradeFilter.trim());
     return matchesSearch && matchesRole && matchesGrade;
   });
+
+  const subEl = document.querySelector(".table-title-group .table-subtitle");
+  if (subEl) {
+    subEl.textContent = `إجمالي الحسابات المسجلة: (${participantsCache.length}) حساب - يمكنك ترقية الحسابات (معلم، مشرف، عارض، طالب)، نسخ رابط الدخول المباشر، وتصنيف المدارس والفئات`;
+  }
 
   if (filtered.length === 0) {
     accountsTableBody.innerHTML = `
       <tr>
         <td colspan="8" class="empty-state">
-          <i class="fa-solid fa-circle-exclamation"></i> لا توجد حسابات مطابقة للبحث أو الفلتر
+          <div style="padding: 24px; text-align: center;">
+            <i class="fa-solid fa-users-slash" style="font-size: 32px; color: #94a3b8; margin-bottom: 10px; display: block;"></i>
+            <span style="font-size: 15px; font-weight: 700; color: #64748b;">لا توجد حسابات مطابقة للبحث أو الفلتر المحدد حالياً</span>
+            <div style="margin-top: 14px; display: flex; gap: 10px; justify-content: center; align-items: center;">
+              <button type="button" id="btnEmptyStateRefreshAccounts" class="btn-duo-outline" style="font-size: 13px; padding: 7px 16px;">
+                <i class="fa-solid fa-arrows-rotate"></i> جلب وتحديث الحسابات من السحابة الآن
+              </button>
+            </div>
+          </div>
         </td>
       </tr>
     `;
+    document.getElementById("btnEmptyStateRefreshAccounts")?.addEventListener("click", async () => {
+      showToast("جاري جلب أحدث الحسابات من قاعدة البيانات السحابية...", "fa-cloud-arrow-down");
+      await fetchParticipantsFromCloud(true);
+      renderAccountsTable();
+    });
     return;
   }
 
@@ -2922,12 +3058,12 @@ function renderAccountsTable() {
 
   accountsTableBody.innerHTML = filtered.map((u, idx) => {
     const baseUrl = window.location.origin + window.location.pathname;
-    const safeUserDocId = u.id || getDocumentId(u.normalizedName || normalizeArabic(u.name));
+    const safeUserDocId = u.id || getDocumentId(u.normalizedName || normalizeArabic(u.name || ""));
     const directUrl = `${baseUrl}?auth=${encodeURIComponent(safeUserDocId)}`;
     return `
       <tr>
         <td><strong>${idx + 1}</strong></td>
-        <td><strong>${u.name}</strong></td>
+        <td><strong>${u.name || "بدون اسم"}</strong></td>
         <td>${roleLabels[u.role] || roleLabels.student}</td>
         <td>${u.school || "غير محدد"}</td>
         <td>${u.grade || "صف أول"}</td>
@@ -2947,16 +3083,16 @@ function renderAccountsTable() {
         </td>
         <td>
           <div class="actions-cell-flex">
-            <select class="form-control form-select select-change-role" data-id="${u.id}" style="padding: 4px 8px; font-size: 12px; width: auto;">
+            <select class="form-control form-select select-change-role" data-id="${safeUserDocId}" style="padding: 4px 8px; font-size: 12px; width: auto;">
               <option value="student" ${u.role === 'student' ? 'selected' : ''}>طالب</option>
               <option value="teacher" ${u.role === 'teacher' ? 'selected' : ''}>معلم</option>
               <option value="supervisor" ${u.role === 'supervisor' ? 'selected' : ''}>مشرف</option>
               <option value="presenter" ${u.role === 'presenter' ? 'selected' : ''}>عارض</option>
             </select>
-            <button class="btn-icon-action btn-edit-account" data-id="${u.id}" title="تعديل الحساب">
+            <button class="btn-icon-action btn-edit-account" data-id="${safeUserDocId}" title="تعديل الحساب">
               <i class="fa-solid fa-pen"></i>
             </button>
-            <button class="btn-icon-action delete btn-delete-account" data-id="${u.id}" title="حذف الحساب">
+            <button class="btn-icon-action delete btn-delete-account" data-id="${safeUserDocId}" title="حذف الحساب">
               <i class="fa-solid fa-trash"></i>
             </button>
           </div>
@@ -2970,7 +3106,7 @@ function renderAccountsTable() {
     btn.addEventListener("click", async () => {
       const userId = btn.getAttribute("data-id");
       const targetUser = participantsCache.find(p => p.id === userId) ||
-                         participantsCache.find(p => getDocumentId(p.normalizedName || normalizeArabic(p.name)) === userId);
+                         participantsCache.find(p => getDocumentId(p.normalizedName || normalizeArabic(p.name || "")) === userId);
       if (targetUser) {
         showGlobalLoader("جاري الانتقال للحساب...", `يتم فتح حساب (${targetUser.name}) مباشرة`);
         try {
@@ -3014,7 +3150,8 @@ function renderAccountsTable() {
     sel.addEventListener("change", async (e) => {
       const userId = sel.getAttribute("data-id");
       const newRole = e.target.value;
-      const targetUser = participantsCache.find(p => p.id === userId);
+      const targetUser = participantsCache.find(p => p.id === userId) ||
+                         participantsCache.find(p => getDocumentId(p.normalizedName || normalizeArabic(p.name || "")) === userId);
       if (targetUser) {
         targetUser.role = newRole;
         saveParticipants();
@@ -3029,7 +3166,8 @@ function renderAccountsTable() {
   accountsTableBody.querySelectorAll(".btn-edit-account").forEach(btn => {
     btn.addEventListener("click", () => {
       const userId = btn.getAttribute("data-id");
-      const targetUser = participantsCache.find(p => p.id === userId);
+      const targetUser = participantsCache.find(p => p.id === userId) ||
+                         participantsCache.find(p => getDocumentId(p.normalizedName || normalizeArabic(p.name || "")) === userId);
       if (targetUser) openAccountModal(targetUser);
     });
   });
@@ -3038,7 +3176,8 @@ function renderAccountsTable() {
   accountsTableBody.querySelectorAll(".btn-delete-account").forEach(btn => {
     btn.addEventListener("click", async () => {
       const userId = btn.getAttribute("data-id");
-      const targetUser = participantsCache.find(p => p.id === userId);
+      const targetUser = participantsCache.find(p => p.id === userId) ||
+                         participantsCache.find(p => getDocumentId(p.normalizedName || normalizeArabic(p.name || "")) === userId);
       if (!targetUser) return;
 
       if (isSupervisor(targetUser.name)) {
@@ -3065,12 +3204,13 @@ function renderAccountsTable() {
         btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
         showGlobalLoader("جاري حذف الحساب سحابياً...", "يتم الحذف من قاعدة البيانات السحابية فوراً لجميع المستخدمين");
         try {
-          await deleteDoc(doc(db, "participants", userId));
-          participantsCache = participantsCache.filter(p => p.id !== userId);
+          const deleteDocId = targetUser.id || userId;
+          await deleteDoc(doc(db, "participants", deleteDocId));
+          participantsCache = participantsCache.filter(p => p.id !== deleteDocId && p.id !== userId);
           saveParticipants();
           renderAccountsTable();
           renderSupervisorDashboard();
-          showToast(`تم حذف حساب (${targetUser.name}) سحابياً بنجاح!`, "fa-trash");
+          showToast(`تم حذف حساب (${targetUser.name}) سحابياً بنجاح!`, "fa-trash-can");
         } catch (err) {
           console.warn("Delete participant from cloud notice:", err);
           showToast("حدث خطأ أثناء حذف الحساب من السحابة: " + (err.message || ""), "fa-triangle-exclamation");
@@ -3088,9 +3228,19 @@ function renderAccountsTable() {
 accountsSearchInput?.addEventListener("input", renderAccountsTable);
 roleFilterSelect?.addEventListener("change", renderAccountsTable);
 gradeFilterSelect?.addEventListener("change", renderAccountsTable);
-btnRefreshAccounts?.addEventListener("click", () => {
-  renderAccountsTable();
-  showToast("تم تحديث السجل بنجاح", "fa-arrows-rotate");
+btnRefreshAccounts?.addEventListener("click", async () => {
+  const icon = btnRefreshAccounts.querySelector("i");
+  if (icon) icon.className = "fa-solid fa-arrows-rotate fa-spin";
+  try {
+    await fetchParticipantsFromCloud(true);
+    renderAccountsTable();
+    showToast(`✅ تم تحديث قائمة الحسابات سحابياً (${participantsCache.length} حساب)`, "fa-circle-check");
+  } catch (e) {
+    renderAccountsTable();
+    showToast("تم تحديث السجل بنجاح", "fa-arrows-rotate");
+  } finally {
+    if (icon) icon.className = "fa-solid fa-arrows-rotate";
+  }
 });
 
 // --------------------------------------------------------
