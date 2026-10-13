@@ -1411,6 +1411,7 @@ let lastSeenCardsTurnTimestamp = 0;
 let lastSeenCardUsedTimestamp = 0;
 let lastSeenWalletSyncTimestamp = 0;
 let lastSeenCardChosenTimestamp = 0;
+let lastSeenQuestionSkipTimestamp = 0;
 let isQuestionTransitionRunning = false;
 let lastKnownSolverRole = null;
 let currentUserProfileUnsubscribe = null;
@@ -1805,6 +1806,49 @@ function updateArenaUIRealtime(room) {
       if (typeof handleSynchronizedCardUsed === "function") {
         handleSynchronizedCardUsed(room.activeCardUsed.cardId, room.activeCardUsed.usedBy, room.activeCardUsed.contestantName);
       }
+    }
+
+    // مزامنة تخطي السؤال الحالي لحظياً لجميع الأجهزة والحضور (Real-time Question Skip Sync)
+    if (room.activeQuestionSkip && room.activeQuestionSkip.timestamp > lastSeenQuestionSkipTimestamp) {
+      lastSeenQuestionSkipTimestamp = room.activeQuestionSkip.timestamp;
+      const skipEv = room.activeQuestionSkip;
+
+      // تحديث نقاط المتسابق لجميع الحضور بالتزامن
+      if (skipEv.contestantScore !== undefined) {
+        contestantScore = skipEv.contestantScore;
+        if (stageStudentScore) stageStudentScore.textContent = String(contestantScore);
+      }
+
+      // إيقاف أي مؤقت نشط وتصفية التأثيرات الفورية
+      clearInterval(liveTimerInterval);
+      liveTimerInterval = null;
+      expireInstantCardEffects();
+
+      // إشعار موحد بالصوت والرسالة لجميع المتصلين
+      showFloatingCardPill("تخطي السؤال الحالي +3 نقاط ⏭️", "fa-forward-fast", "gold");
+      showToast(`⏭️ تم تخطي السؤال الحالي بواسطة (${skipEv.skippedBy || 'المتسابق'}) واحتساب +3 نقاط!`, "fa-forward-fast", 3500);
+      try { soundFX.correct(); } catch(e) {}
+
+      currentQuestionIndex = skipEv.nextIdx;
+      if (currentLiveRoom) {
+        currentLiveRoom.currentQuestionIdx = skipEv.nextIdx;
+        currentLiveRoom.contestantScore = contestantScore;
+      }
+
+      if (skipEv.isFinished) {
+        finishContestant();
+      } else {
+        showHonorBoardModal(
+          false,
+          () => loadStageQuestion(skipEv.nextIdx),
+          room.contestantName || currentContestant?.name,
+          skipEv.grantedPoints || 3,
+          false,
+          skipEv.grantedPoints || 3,
+          0
+        );
+      }
+      return;
     }
 
     // فحص ما إذا كان هناك حدث إجابة جديد تم بثه من أي مصرح له بالحل (المتسابق، المعلم، العارض، المشرف)
@@ -2263,7 +2307,8 @@ function showDirectUrlDialog(url) {
 
 function updateImpersonationBanner() {
   let banner = document.getElementById("impersonationNoticeBar");
-  const prevSupJson = localStorage.getItem("nour_previous_supervisor");
+  // لا يظهر الشريط إطلاقاً إلا إذا قام المشرف العام نفسه بالضغط محلياً على زر "فتح الحساب" من لوحة التحكم في نفس الجلسة
+  const prevSupJson = sessionStorage.getItem("nour_supervisor_impersonation");
 
   if (prevSupJson && currentUser && currentUser.role !== "supervisor") {
     if (!banner) {
@@ -2285,7 +2330,9 @@ function updateImpersonationBanner() {
     banner.querySelector("#btnReturnToSupervisor")?.addEventListener("click", () => {
       try {
         const supObj = JSON.parse(prevSupJson);
+        sessionStorage.removeItem("nour_supervisor_impersonation");
         localStorage.removeItem("nour_previous_supervisor");
+        banner.remove();
         finalizeUserSession(supObj, true);
         showToast("تمت العودة لحساب المشرف العام بنجاح", "fa-crown");
       } catch (e) {}
@@ -2396,6 +2443,7 @@ async function checkDirectUrlAuthentication(overrideToken = null) {
   if (user) {
     // إزالة وحذف أي جلسة إشراف سابقة تماماً عند فتح الرابط المباشر
     // لحماية حساب المشرف ومنع ظهور شريط "العودة لحساب المشرف العام" لأولياء الأمور والطلاب نهائياً
+    sessionStorage.removeItem("nour_supervisor_impersonation");
     localStorage.removeItem("nour_previous_supervisor");
     const existingBanner = document.getElementById("impersonationNoticeBar");
     if (existingBanner) existingBanner.remove();
@@ -2495,6 +2543,9 @@ async function handleLogout() {
 
   const lastSavedName = currentUser?.name || localStorage.getItem("nour_last_username");
   currentUser = null;
+  sessionStorage.removeItem("nour_supervisor_impersonation");
+  localStorage.removeItem("nour_previous_supervisor");
+  document.getElementById("impersonationNoticeBar")?.remove();
   localStorage.removeItem("active_quran_user");
   localStorage.removeItem("nour_saved_user");
   localStorage.removeItem("nour_saved_view");
@@ -2544,6 +2595,7 @@ loginForm?.addEventListener("submit", async (e) => {
   }
 
   validationAlert.classList.add("hidden");
+  sessionStorage.removeItem("nour_supervisor_impersonation");
   localStorage.removeItem("nour_previous_supervisor");
   document.getElementById("impersonationNoticeBar")?.remove();
   btnSubmitLogin.disabled = true;
@@ -3097,17 +3149,9 @@ function renderAccountsTable() {
         <td>${u.grade || "صف أول"}</td>
         <td><small style="color: #64748b;">${formatArabicDate(u.lastLoginAt)}</small></td>
         <td>
-          <div class="direct-link-cell-group">
-            <button type="button" class="btn-open-direct-link" data-id="${safeUserDocId}" title="فتح هذا الحساب فوراً والدخول به مباشرة">
-              <i class="fa-solid fa-right-to-bracket"></i> فتح الحساب
-            </button>
-            <button type="button" class="btn-copy-direct-link" data-url="${directUrl}" title="نسخ رابط الدخول المباشر">
-              <i class="fa-solid fa-copy"></i> نسخ
-            </button>
-            <a href="${directUrl}" target="_blank" class="btn-icon-action" title="فتح الرابط في علامة تبويب جديدة" style="display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; font-size: 11px; text-decoration: none; color: #475569;">
-              <i class="fa-solid fa-arrow-up-right-from-square"></i>
-            </a>
-          </div>
+          <button type="button" class="btn-open-direct-link" data-id="${safeUserDocId}" title="فتح هذا الحساب ومعاينته مباشرة">
+            <i class="fa-solid fa-right-to-bracket"></i> فتح الحساب
+          </button>
         </td>
         <td>
           <div class="actions-cell-flex">
@@ -3129,7 +3173,7 @@ function renderAccountsTable() {
     `;
   }).join("");
 
-  // مستمعات فتح الحساب مباشرة والدخول به
+  // مستمعات فتح الحساب مباشرة والدخول به (متاحة حصرياً للمشرف في جلسته المحلية)
   accountsTableBody.querySelectorAll(".btn-open-direct-link").forEach(btn => {
     btn.addEventListener("click", async () => {
       const userId = btn.getAttribute("data-id");
@@ -3139,7 +3183,7 @@ function renderAccountsTable() {
         showGlobalLoader("جاري الانتقال للحساب...", `يتم فتح حساب (${targetUser.name}) مباشرة`);
         try {
           if (currentUser && currentUser.role === "supervisor" && targetUser.role !== "supervisor") {
-            localStorage.setItem("nour_previous_supervisor", JSON.stringify(currentUser));
+            sessionStorage.setItem("nour_supervisor_impersonation", JSON.stringify(currentUser));
           }
           targetUser.lastLoginAt = new Date().toISOString();
           targetUser.loginCount = (targetUser.loginCount || 1) + 1;
@@ -3150,25 +3194,6 @@ function renderAccountsTable() {
         } finally {
           hideGlobalLoader();
         }
-      }
-    });
-  });
-
-  // مستمعات الأحداث لنسخ الرابط المباشر داخل الجدول مع الدعم التام لبيئة الآي فريم
-  accountsTableBody.querySelectorAll(".btn-copy-direct-link").forEach(btn => {
-    btn.addEventListener("click", async () => {
-      const url = btn.getAttribute("data-url");
-      const success = await copyTextToClipboard(url);
-      if (success) {
-        btn.classList.add("copied");
-        btn.innerHTML = `<i class="fa-solid fa-check"></i> تم النسخ!`;
-        showToast("تم نسخ رابط الدخول المباشر للحساب بنجاح!", "fa-copy");
-        setTimeout(() => {
-          btn.classList.remove("copied");
-          btn.innerHTML = `<i class="fa-solid fa-copy"></i> نسخ`;
-        }, 2500);
-      } else {
-        showDirectUrlDialog(url);
       }
     });
   });
@@ -9661,6 +9686,11 @@ function handleSynchronizedCardUsed(cardId, usedBy, contestantName) {
     updateContestantWalletUI(currentLiveRoom.contestantWallet);
   }
 
+  // إذا كانت البطاقة هي بطاقة تخطي السؤال (21)، تتولى مزامنتها الفورية والدقيقة دالة activeQuestionSkip
+  if (card.id === 21) {
+    return;
+  }
+
   executeCardEffect(card, null);
 }
 
@@ -9686,17 +9716,76 @@ function executeQuestionSwap() {
   }
 }
 
-// تنفيذ تخطي السؤال الحالي بأمان ونيل درجات (البطاقة 21)
-function executeCurrentQuestionSkip(grantedPoints = 3) {
+// تنفيذ تخطي السؤال الحالي بأمان ونيل درجات (البطاقة 21) مع مزامنة سحابية كاملة لجميع الأجهزة والحضور
+function executeCurrentQuestionSkip(grantedPoints = 3, broadcast = true) {
+  if (!currentLiveRoom) return;
+
+  const curIdx = currentQuestionIndex ?? (currentLiveRoom.currentQuestionIdx || 0);
+  const allQ = (currentLiveRoom.drawnQuestions && currentLiveRoom.drawnQuestions.length > 0)
+    ? currentLiveRoom.drawnQuestions
+    : (currentQuizData?.sections?.flatMap(s => s.questions || []) || []);
+  const nextIdx = curIdx + 1;
+  const isFinished = nextIdx >= allQ.length;
+  const nowTs = Date.now();
+
+  // تحديث نقاط المتسابق محلياً
   addContestantScore(grantedPoints);
-  const nextIdx = (currentLiveRoom?.currentQuestionIdx || 0) + 1;
-  const allQ = currentLiveRoom?.drawnQuestions || [];
   expireInstantCardEffects();
-  if (nextIdx >= allQ.length) {
+  clearInterval(liveTimerInterval);
+  liveTimerInterval = null;
+
+  // إشعار مرئي وصوتي فوري
+  showFloatingCardPill("تخطي السؤال الحالي +3 نقاط ⏭️", "fa-forward-fast", "gold");
+  showToast("⏭️ سهم الانطلاق: تخطي السؤال الحالي بأمان ونيل +3 نقاط تكتيكية!", "fa-forward-fast", 3500);
+  try { soundFX.correct(); } catch(e) {}
+
+  currentLiveRoom.currentQuestionIdx = nextIdx;
+  currentLiveRoom.contestantScore = contestantScore;
+  currentQuestionIndex = nextIdx;
+  lastSeenQuestionSkipTimestamp = nowTs;
+
+  // بث التخطي سحابياً للغرفة الحية لجميع الأجهزة والحضور
+  if (broadcast && currentLiveRoom.id) {
+    const skipPayload = {
+      questionIdx: curIdx,
+      nextIdx: nextIdx,
+      grantedPoints: grantedPoints,
+      contestantScore: contestantScore,
+      skippedBy: currentUser?.name || currentContestant?.name || "المتسابق",
+      isFinished: isFinished,
+      timestamp: nowTs
+    };
+
+    currentLiveRoom.activeQuestionSkip = skipPayload;
+    currentLiveRoom.timerState = null;
+
+    try {
+      const roomRef = doc(db, "live_rooms", currentLiveRoom.id);
+      updateDoc(roomRef, {
+        activeQuestionSkip: skipPayload,
+        currentQuestionIdx: nextIdx,
+        contestantScore: contestantScore,
+        timerState: null,
+        lastUpdated: serverTimestamp()
+      }).catch(err => console.warn("Sync activeQuestionSkip error:", err));
+    } catch (e) {
+      console.warn("Update doc activeQuestionSkip error:", e);
+    }
+  }
+
+  // إظهار لوحة الشرف ثم الانتقال للسؤال التالي (أو إنهاء المسابقة)
+  if (isFinished) {
     finishContestant();
   } else {
-    if (currentLiveRoom) currentLiveRoom.currentQuestionIdx = nextIdx;
-    showHonorBoardModal(false, () => loadStageQuestion(nextIdx), currentContestant?.name, grantedPoints, false, grantedPoints, 0);
+    showHonorBoardModal(
+      false, 
+      () => loadStageQuestion(nextIdx), 
+      currentContestant?.name || currentLiveRoom.contestantName, 
+      grantedPoints, 
+      false, 
+      grantedPoints, 
+      0
+    );
   }
 }
 
