@@ -894,12 +894,9 @@
             <!-- شريط البطاقات التكتيكية النشطة باللون البنفسجي الأنيق المعتمد -->
             <div id="stagePurpleActiveCardsBar" class="purple-active-cards-bar hidden"></div>
 
-            <!-- غطاء أنيميشن النتيجة الكبير مع ستيكر تميمة المنصة بثيم نور البيان -->
+            <!-- غطاء أنيميشن النتيجة الكبير مع إبراز الصح والخطأ بدون صورة الأسد -->
             <div id="stageQuestionResultOverlay" class="question-result-overlay hidden">
               <div class="result-badge-anim-wrap">
-                <div id="resultMascotStickerWrap" class="result-mascot-sticker-wrap">
-                  <img id="resultMascotStickerImg" class="result-mascot-sticker-img" src="duo-lion.png" alt="ستيكر منصة نور البيان" />
-                </div>
                 <div class="result-badge-icon" id="resultOverlayIcon">
                   <i class="fa-solid fa-circle-check"></i>
                 </div>
@@ -955,8 +952,8 @@
                 <button type="button" class="themed-sticker-btn" data-sticker="quran" title="مصحف نور البيان المبارك">
                   <i class="fa-solid fa-book-quran" style="color:#16a34a; font-size:16px;"></i> <span>نور القرآن</span>
                 </button>
-                <button type="button" class="themed-sticker-btn" data-sticker="lion" title="أسد نور البيان البطل">
-                  <img src="duo-lion.png" alt="أسد نور البيان" /> <span>بطل البيان</span>
+                <button type="button" class="themed-sticker-btn" data-sticker="star" title="نجم البيان المتألق">
+                  <i class="fa-solid fa-star" style="color:#eab308; font-size:16px;"></i> <span>نجم البيان</span>
                 </button>
                 <button type="button" class="themed-sticker-btn" data-sticker="crown" title="تاج الوقار القرآني">
                   <i class="fa-solid fa-crown" style="color:#ca8a04; font-size:16px;"></i> <span>تاج الوقار</span>
@@ -994,6 +991,12 @@
                   <button class="btn-rate-score" data-score="4">4</button>
                   <button class="btn-rate-score active" data-score="5">5</button>
                 </div>
+              </div>
+
+              <!-- رسالة حالة التقييم للمشاهدين والطلاب -->
+              <div class="oral-observer-status-msg hidden" id="oralObserverStatusMsg">
+                <i class="fa-solid fa-microphone-lines fa-fade" style="color: #6366f1;"></i>
+                <span>جاري استماع وتقييم لجنة المعلمين المعتمدة لتلاوة المتسابق...</span>
               </div>
             </div>
 

@@ -6747,36 +6747,8 @@ button:disabled .fa-spin,
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   transform-origin: center center;
-}
-
-.result-mascot-sticker-wrap {
-  width: 105px;
-  height: 105px;
-  margin: 0 auto;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.22);
-  border: 3px solid rgba(255, 255, 255, 0.7);
-  padding: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
-  animation: mascotPopBounce 0.75s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
-}
-
-.result-mascot-sticker-img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.35));
-}
-
-@keyframes mascotPopBounce {
-  0% { transform: scale(0.3) rotate(-10deg); opacity: 0; }
-  60% { transform: scale(1.15) rotate(5deg); opacity: 1; }
-  100% { transform: scale(1) rotate(0deg); opacity: 1; }
 }
 
 /* شريط ملصقات منصة نور البيان التفاعلي */
@@ -7127,7 +7099,31 @@ button:disabled .fa-spin,
 
 /* ضمان ظهور نافذة البطاقات التكتيكية دائماً في أعلى الطبقات دون أي حجب */
 #tacticalCardsModal {
-  z-index: 10050 !important;
+  z-index: 100050 !important;
+}
+
+.draw-count-bump {
+  animation: drawCountBumpAnim 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards !important;
+}
+
+@keyframes drawCountBumpAnim {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.4); color: #ca8a04; text-shadow: 0 0 14px rgba(234, 179, 8, 0.7); }
+  100% { transform: scale(1); }
+}
+
+.observer-synced-stepper {
+  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%) !important;
+  border-color: #86efac !important;
+}
+
+.observer-synced-stepper .stepper-label {
+  font-size: 11.5px;
+  color: #15803d;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 /* حركة الكلمات المحدثة في أسئلة الترتيب بالتزامن */
@@ -7173,80 +7169,113 @@ button:disabled .fa-spin,
   margin-bottom: 12px !important;
 }
 
+/* ========================================================
+   تخطيط وتمركز السؤال وخياراته في منتصف الشاشة تلقائياً
+   ======================================================== */
+.arena-stage-card.is-question-active {
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: flex-start !important;
+  align-items: center !important;
+  min-height: calc(100vh - 90px) !important;
+  box-sizing: border-box !important;
+  padding-bottom: 20px !important;
+}
+
 .arena-stage-card.is-question-active .stage-question-card {
-  transition: transform 0.28s cubic-bezier(0.2, 0.9, 0.3, 1), margin-bottom 0.28s ease !important;
+  margin: 10px auto auto auto !important;
+  width: 100% !important;
+  max-width: 920px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  box-sizing: border-box !important;
+  padding: clamp(14px, 2.2vh, 26px) clamp(16px, 2.5vw, 30px) !important;
+  transition: padding 0.25s ease, margin 0.25s ease, box-shadow 0.3s ease !important;
 }
 
-.stage-question-card.auto-scale-fit {
-  transform-origin: top center !important;
-  will-change: transform !important;
+/* تنسيق متوازن للكثافة التلقائية عند الأسئلة الطويلة أو كثرة الخيارات */
+.stage-question-card.question-compact-density {
+  padding: clamp(10px, 1.4vh, 16px) clamp(12px, 1.8vw, 20px) !important;
 }
 
-/* تصغير وتكبير مرن وجميل لنصوص وخيارات الأسئلة */
-@media (max-height: 850px) {
+.stage-question-card.question-compact-density .question-header-bar {
+  margin-bottom: 8px !important;
+  padding-bottom: 6px !important;
+}
+
+.stage-question-card.question-compact-density .question-text-content {
+  font-size: clamp(18px, 2.2vw, 24px) !important;
+  margin-bottom: 8px !important;
+  padding: 4px 8px !important;
+}
+
+.stage-question-card.question-compact-density .interactive-question-area {
+  margin-top: 8px !important;
+}
+
+.stage-question-card.question-compact-density .btn-choice-duo {
+  min-height: 40px !important;
+  padding: 8px 12px !important;
+  font-size: 15px !important;
+}
+
+.stage-question-card.question-compact-density .matching-play-grid {
+  gap: 8px !important;
+}
+
+.stage-question-card.question-compact-density .matching-tile {
+  min-height: 38px !important;
+  padding: 6px 10px !important;
+  font-size: 14px !important;
+}
+
+.stage-question-card.question-compact-density .ordering-slots-container,
+.stage-question-card.question-compact-density .ordering-bank-container {
+  padding: 6px 10px !important;
+  min-height: 42px !important;
+  gap: 6px !important;
+}
+
+.stage-question-card.question-compact-density .ordering-chip {
+  padding: 5px 10px !important;
+  font-size: 13.5px !important;
+}
+
+.stage-question-card.question-compact-density .oral-stage-showcase {
+  padding: 10px 14px !important;
+}
+
+.stage-question-card.question-compact-density .live-eval-box {
+  margin-top: 10px !important;
+  padding: 10px 14px !important;
+}
+
+/* دعم الشاشات الصغيرة وأجهزة الجوال أفقياً ورأسياً */
+@media (max-height: 760px) {
+  .arena-stage-card.is-question-active .current-contestant-banner {
+    padding: 6px 14px !important;
+    margin-bottom: 6px !important;
+  }
+  .arena-stage-card.is-question-active .supervisor-controls-panel {
+    padding: 6px 10px !important;
+    margin-bottom: 6px !important;
+  }
   .stage-question-card {
-    padding: 18px 22px !important;
+    padding: 12px 16px !important;
   }
   .question-header-bar {
-    margin-bottom: 12px !important;
-    padding-bottom: 8px !important;
+    margin-bottom: 8px !important;
+    padding-bottom: 6px !important;
   }
   .question-text-content {
-    font-size: 24px !important;
-    margin-bottom: 12px !important;
-  }
-  .btn-choice-duo {
-    min-height: 46px !important;
-    padding: 10px 14px !important;
-    font-size: 17px !important;
-  }
-  .matching-play-grid {
-    gap: 10px !important;
-  }
-  .matching-tile {
-    min-height: 44px !important;
-    padding: 8px 12px !important;
-    font-size: 15px !important;
-  }
-  .ordering-slots-container, .ordering-bank-container {
-    padding: 8px 12px !important;
-    min-height: 46px !important;
-    gap: 6px !important;
-  }
-  .ordering-chip {
-    padding: 6px 14px !important;
-    font-size: 15px !important;
-  }
-  .oral-stage-showcase {
-    padding: 14px 18px !important;
-  }
-  .oral-showcase-content {
-    font-size: 26px !important;
-    margin: 8px 0 !important;
-  }
-}
-
-@media (max-height: 700px) {
-  .stage-question-card {
-    padding: 14px 18px !important;
-  }
-  .question-text-content {
-    font-size: 21px !important;
+    font-size: clamp(18px, 2.2vw, 23px) !important;
     margin-bottom: 8px !important;
   }
   .btn-choice-duo {
     min-height: 42px !important;
     padding: 8px 12px !important;
-    font-size: 15.5px !important;
-  }
-  .matching-tile {
-    min-height: 40px !important;
-    padding: 6px 10px !important;
-    font-size: 14px !important;
-  }
-  .ordering-chip {
-    padding: 5px 10px !important;
-    font-size: 14px !important;
+    font-size: 15px !important;
   }
 }
 
@@ -8243,28 +8272,159 @@ button:disabled .fa-spin,
 
 /* ========================================================
    التأثير البصري البنفسجي الإلزامي للبطاقات التكتيكية النشطة
+   يشمل خلفية السؤال كاملة، الإطار، النص الداخلي، الخيارات والأزرار
    ======================================================== */
-.card-purple-aura {
-  box-shadow: 0 0 25px rgba(147, 51, 234, 0.65), 0 0 50px rgba(126, 34, 206, 0.35) !important;
-  border: 3.5px solid #a855f7 !important;
-  animation: purpleGlowPulse 2.8s ease-in-out infinite alternate !important;
-  position: relative;
-  transition: all 0.4s ease;
+.stage-question-card.card-purple-aura {
+  background: linear-gradient(145deg, #2e1065 0%, #3b0764 45%, #1e1b4b 100%) !important;
+  border: 2.5px solid #c084fc !important;
+  box-shadow: 0 0 25px rgba(168, 85, 247, 0.45), 0 16px 45px -10px rgba(88, 28, 135, 0.5) !important;
+  color: #ffffff !important;
+  position: relative !important;
+  animation: purpleSubtleBreathe 3.5s ease-in-out infinite alternate !important;
+  transition: background 0.5s ease, border-color 0.5s ease, box-shadow 0.5s ease, color 0.5s ease !important;
 }
 
-@keyframes purpleGlowPulse {
+@keyframes purpleSubtleBreathe {
   0% {
-    box-shadow: 0 0 16px rgba(147, 51, 234, 0.5), 0 0 35px rgba(126, 34, 206, 0.25);
+    box-shadow: 0 0 20px rgba(168, 85, 247, 0.35), 0 16px 40px -10px rgba(88, 28, 135, 0.4);
     border-color: #a855f7;
   }
   50% {
-    box-shadow: 0 0 28px rgba(168, 85, 247, 0.8), 0 0 60px rgba(147, 51, 234, 0.45);
-    border-color: #c084fc;
+    box-shadow: 0 0 35px rgba(192, 132, 252, 0.6), 0 20px 50px -10px rgba(126, 34, 206, 0.55);
+    border-color: #d8b4fe;
   }
   100% {
-    box-shadow: 0 0 20px rgba(147, 51, 234, 0.6), 0 0 45px rgba(126, 34, 206, 0.3);
-    border-color: #9333ea;
+    box-shadow: 0 0 20px rgba(168, 85, 247, 0.35), 0 16px 40px -10px rgba(88, 28, 135, 0.4);
+    border-color: #a855f7;
   }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage-question-card.card-purple-aura {
+    animation: none !important;
+  }
+}
+
+/* 1. ترويسة السؤال بالثيم البنفسجي */
+.stage-question-card.card-purple-aura .question-header-bar {
+  border-bottom: 2px solid rgba(192, 132, 252, 0.25) !important;
+}
+
+.stage-question-card.card-purple-aura .question-index-tag {
+  background: rgba(147, 51, 234, 0.35) !important;
+  color: #f3e8ff !important;
+  border: 1px solid rgba(216, 180, 254, 0.4) !important;
+}
+
+.stage-question-card.card-purple-aura .question-section-name {
+  color: #e9d5ff !important;
+}
+
+/* 2. حاوية نص السؤال بالثيم البنفسجي */
+.stage-question-card.card-purple-aura .question-text-content {
+  background: rgba(88, 28, 135, 0.35) !important;
+  border: 1.5px solid rgba(192, 132, 252, 0.35) !important;
+  border-radius: 16px !important;
+  padding: 12px 18px !important;
+  color: #faf5ff !important;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.45) !important;
+}
+
+/* 3. خيارات الأسئلة الاختيارية MCQ */
+.stage-question-card.card-purple-aura .btn-choice-duo {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 2px solid rgba(192, 132, 252, 0.35) !important;
+  border-bottom: 4px solid rgba(147, 51, 234, 0.6) !important;
+  color: #ffffff !important;
+  backdrop-filter: blur(4px) !important;
+  -webkit-backdrop-filter: blur(4px) !important;
+  transition: all 0.2s ease !important;
+}
+
+.stage-question-card.card-purple-aura .btn-choice-duo:hover:not(:disabled) {
+  background: rgba(168, 85, 247, 0.28) !important;
+  border-color: #d8b4fe !important;
+  transform: translateY(-2px) !important;
+  box-shadow: 0 6px 18px rgba(147, 51, 234, 0.35) !important;
+}
+
+.stage-question-card.card-purple-aura .btn-choice-duo .choice-letter {
+  background: rgba(147, 51, 234, 0.45) !important;
+  color: #f3e8ff !important;
+  border: 1px solid rgba(216, 180, 254, 0.4) !important;
+}
+
+/* التباين الشديد للصح والخطأ عند الإجابة داخل الهالة البنفسجية */
+.stage-question-card.card-purple-aura .btn-choice-duo.correct {
+  background: #15803d !important;
+  border-color: #22c55e !important;
+  border-bottom-color: #16a34a !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 25px rgba(34, 197, 94, 0.6) !important;
+}
+
+.stage-question-card.card-purple-aura .btn-choice-duo.wrong {
+  background: #b91c1c !important;
+  border-color: #ef4444 !important;
+  border-bottom-color: #dc2626 !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 25px rgba(239, 68, 68, 0.6) !important;
+}
+
+/* 4. أسئلة التوصيل Matching بالثيم البنفسجي */
+.stage-question-card.card-purple-aura .matching-tile {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 2px solid rgba(192, 132, 252, 0.35) !important;
+  border-bottom: 4px solid rgba(147, 51, 234, 0.6) !important;
+  color: #ffffff !important;
+}
+
+.stage-question-card.card-purple-aura .matching-tile.selected {
+  background: rgba(168, 85, 247, 0.4) !important;
+  border-color: #e9d5ff !important;
+  box-shadow: 0 0 16px rgba(216, 180, 254, 0.6) !important;
+}
+
+.stage-question-card.card-purple-aura .matching-tile.matched {
+  background: #15803d !important;
+  border-color: #22c55e !important;
+  color: #ffffff !important;
+}
+
+/* 5. أسئلة الترتيب Ordering بالثيم البنفسجي */
+.stage-question-card.card-purple-aura .ordering-slots-container,
+.stage-question-card.card-purple-aura .ordering-bank-container {
+  background: rgba(88, 28, 135, 0.25) !important;
+  border: 1.5px dashed rgba(192, 132, 252, 0.4) !important;
+}
+
+.stage-question-card.card-purple-aura .ordering-chip {
+  background: rgba(147, 51, 234, 0.4) !important;
+  border: 2px solid #c084fc !important;
+  color: #ffffff !important;
+}
+
+/* 6. أسئلة القراءة والشفهي Oral بالثيم البنفسجي */
+.stage-question-card.card-purple-aura .oral-stage-showcase {
+  background: rgba(88, 28, 135, 0.35) !important;
+  border: 2px solid rgba(192, 132, 252, 0.45) !important;
+  color: #ffffff !important;
+}
+
+.stage-question-card.card-purple-aura .oral-showcase-verse {
+  color: #faf5ff !important;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5) !important;
+}
+
+.stage-question-card.card-purple-aura .live-eval-box {
+  background: rgba(88, 28, 135, 0.35) !important;
+  border: 1.5px solid rgba(192, 132, 252, 0.4) !important;
+  color: #ffffff !important;
+}
+
+.stage-question-card.card-purple-aura .eval-header-flex,
+.stage-question-card.card-purple-aura .vote-prompt {
+  color: #f3e8ff !important;
 }
 
 /* شريط البطاقات النشطة البنفسجي الأنيق أعلى السؤال */

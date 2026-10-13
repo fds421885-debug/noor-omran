@@ -77,6 +77,14 @@ import {
   getCardMechanicsExplanation 
 } from "./cards-data.js";
 import { generateTestWithAI } from "./ai-service.js";
+import { 
+  getAnswerLogKey, 
+  calculateQuestionScore, 
+  recordAnswerIdempotent, 
+  calculateSessionScoreFromLog, 
+  getContestantTotalScore, 
+  finalizeContestantScore 
+} from "./scoring-engine.js";
 
 // --------------------------------------------------------
 // ثوابت النظام
@@ -1400,6 +1408,7 @@ function listenToActiveRoom(roomId) {
 
 // متغيرات مزامنة الأنيميشن السحابي اللحظي للغرف الحية بين المشرف والمعلمين والعارض
 let lastSeenDrawAnimTimestamp = 0;
+let lastSeenSectionCountUpdateTimestamp = 0;
 let isSectionDrawAnimating = false;
 let currentDrawInterval = null;
 let currentDrawTimeout = null;
@@ -1613,6 +1622,23 @@ function updateArenaUIRealtime(room) {
       // مزامنة أعداد الأسئلة المختارة للأقسام سحابياً للجميع
       if (room.sectionCounts && typeof room.sectionCounts === 'object') {
         currentLiveRoom.sectionCounts = room.sectionCounts;
+      }
+
+      // رصد وتنبيه أنيميشن تغيير أعداد الأسئلة للأقسام بالتزامن لجميع الحضور
+      if (room.sectionCountUpdate && room.sectionCountUpdate.timestamp > lastSeenSectionCountUpdateTimestamp) {
+        lastSeenSectionCountUpdateTimestamp = room.sectionCountUpdate.timestamp;
+        if (!isLead) {
+          try { soundFX.btnClick(); } catch (e) {}
+          const targetSecIdx = room.sectionCountUpdate.secIdx;
+          setTimeout(() => {
+            const valEl = document.getElementById(`drawSecVal_${targetSecIdx}`);
+            if (valEl) {
+              valEl.classList.remove("draw-count-bump");
+              void valEl.offsetWidth;
+              valEl.classList.add("draw-count-bump");
+            }
+          }, 40);
+        }
       }
 
       // مزامنة لحظية لأنيميشن سحب الأسئلة قسم بقسم مع المشرف لجميع المشاركين
@@ -5800,10 +5826,15 @@ async function selectContestant(student) {
   currentContestant = student;
   const p = participantsCache.find(x => x.name === student.name || x.id === student.id);
   contestantBaseScore = (p && typeof p.totalScore === "number") ? p.totalScore : (student.totalScore || 0);
+  contestantScore = 0;
   currentLiveRoom.contestantId = student.id;
   currentLiveRoom.contestantName = student.name;
   currentLiveRoom.contestantSchool = student.school || "--";
   currentLiveRoom.contestantGrade = student.grade || "--";
+  currentLiveRoom.contestantInitialBaseScore = contestantBaseScore;
+  currentLiveRoom.contestantScore = 0;
+  currentLiveRoom.highestLockedScore = 0;
+  currentLiveRoom.answeredQuestionsLog = {};
   currentLiveRoom.phase = "draw";
   await saveRooms(currentLiveRoom);
   enterPhaseQuestionDraw();
@@ -5821,6 +5852,24 @@ function enterPhaseQuestionDraw() {
     drawPhaseStudentLabel.textContent = `المتسابق: ${currentLiveRoom?.contestantName || '--'}`;
 
   if (!currentQuizData) return;
+
+  const secList = Array.isArray(currentQuizData.sections) ? currentQuizData.sections : [];
+  if (secList.length > 0 && (!currentLiveRoom.sectionCounts || Object.keys(currentLiveRoom.sectionCounts).length === 0)) {
+    const totalInQuiz = secList.reduce((a, s) => a + (Array.isArray(s?.questions) ? s.questions.length : 0), 0);
+    const perStudent = currentLiveRoom?.questionsPerStudent || (totalInQuiz || 5);
+    const counts = {};
+    secList.forEach(s => {
+      const secTotal = Array.isArray(s.questions) ? s.questions.length : 0;
+      counts[s.sectionName] = Math.max(1, Math.round((secTotal / (totalInQuiz || 1)) * perStudent));
+    });
+    currentLiveRoom.sectionCounts = counts;
+    if (currentLiveRoom.id) {
+      updateDoc(doc(db, "live_rooms", currentLiveRoom.id), {
+        sectionCounts: counts,
+        lastUpdated: serverTimestamp()
+      }).catch(() => {});
+    }
+  }
 
   renderDrawSectionsList();
 }
@@ -5849,7 +5898,7 @@ function renderDrawSectionsList() {
 
   const drawn = Array.isArray(currentLiveRoom?.drawnQuestions) ? currentLiveRoom.drawnQuestions : [];
 
-  // بناء عرض الأقسام مع أدوات اختيار كم سؤال في كل قسم للمشرف والتزامن للجميع
+  // بناء عرض الأقسام مع أدوات اختيار كم سؤال في كل قسم للمشرف والتزامن الكامل للجميع بأنيميشن مبهج
   drawSectionsList.innerHTML = secList.map((sec, idx) => {
     const secTotal = Array.isArray(sec.questions) ? sec.questions.length : 0;
     const defaultPortion = Math.max(1, Math.round((secTotal / (totalInQuiz || 1)) * perStudent));
@@ -5874,8 +5923,8 @@ function renderDrawSectionsList() {
               <button type="button" class="draw-step-btn" data-sec-step="inc" data-sec-idx="${idx}" ${currentVal >= secTotal ? 'disabled' : ''}>+</button>
             </div>
           ` : `
-            <div class="draw-section-stepper" style="background:#f1f5f9;border-color:#cbd5e1;">
-              <span style="font-size:11.5px;color:#64748b;font-weight:700;">المحدد:</span>
+            <div class="draw-section-stepper observer-synced-stepper">
+              <span class="stepper-label"><i class="fa-solid fa-list-check"></i> المحدد:</span>
               <span class="draw-step-val" id="drawSecVal_${idx}">${currentVal}</span>
             </div>
           `}
@@ -5903,11 +5952,20 @@ function renderDrawSectionsList() {
         currentLiveRoom.sectionCounts[sec.sectionName] = val;
 
         renderDrawSectionsList();
+        try { soundFX.btnClick(); } catch (e) {}
+
+        const valEl = document.getElementById(`drawSecVal_${idx}`);
+        if (valEl) {
+          valEl.classList.remove("draw-count-bump");
+          void valEl.offsetWidth;
+          valEl.classList.add("draw-count-bump");
+        }
 
         // بث فوري سحابي لعدد الأسئلة المختارة لكل قسم ليتزامن عند الجميع
         if (currentLiveRoom.id) {
           updateDoc(doc(db, "live_rooms", currentLiveRoom.id), {
             sectionCounts: currentLiveRoom.sectionCounts,
+            sectionCountUpdate: { secName: sec.sectionName, count: val, secIdx: idx, timestamp: Date.now() },
             lastUpdated: serverTimestamp()
           }).catch(e => console.warn("Sync sectionCounts err:", e));
         }
@@ -6142,72 +6200,54 @@ function bringQuestionCardIntoView(cardEl) {
   const arenaEl = document.getElementById("arenaStage");
   if (arenaEl) arenaEl.classList.add("is-question-active");
 
-  const fitAndCenter = () => {
+  // إزالة أي تحويلات أو حواشي متبقية
+  cardEl.style.transform = '';
+  cardEl.style.marginBottom = '';
+  cardEl.classList.remove("auto-scale-fit");
+
+  const adjustLayout = () => {
     try {
-      // 1. إعادة ضبط مؤقت للتأكد من القياس الحقيقي
-      cardEl.style.transform = '';
-      cardEl.style.marginBottom = '';
-      cardEl.style.transformOrigin = 'top center';
-      cardEl.classList.remove("auto-scale-fit");
-
-      const headerEl = document.querySelector(".main-header");
-      const headerH = headerEl ? headerEl.offsetHeight : 64;
       const viewportH = window.innerHeight;
-      const viewportW = window.innerWidth;
+      const headerEl = document.querySelector(".main-header");
+      const headerH = headerEl ? headerEl.offsetHeight : 54;
+      const contestantBanner = document.querySelector(".current-contestant-banner");
+      const bannerH = (contestantBanner && !contestantBanner.classList.contains("hidden")) ? contestantBanner.offsetHeight : 50;
+      const supBar = document.getElementById("supervisorControlBar");
+      const supBarH = (supBar && !supBar.classList.contains("hidden")) ? supBar.offsetHeight : 0;
 
-      // الارتفاع الحقيقي لبطاقة السؤال مع كافة خياراتها وتفاصيلها
-      const naturalH = cardEl.offsetHeight || cardEl.scrollHeight;
+      const availableH = viewportH - headerH - bannerH - supBarH - 35;
+      const cardScrollH = cardEl.scrollHeight;
 
-      // حساب المساحة الرأسية المتاحة لبطاقة السؤال بالكامل داخل الشاشة
-      const safePadding = 20;
-      const availableH = viewportH - headerH - safePadding;
-
-      let scale = 1;
-
-      // إذا كان السؤال مع خياراته (خصوصاً التوصيل، الترتيب، الشفهي) أكبر من المساحة المعروضة
-      // نصغره بنسبة ذكية متوازنة ليتسع كاملاً بدون اقتطاع أي خيار أو زر بالأسفل
-      if (naturalH > (availableH - 16) && naturalH > 0) {
-        scale = Math.max(0.60, Math.min(1, (availableH - 24) / naturalH));
-        cardEl.classList.add("auto-scale-fit");
-        cardEl.style.transform = `scale(${scale.toFixed(3)})`;
-        cardEl.style.transformOrigin = "top center";
-        const diffH = Math.round(naturalH * (1 - scale));
-        cardEl.style.marginBottom = `-${diffH}px`;
-      } else if (naturalH < (availableH * 0.52) && viewportW > 768) {
-        // إذا كان السؤال قصيراً على شاشة واسعة، نكبره قليلاً لمظهر جذاب
-        scale = 1.04;
-        cardEl.style.transform = `scale(${scale.toFixed(3)})`;
-        cardEl.style.transformOrigin = "top center";
-        const extraH = Math.round(naturalH * (scale - 1));
-        cardEl.style.marginBottom = `${extraH}px`;
+      // ضبط الكثافة التلقائية للسؤال إذا كان طويلاً أو يحتوي على خيارات كثيرة
+      if (cardScrollH > availableH && availableH > 260) {
+        cardEl.classList.add("question-compact-density");
+      } else {
+        cardEl.classList.remove("question-compact-density");
       }
 
-      // 2. التمرير التلقائي السلس إلى وسط الشاشة تماماً لظهور السؤال وجميع الإجابات بوسط العين
-      const rect = cardEl.getBoundingClientRect();
-      const currentScrollY = window.pageYOffset || document.documentElement.scrollTop;
-      const cardAbsoluteTop = currentScrollY + rect.top;
-      const scaledH = rect.height;
-
-      const idealCenterScrollY = cardAbsoluteTop - headerH - Math.max(8, (availableH - scaledH) / 2);
-
-      window.scrollTo({
-        top: Math.max(0, Math.round(idealCenterScrollY)),
-        behavior: "smooth"
-      });
-    } catch (e) {
-      try {
-        cardEl.scrollIntoView({ behavior: "smooth", block: "center" });
-      } catch (err) {}
-    }
+      // تمرير ناعم ومريح لضمان رؤية السؤال وخياراته بوضوح تام دون اقتطاع
+      const topOffset = headerH + 8;
+      const cardRect = cardEl.getBoundingClientRect();
+      if (cardRect.top < topOffset || cardRect.bottom > viewportH) {
+        window.scrollTo({
+          top: Math.max(0, window.pageYOffset + cardRect.top - topOffset),
+          behavior: "smooth"
+        });
+      }
+    } catch (e) {}
   };
 
-  requestAnimationFrame(() => {
-    fitAndCenter();
-    setTimeout(fitAndCenter, 100);
-    setTimeout(fitAndCenter, 280);
-    setTimeout(fitAndCenter, 550);
-  });
+  adjustLayout();
+  requestAnimationFrame(adjustLayout);
 }
+
+// إعادة ضبط التخطيط تلقائياً عند تغيير مقاس الشاشة أو استدارتها دون إعادة تحميل الصفحة
+window.addEventListener("resize", () => {
+  const cardEl = document.querySelector(".stage-question-card");
+  if (cardEl && document.getElementById("arenaStage") && !document.getElementById("arenaStage").classList.contains("hidden")) {
+    bringQuestionCardIntoView(cardEl);
+  }
+});
 
 // =========================================================
 // المؤقت اللحظي السحابي الموحد والمزامن عبر Firestore لجميع المتسابقين والعارض والمشرف
@@ -6497,14 +6537,16 @@ function handleLiveQuestionTimeout() {
   const curQ = allQ[currentLiveRoom?.currentQuestionIdx || 0] || {};
   
   // فحص بطاقة الحصانة (درع الأمان)
+  const basePoints = (typeof curQ.points === "number" && curQ.points > 0) ? curQ.points : 3;
   const hasImmunity = !!(activeCardEffect?.effect?.immunity);
   let penalty = 0;
   if (hasImmunity) {
     showToast("درع الأمان (الحصانة): انتهى الوقت ولكن تم إلغاء أي خصم درجات!", "fa-shield-halved", 3500);
     activeCardEffect = null;
   } else {
-    penalty = 3;
-    showToast("انتهى الوقت المحدد للسؤال! تم خصم 3 درجات والانتقال للسؤال التالي", "fa-clock", 3500);
+    // خصم نصف النقاط التي كان المفروض أن يحصل عليها لو جاوب صح
+    penalty = Math.max(1, Math.round(basePoints / 2));
+    showToast(`انتهى الوقت المحدد للسؤال! تم خصم ${penalty} درجات (نصف نقاط السؤال) والانتقال للوحة الشرف`, "fa-clock", 3500);
   }
 
   // إذا كان نوع السؤال اختيار من متعدد، نعطل الخيارات ونظهر الإجابة الصحيحة
@@ -6520,9 +6562,9 @@ function handleLiveQuestionTimeout() {
 
   // إيقاف العداد كلياً وتمرير انتهاء الوقت كإجابة خاطئة تماماً مع ظهور X أحمر
   if (typeof currentStageAdvanceToNext === "function") {
-    currentStageAdvanceToNext(-penalty, penalty > 0, false, null, true);
+    currentStageAdvanceToNext(-penalty, penalty > 0, false, null, true, 0, basePoints);
   } else if (typeof advanceToNext === "function") {
-    advanceToNext(-penalty, penalty > 0, false, null, true);
+    advanceToNext(-penalty, penalty > 0, false, null, true, 0, basePoints);
   }
 }
 
@@ -6546,17 +6588,14 @@ function showBigQuestionResultOverlay({ isCorrect, isTimeout = false, scoreDelta
     void questionCardEl.offsetWidth;
   }
 
-  const mascotImg = document.getElementById("resultMascotStickerImg");
   if (isCorrect) {
     overlay.classList.add("correct");
-    if (mascotImg) mascotImg.src = "duo-lion.png";
     iconEl.innerHTML = `<i class="fa-solid fa-circle-check"></i>`;
     titleEl.textContent = "ما شاء الله! إجابة صحيحة ومتقنة";
     pointsEl.textContent = `+${scoreDelta} درجات`;
     try { soundFX.correct(); } catch (e) {}
   } else if (isTimeout) {
     overlay.classList.add("wrong", "timeout");
-    if (mascotImg) mascotImg.src = "duo-lion-student.png";
     iconEl.innerHTML = `<i class="fa-solid fa-hourglass-end"></i>`;
     titleEl.textContent = "انتهى الوقت المحدد للسؤال";
     pointsEl.textContent = scoreDelta !== 0 ? `${scoreDelta} درجات` : "استعن بالله وركّز في السؤال القادم";
@@ -6564,7 +6603,6 @@ function showBigQuestionResultOverlay({ isCorrect, isTimeout = false, scoreDelta
     try { soundFX.wrong(); } catch (e) {}
   } else {
     overlay.classList.add("wrong");
-    if (mascotImg) mascotImg.src = "duo-lion-student.png";
     iconEl.innerHTML = `<i class="fa-solid fa-circle-xmark"></i>`;
     titleEl.textContent = "إجابة غير دقيقة";
     pointsEl.textContent = scoreDelta !== 0 ? `${scoreDelta} درجات` : "استعن بالله وركّز في السؤال القادم";
@@ -6594,7 +6632,11 @@ function shouldTriggerTacticalCards(room, currentIdx, nextIdx, totalQ) {
   if (freq === "3" || freq === "every_3") return ((currentIdx + 1) % 3 === 0);
   if (freq === "4" || freq === "every_4") return ((currentIdx + 1) % 4 === 0); // الافتراضي الموصى به: كل 4 أسئلة
   if (freq === "5" || freq === "every_5") return ((currentIdx + 1) % 5 === 0);
-  if (freq === "quarter") return ((currentIdx + 1) % Math.max(1, Math.round(totalQ / 4)) === 0);
+  if (freq === "quarter") {
+    // كل ربع الأسئلة (مثال: في 20 سؤال تظهر 5 مرات بمعدل كل 4 أسئلة)
+    const quarterStep = Math.max(1, Math.floor(totalQ / 5) || 4);
+    return ((currentIdx + 1) % quarterStep === 0);
+  }
   return ((currentIdx + 1) % 4 === 0);
 }
 
@@ -6634,6 +6676,13 @@ function playQuestionTransitionSequence({ isCorrect, scoreDelta, isPenalty, next
         const canGenerate = isLeaderUser || checkIsSolverAllowed(currentLiveRoom);
         if (canGenerate) {
           triggerTacticalCardsModal(() => loadStageQuestion(nextIdx), nextIdx);
+        } else {
+          // للمشاهدين والعارضين: إذا كانت البطاقات مفتوحة بالفعل سحابياً، نعرضها بأنيميشن جميل
+          if (currentLiveRoom?.activeCardsTurn?.isOpen && Array.isArray(currentLiveRoom.activeCardsTurn.cards)) {
+            showSynchronizedTacticalCardsModal(currentLiveRoom.activeCardsTurn.cards, nextIdx);
+          } else {
+            showToast("🃏 حان موعد ظهور البطاقات التكتيكية! بانتظار استعراض واختيار البطاقة...", "fa-layer-group", 4000);
+          }
         }
       } else {
         loadStageQuestion(nextIdx);
@@ -6818,10 +6867,21 @@ function enterPhaseStage() {
 
   currentQuizData = { sections: [{ sectionName: "أسئلة المسابقة", questions: questionsToUse }] };
   currentQuestionIndex = room.currentQuestionIdx || 0;
-  // استعادة النقاط من بيانات الغرفة السحابية كمرجع موحد وأساسي لجميع الأجهزة والشاشات
-  contestantScore = typeof room.contestantScore === "number" ? room.contestantScore : 0;
-  const pFound = participantsCache.find(x => x.name === currentContestant.name || x.id === currentContestant.id);
-  contestantBaseScore = (pFound && typeof pFound.totalScore === "number") ? pFound.totalScore : (currentContestant.totalScore || 0);
+  // استعادة النقاط من سجل الإجابات المعتمد أو بيانات الغرفة السحابية كمرجع موحد وأساسي لجميع الأجهزة والشاشات
+  if (room.answeredQuestionsLog && typeof room.answeredQuestionsLog === "object") {
+    contestantScore = calculateSessionScoreFromLog(room.answeredQuestionsLog);
+  } else {
+    contestantScore = typeof room.contestantScore === "number" ? room.contestantScore : 0;
+  }
+
+  // الرصيد الابتدائي الأساسي للمتسابق عند بدء الجلسة
+  if (typeof room.contestantInitialBaseScore === "number") {
+    contestantBaseScore = room.contestantInitialBaseScore;
+  } else {
+    const pFound = participantsCache.find(x => x.name === currentContestant.name || x.id === currentContestant.id);
+    contestantBaseScore = (pFound && typeof pFound.totalScore === "number") ? pFound.totalScore : (currentContestant.totalScore || 0);
+    room.contestantInitialBaseScore = contestantBaseScore;
+  }
 
   if (stageStudentName) stageStudentName.textContent = currentContestant.name;
   if (stageStudentSchool) stageStudentSchool.innerHTML = `<i class="fa-solid fa-school"></i> ${currentContestant.school || '--'}`;
@@ -7027,14 +7087,29 @@ function loadStageQuestion(idx) {
   // إزالة أي شريط تقييم إجابة سابق
   stageInteractiveArea.querySelectorAll(".answer-feedback-banner").forEach(fb => fb.remove());
 
-  // الانتقال للسؤال التالي مع عرض كرت نتيجة الإجابة أولاً ثم خروج السؤال ثم لوحة الشرف
+  // الانتقال للسؤال التالي مع اعتماد وتسجيل النتيجة ذرية دون أي تكرار
   function advanceToNext(scoreDelta = 0, isPenalty = false, isCorrect = true, chosenChoiceIdx = null, isTimeout = false, cardBonus = 0, basePoints = 0) {
     if (isAdvancingQuestion) return;
     isAdvancingQuestion = true;
     clearInterval(liveTimerInterval);
     liveTimerInterval = null;
     lastTimerConfigKey = "";
-    addContestantScore(scoreDelta);
+
+    // استخدام محرك النقاط الموحد والموثوق لتسجيل النتيجة مرة واحدة فقط ومنع أي تكرار شبكي
+    const recordResult = recordAnswerIdempotent(currentLiveRoom, {
+      questionIdx: idx,
+      isCorrect,
+      isTimeout,
+      basePoints,
+      cardBonus,
+      penalty: isPenalty ? Math.abs(scoreDelta) : 0,
+      scoreDelta,
+      chosenChoiceIdx,
+      answeredBy: currentUser?.name || "المتسابق"
+    });
+
+    contestantScore = recordResult.contestantScore;
+    if (stageStudentScore) stageStudentScore.textContent = String(contestantScore);
 
     // إنهاء أي بطاقة فورية سارية على هذا السؤال فوراً
     expireInstantCardEffects();
@@ -7043,8 +7118,7 @@ function loadStageQuestion(idx) {
     const nextIdx = idx + 1;
     const isFinished = nextIdx >= allQuestions.length;
 
-    // بث نتيجة الإجابة سحابياً للغرفة الحية مع نقاط البطاقات والتحديثات
-    // ملاحظة حاسمة: لا نحدث currentQuestionIdx إلى nextIdx في السحابة هنا حتى لا يقفز أي جهاز للسؤال التالي أثناء عرض لوحة الشرف!
+    // بث نتيجة الإجابة سحابياً للغرفة الحية مع سجل الإجابات المعتمد ونقاط البطاقات
     if (currentLiveRoom) {
       const answerPayload = {
         questionIdx: idx,
@@ -7069,6 +7143,8 @@ function loadStageQuestion(idx) {
           const updatePayload = {
             lastAnswerEvent: answerPayload,
             contestantScore: contestantScore,
+            answeredQuestionsLog: currentLiveRoom.answeredQuestionsLog || {},
+            highestLockedScore: currentLiveRoom.highestLockedScore || contestantScore,
             timerState: null,
             lastUpdated: serverTimestamp()
           };
@@ -7095,7 +7171,7 @@ function loadStageQuestion(idx) {
 
   currentStageAdvanceToNext = advanceToNext;
 
-  // معالجة انتهاء وقت السؤال الحالي كإجابة خاطئة مع ظهور X أحمر
+  // معالجة انتهاء وقت السؤال الحالي كإجابة خاطئة مع ظهور X أحمر وخصم نصف نقاط السؤال
   function handleStageQuestionTimeout() {
     if (isAdvancingQuestion) return;
     if (isQuestionTransitionRunning) {
@@ -7106,14 +7182,16 @@ function loadStageQuestion(idx) {
     }
 
     // فحص بطاقة الحصانة (درع الأمان)
+    const basePoints = (typeof q.points === "number" && q.points > 0) ? q.points : 3;
     const hasImmunity = !!(activeCardEffect?.effect?.immunity);
     let penalty = 0;
     if (hasImmunity) {
       showToast("درع الأمان (الحصانة): انتهى الوقت ولكن تم إلغاء أي خصم درجات!", "fa-shield-halved", 3500);
       activeCardEffect = null;
     } else {
-      penalty = 3;
-      showToast("انتهى الوقت المحدد للسؤال! تم خصم 3 درجات والانتقال للسؤال التالي", "fa-clock", 3500);
+      // خصم نصف النقاط التي كان المفروض أن يحصل عليها لو جاوب صح
+      penalty = Math.max(1, Math.round(basePoints / 2));
+      showToast(`انتهى الوقت المحدد للسؤال! تم خصم ${penalty} درجات (نصف نقاط السؤال) والانتقال للوحة الشرف`, "fa-clock", 3500);
     }
 
     // إذا كان نوع السؤال اختيار من متعدد (MCQ)، نظهر الإجابة الصحيحة باللون الأخضر ونعطل الخيارات
@@ -7130,7 +7208,7 @@ function loadStageQuestion(idx) {
     }
 
     // الانتقال مع ظهور علامة X الحمراء الكبيرة تماماً كالإجابة الخاطئة
-    advanceToNext(-penalty, penalty > 0, false, null, true);
+    advanceToNext(-penalty, penalty > 0, false, null, true, 0, basePoints);
   }
 
   // فحص ما إذا كان هذا السؤال قد تم تخطيه مسبقاً ببطاقة التخطي التكتيكية
@@ -8209,13 +8287,26 @@ function loadStageQuestion(idx) {
     stageInteractiveArea.innerHTML = "";
   }
 
-  // إظهار أو إخفاء شريط تقييم المعلمين الشفهي حسب نوع السؤال
+  // إظهار أو إخفاء وتنسيق شريط تقييم المعلمين الشفهي حسب نوع السؤال والدور
   const oralEvalBar = document.getElementById("liveOralEvaluationBar");
+  const teacherVotingRow = document.getElementById("teacherVotingRow");
+  const oralObserverStatusMsg = document.getElementById("oralObserverStatusMsg");
+  const isEvaluator = currentUser && (currentUser.role === "teacher" || currentUser.role === "supervisor" || isSupervisor(currentUser.name));
+
   if (oralEvalBar) {
     if (q.type === "oral") {
       oralEvalBar.classList.remove("hidden");
+      if (isEvaluator) {
+        teacherVotingRow?.classList.remove("hidden");
+        oralObserverStatusMsg?.classList.add("hidden");
+      } else {
+        teacherVotingRow?.classList.add("hidden");
+        oralObserverStatusMsg?.classList.remove("hidden");
+      }
+      stageThemedStickersBar?.classList.add("hidden");
     } else {
       oralEvalBar.classList.add("hidden");
+      stageThemedStickersBar?.classList.remove("hidden");
     }
   }
 
@@ -8278,26 +8369,33 @@ function loadStageQuestion(idx) {
 // انتهاء مسابقة الطالب بالكامل
 function finishContestant() {
   clearInterval(liveTimerInterval);
-  let finalScore = Math.max(0, contestantScore); // حفظ النتيجة النهائية قبل التصفير
+  let sessionFinalScore = Math.max(0, contestantScore); // حفظ النتيجة النهائية للجلسة قبل التصفير
 
   // تطبيق بطاقة 37 (صمام الأمان النهائي): عدم هبوط النتيجة عن القمة المعتمدة
   const hasSafetyValve = hasActiveEffect(37) || currentLiveRoom?.activeCardEffects?.some(e => e.cardId === 37);
   if (hasSafetyValve && currentLiveRoom?.highestLockedScore) {
-    if (finalScore < currentLiveRoom.highestLockedScore) {
-      finalScore = currentLiveRoom.highestLockedScore;
-      showToast(`صمام الأمان النهائي: تطبيق أعلى نتيجة مسجلة (${finalScore} نقطة) كحد أدنى مضمون!`, "fa-vault", 4500);
+    if (sessionFinalScore < currentLiveRoom.highestLockedScore) {
+      sessionFinalScore = currentLiveRoom.highestLockedScore;
+      showToast(`صمام الأمان النهائي: تطبيق أعلى نتيجة مسجلة (${sessionFinalScore} نقطة) كحد أدنى مضمون!`, "fa-vault", 4500);
     }
   }
 
   // تطبيق بطاقة 35 (وسام الشرف القرآني): +1 نقطة شرف دائمة في نهاية المسابقة
   const hasHonorMedal = hasActiveEffect(35) || currentLiveRoom?.activeCardEffects?.some(e => e.cardId === 35);
   if (hasHonorMedal) {
-    finalScore += 1;
+    sessionFinalScore += 1;
   }
 
+  const studentUser = currentContestant ? participantsCache.find(p => p.name === currentContestant.name || p.id === currentContestant.id) : null;
+  const initialBase = (currentLiveRoom && typeof currentLiveRoom.contestantInitialBaseScore === "number")
+    ? currentLiveRoom.contestantInitialBaseScore
+    : (typeof contestantBaseScore === "number" ? contestantBaseScore : (studentUser?.totalScore || 0));
+
+  const totalFinalScore = Math.max(0, initialBase + sessionFinalScore);
+
   if (currentContestant) {
-    recordHonorScore(currentContestant.name, finalScore);
-    showToast(`اكتملت مسابقة المتسابق (${currentContestant.name})! المجموع النهائي: ${finalScore} نقطة`, "fa-trophy", 4000);
+    recordHonorScore(currentContestant.name, sessionFinalScore);
+    showToast(`اكتملت مسابقة المتسابق (${currentContestant.name})! المجموع النهائي المعتمد: ${totalFinalScore} نقطة (رصيد الجولة: +${sessionFinalScore})`, "fa-trophy", 4500);
   }
 
   // تصفير نقاط الجلسة بعد الحفظ وقبل عرض لوحة الشرف
@@ -8335,11 +8433,14 @@ function addContestantScore(pts) {
     currentLiveRoom.highestLockedScore = Math.max(currentLiveRoom.highestLockedScore || 0, contestantScore);
   }
 
-  // تحديث رصيد الطالب التراكمي فورياً في الذاكرة والسحابة ولوحة الشرف لمنع ضياع أي خسارة أو نقاط عند الخروج
+  // تحديث رصيد الطالب التراكمي المعتمد بأمان: (الرصيد الابتدائي الأصلي) + (رصيد الجلسة الحالي)
+  const initialBase = (currentLiveRoom && typeof currentLiveRoom.contestantInitialBaseScore === "number")
+    ? currentLiveRoom.contestantInitialBaseScore
+    : (typeof contestantBaseScore === "number" ? contestantBaseScore : 0);
+  const newTotal = Math.max(0, initialBase + contestantScore);
+
   if (currentContestant) {
     const studentUser = participantsCache.find(p => p.name === currentContestant.name || p.id === currentContestant.id);
-    const newTotal = Math.max(0, contestantBaseScore + contestantScore);
-
     if (studentUser) {
       studentUser.totalScore = newTotal;
       saveParticipants();
@@ -8882,7 +8983,7 @@ function showSynchronizedTacticalCardsModal(cards, nextIdx = null) {
   }, 1000);
 }
 
-// اختيار بطاقة من العرض ثلاثي الأبعاد وإضافتها لمحفظة المتسابق
+// اختيار بطاقة من العرض ثلاثي الأبعاد وإضافتها لمحفظة المتسابق وتفعيل تأثيرها للجميع فوراً
 function selectTacticalCard3D(cardId, nextIdx = null) {
   if (cardsTimerInterval) {
     clearInterval(cardsTimerInterval);
@@ -8899,14 +9000,15 @@ function selectTacticalCard3D(cardId, nextIdx = null) {
   // إغلاق المودال
   tacticalCardsModal?.classList.add("hidden");
 
-  // إضافة البطاقة لمحفظة المتسابق فوراً
+  // إضافة البطاقة لمحفظة المتسابق فقط دون تفعيل تأثيرها
   addCardToContestantWallet(cardId);
 
-  // إشعار بالصوت والرسالة
-  try { soundFX.correct(); } catch (e) {}
-  showToast(`تم حفظ بطاقة «${card.title}» في محفظة المتسابق (${contestantName})!`, card.icon || "fa-wallet", 4000);
+  // إشعار بالصوت والرسالة والشارة بأن البطاقة دخلت المحفظة
+  try { soundFX.celebrate(); } catch (e) {}
+  showFloatingCardPill("أُضيفت إلى المحفظة 🃏", card.icon || "fa-wallet", "purple");
+  showToast(`تمت إضافة بطاقة «${card.title}» إلى محفظتك بنجاح! 🃏 يمكنك تفعيلها متى شئت من زر المحفظة.`, card.icon || "fa-wallet", 4000);
 
-  // بث اختيار البطاقة وإغلاق نافذة الاختيار في الغرفة
+  // بث إضافة البطاقة لمحفظة المتسابق في الغرفة الحية دون تفعيل أي تأثير تلقائي
   if (currentLiveRoom && currentLiveRoom.id) {
     const updatedWallet = Array.isArray(currentLiveRoom.contestantWallet) ? [...currentLiveRoom.contestantWallet] : [cardId];
     updateDoc(doc(db, "live_rooms", currentLiveRoom.id), {
@@ -8933,7 +9035,7 @@ function selectTacticalCard3D(cardId, nextIdx = null) {
   }
 }
 
-// تطبيق استلام بطاقة مختارة عبر المزامنة السحابية للغرفة
+// تطبيق استلام بطاقة مختارة عبر المزامنة السحابية للغرفة (إضافتها للمحفظة فقط دون تفعيل)
 function applySynchronizedChosenCard(chosenCard, chosenBy, nextIdx = null) {
   clearInterval(cardsTimerInterval);
   tacticalCardsModal?.classList.add("hidden");
@@ -8946,7 +9048,10 @@ function applySynchronizedChosenCard(chosenCard, chosenBy, nextIdx = null) {
       }
       updateContestantWalletUI();
     }
-    showToast(`اختار (${chosenBy || 'المتسابق'}) بطاقة «${chosenCard.title}» وحُفظت في محفظته!`, chosenCard.icon || "fa-wallet", 3500);
+    // إشعار بالحصول على البطاقة دون تفعيل تأثيرها
+    try { soundFX.celebrate(); } catch (e) {}
+    showFloatingCardPill("أُضيفت إلى المحفظة 🃏", chosenCard.icon || "fa-wallet", "purple");
+    showToast(`حصل (${chosenBy || 'المتسابق'}) على بطاقة «${chosenCard.title}» وأُضيفت لمحفظته! 🃏 يمكن تفعيلها من زر المحفظة.`, chosenCard.icon || "fa-wallet", 4000);
   }
 
   const targetNextIdx = nextIdx !== null ? nextIdx : (currentLiveRoom?.currentQuestionIdx || 0);
@@ -9528,6 +9633,12 @@ function selectCardFromWallet(cardId) {
   if (!isCardCompatible(card, curQ, timerContext)) {
     const reason = getIncompatibilityReason(card, curQ, timerContext);
     showToast(`تعذر التفعيل: ${reason}`, "fa-circle-exclamation", 4500);
+    return;
+  }
+
+  // فحص ما إذا كانت البطاقة مفعّلة بالفعل على السؤال الحالي لمنع التفعيل المزدوج
+  if (hasActiveEffect(cardId, currentQuestionIndex)) {
+    showToast(`البطاقة «${card.title}» مفعّلة بالفعل على هذا السؤال ولا يمكن تكرار تفعيلها!`, "fa-ban", 4000);
     return;
   }
 
@@ -10312,17 +10423,13 @@ let honorLeaderboardCache = [];
 function recordHonorScore(studentName, sessionFinalScore) {
   if (!studentName || sessionFinalScore === undefined) return;
 
-  // إضافة نقاط الجلسة (sessionFinalScore) إلى رصيد الطالب المحفوظ
   const studentUser = participantsCache.find(p => p.name === studentName);
-  const currentSaved = (studentUser && typeof studentUser.totalScore === "number")
-    ? studentUser.totalScore
-    : (() => {
-        const entry = honorLeaderboardCache.find(x => x.name === studentName);
-        return entry ? entry.score : 0;
-      })();
+  const initialBase = (currentLiveRoom && typeof currentLiveRoom.contestantInitialBaseScore === "number")
+    ? currentLiveRoom.contestantInitialBaseScore
+    : (typeof contestantBaseScore === "number" ? contestantBaseScore : (studentUser?.totalScore || 0));
 
-  const base = (typeof contestantBaseScore === "number" && contestantBaseScore > 0) ? contestantBaseScore : currentSaved;
-  const newTotal = Math.max(0, base + sessionFinalScore);
+  // النتيجة الإجمالية المعتمدة النهائية = الرصيد الابتدائي + نقاط الجلسة
+  const newTotal = Math.max(0, initialBase + sessionFinalScore);
 
   // 1. تحديث قائمة لوحة الشرف
   const existingIdx = honorLeaderboardCache.findIndex(x => x.name === studentName);
@@ -10363,24 +10470,20 @@ function showHonorBoardModal(openNextStudentAfter = false, onDone = null, highli
     return;
   }
 
-  // حساب النقاط السابقة والنهائية للمتسابق الحالي بدقة وضمان إضافة نقاط البطاقات التكتيكية للرصيد
+  // حساب النقاط السابقة والنهائية للمتسابق الحالي بدقة وموثوقية دون أي جمع مكرر
   let currentTargetScore = 0;
   let previousTargetScore = 0;
   if (highlightStudentName) {
-    const existingEntry = honorLeaderboardCache.find(x => x.name === highlightStudentName);
     const studentUser = participantsCache.find(p => p.name === highlightStudentName);
-    const savedTotal = (studentUser && typeof studentUser.totalScore === "number")
-      ? studentUser.totalScore
-      : (existingEntry ? existingEntry.score : 0);
+    const initialBase = (currentLiveRoom && typeof currentLiveRoom.contestantInitialBaseScore === "number")
+      ? currentLiveRoom.contestantInitialBaseScore
+      : (typeof contestantBaseScore === "number" ? contestantBaseScore : (studentUser?.totalScore || 0));
 
-    // إضافة نقاط السؤال والبطاقات التكتيكية بالكامل للرصيد المستهدف
-    currentTargetScore = (typeof contestantScore === "number")
-      ? (savedTotal + contestantScore)
-      : ((existingEntry ? existingEntry.score : 0) + scoreDelta);
-
+    // الرصيد النهائي المعتمد الحالي دائماً = الرصيد الابتدائي + رصيد الجلسة
+    currentTargetScore = Math.max(0, initialBase + contestantScore);
     previousTargetScore = Math.max(0, currentTargetScore - scoreDelta);
 
-    // تحديث رصيد الطالب فورياً في كاش لوحة الشرف وسحابياً لضمان إضافة نقاط البطاقات وعدم فقدانها
+    const existingEntry = honorLeaderboardCache.find(x => x.name === highlightStudentName);
     if (existingEntry) {
       existingEntry.score = currentTargetScore;
       existingEntry.timestamp = new Date().toISOString();
