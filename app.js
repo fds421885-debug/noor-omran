@@ -1,3 +1,45 @@
+
+// ========================================================
+// تفاعل ملصقات منصة نور البيان في المسرح الحي بثيم مبهج
+// ========================================================
+function setupPlatformThemedStickers() {
+  const container = document.getElementById("stageThemedStickersBar");
+  if (!container) return;
+
+  const stickersConfig = {
+    quran: { title: "نور القرآن", icon: '<i class="fa-solid fa-book-quran" style="color:#16a34a; font-size:22px;"></i>' },
+    lion: { title: "بطل البيان", icon: '<img src="duo-lion.png" style="width:26px; height:26px; object-fit:contain;" />' },
+    crown: { title: "تاج الوقار", icon: '<i class="fa-solid fa-crown" style="color:#ca8a04; font-size:22px;"></i>' },
+    crescent: { title: "هلال الإتقان", icon: '<i class="fa-solid fa-moon" style="color:#3b82f6; font-size:22px;"></i>' },
+    honor: { title: "وسام الشرف", icon: '<i class="fa-solid fa-award" style="color:#d97706; font-size:22px;"></i>' },
+    dua: { title: "دعاء بالتوفيق", icon: '<i class="fa-solid fa-hands-praying" style="color:#059669; font-size:22px;"></i>' }
+  };
+
+  container.querySelectorAll(".themed-sticker-btn").forEach(btn => {
+    btn.onclick = () => {
+      const type = btn.getAttribute("data-sticker");
+      const cfg = stickersConfig[type] || stickersConfig.lion;
+      triggerFloatingThemedSticker(cfg.title, cfg.icon);
+      try { soundFX.pop(); } catch (e) {}
+    };
+  });
+}
+
+function triggerFloatingThemedSticker(title, iconHtml) {
+  const el = document.createElement("div");
+  el.className = "floating-themed-sticker";
+  const randomX = Math.floor(Math.random() * 50) + 25;
+  el.style.left = randomX + "%";
+  el.innerHTML = `
+    <div class="floating-themed-sticker-bubble">
+      ${iconHtml}
+      <span>${title}</span>
+    </div>
+  `;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 2500);
+}
+
 // ========================================================
 // مسابقة نور البيان 1448 - 1449 هـ
 // النظام الشامل المتكامل: الأدوار الأربعة، إدارة الحسابات،
@@ -598,10 +640,16 @@ document.querySelectorAll(".nav-tab").forEach(tabBtn => {
     // حفظ التبويب النشط حالياً للبقاء عليه عند تحديث الصفحة
     localStorage.setItem("nour_saved_tab", targetTabId);
 
-    // إذا تم الضغط على تبويب الحسابات، نقوم بعرض الجدول فوراً من الذاكرة ثم جلب أحدث الحسابات سحابياً
+    // إذا تم الضغط على تبويب الحسابات، نقوم بعرض الجدول فوراً وضمان جلب الحسابات السحابية
     if (targetTabId === "tabAccounts") {
-      renderAccountsTable();
-      fetchParticipantsFromCloud(true).catch(() => {});
+      if (participantsCache.length === 0) {
+        if (accountsTableBody) {
+          accountsTableBody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:32px;"><i class="fa-solid fa-spinner fa-spin" style="font-size:26px;color:var(--duo-green);"></i><div style="margin-top:10px;font-weight:800;color:#475569;">جاري جلب أحدث الحسابات من قاعدة البيانات السحابية...</div></td></tr>';
+        }
+      } else {
+        renderAccountsTable();
+      }
+      fetchParticipantsFromCloud(true).then(() => renderAccountsTable()).catch(() => {});
     }
 
     // تحديث البيانات السحابية في الخلفية بهدوء دون تجميد الواجهة
@@ -985,7 +1033,7 @@ let previousQuizzesMap = new Map();
 let isFirstQuizzesSnapshot = true;
 let syncPillTimer = null;
 
-function showRealtimeSyncPill(text = "تم استلام تحديث جديد من السحابة وتحديث البيانات فورياً ✓") {
+function showRealtimeSyncPill(text = "تم استلام تحديث جديد من السحابة وتحديث البيانات فورياً") {
   const pill = document.getElementById("realtimeSyncPill");
   const textEl = document.getElementById("realtimeSyncText");
   if (!pill) return;
@@ -1010,7 +1058,7 @@ function showLiveBroadcastBanner(room) {
   const closeBtn = document.getElementById("btnCloseBroadcastBanner");
   if (!banner) return;
 
-  if (titleEl) titleEl.textContent = `🔴 بدأت مسابقة حية جديدة الآن: «${room.name}»`;
+  if (titleEl) titleEl.textContent = `بدأت مسابقة حية جديدة الآن: «${room.name}»`;
   if (metaEl) metaEl.textContent = `بإشراف: ${room.leaderName || room.creatorName || 'المشرف'} | ${(room.users || []).length} متواجد حالياً`;
   
   if (joinBtn) {
@@ -1063,7 +1111,7 @@ function setupRealtimeCloudListeners() {
           if (loginStepGrade && !loginStepGrade.classList.contains("hidden")) {
             showOnboardingGradeStep();
           }
-          showRealtimeSyncPill("⚡ تم تحديث قائمة المدارس والصفوف من السحابة");
+          showRealtimeSyncPill("تم تحديث قائمة المدارس والصفوف من السحابة");
         }
       }
     }, (err) => {
@@ -1127,7 +1175,7 @@ function setupRealtimeCloudListeners() {
             setTimeout(() => {
               hideGlobalLoader();
               finalizeUserSession(currentUser, true);
-              showToast(`🌟 مبارك! أصبحت الآن (${newRoleName}) وتم فتح الواجهة الخاصة بك فورياً دون الحاجة لتحديث الصفحة!`, "fa-award", 4500);
+              showToast(`مبارك! أصبحت الآن (${newRoleName}) وتم فتح الواجهة الخاصة بك فورياً دون الحاجة لتحديث الصفحة!`, "fa-award", 4500);
             }, 900);
           }
         }
@@ -1161,13 +1209,13 @@ function setupRealtimeCloudListeners() {
           const modifier = changedDoc?.lastModifiedBy || "المشرف";
 
           if (change.type === "added" && !previousQuizzesMap.has(changedId)) {
-            showToast(`📚 اختبار جديد: «${changedTitle}» (بواسطة ${modifier})`, "fa-book-quran", 3500);
-            showRealtimeSyncPill(`⚡ أضاف ${modifier} اختباراً جديداً: «${changedTitle}»`);
+            showToast(`اختبار جديد: «${changedTitle}» (بواسطة ${modifier})`, "fa-book-quran", 3500);
+            showRealtimeSyncPill(`أضاف ${modifier} اختباراً جديداً: «${changedTitle}»`);
           } else if (change.type === "modified") {
-            showToast(`✏️ تم تحديث الاختبار: «${changedTitle}» فورياً للجميع!`, "fa-pen-to-square", 3500);
-            showRealtimeSyncPill(`⚡ تم تحديث الاختبار «${changedTitle}» في الوقت الفعلي ✓`);
+            showToast(`تم تحديث الاختبار: «${changedTitle}» فورياً للجميع!`, "fa-pen-to-square", 3500);
+            showRealtimeSyncPill(`تم تحديث الاختبار «${changedTitle}» في الوقت الفعلي`);
           } else if (change.type === "removed") {
-            showToast(`🗑️ تم حذف الاختبار: «${changedTitle}» من السحابة`, "fa-trash", 3000);
+            showToast(`تم حذف الاختبار: «${changedTitle}» من السحابة`, "fa-trash", 3000);
           }
         });
       }
@@ -1202,8 +1250,8 @@ function setupRealtimeCloudListeners() {
           // إشعار المستخدمين الآخرين فقط حتى لا يتكرر التنبيه لمنشئ الغرفة
           if (!currentUser || (currentUser.name !== roomStarted.creatorName && currentUser.name !== roomStarted.leaderName)) {
             showLiveBroadcastBanner(roomStarted);
-            showToast(`🔴 بدأت غرفة مسابقة جديدة الآن: «${roomStarted.name}»`, "fa-tower-broadcast");
-            showRealtimeSyncPill("⚡ تم رصد غرفة مسابقة جديدة وبدء الفعالية في السحابة فوراً!");
+            showToast(`بدأت غرفة مسابقة جديدة الآن: «${roomStarted.name}»`, "fa-tower-broadcast");
+            showRealtimeSyncPill("تم رصد غرفة مسابقة جديدة وبدء الفعالية في السحابة فوراً");
           }
         }
 
@@ -1219,13 +1267,13 @@ function setupRealtimeCloudListeners() {
                   draw: "سحب الأسئلة والقرعة",
                   competing: "المسرح الحي وعرض الأسئلة"
                 };
-                showToast(`🔔 انتقلت المسابقة لمرحلة: ${phaseLabels[cr.phase] || cr.phase}`, "fa-bolt");
+                showToast(`انتقلت المسابقة لمرحلة: ${phaseLabels[cr.phase] || cr.phase}`, "fa-bolt");
               }
-              showRealtimeSyncPill(`⚡ تحديث مباشر: المسابقة «${cr.name}» قيد التشغيل`);
+              showRealtimeSyncPill(`تحديث مباشر: المسابقة «${cr.name}» قيد التشغيل`);
             }
             if (!prev.contestantName && cr.contestantName) {
               if (currentLiveRoom && currentLiveRoom.id === cr.id) {
-                showToast(`👤 المتسابق المختار الآن: ${cr.contestantName}`, "fa-user-check");
+                showToast(`المتسابق المختار الآن: ${cr.contestantName}`, "fa-user-check");
               }
             }
           }
@@ -1327,8 +1375,8 @@ function listenToActiveRoom(roomId) {
       const joinedUsers = newUsers.filter(u => !prevUsers.includes(u));
       joinedUsers.forEach(u => {
         if (!currentUser || u !== currentUser.name) {
-          showToast(`🟢 انضم «${u}» إلى الغرفة الآن!`, "fa-user-plus");
-          showRealtimeSyncPill(`⚡ انضم متسابق جديد للغرفة: ${u}`);
+          showToast(`انضم «${u}» إلى الغرفة الآن!`, "fa-user-plus");
+          showRealtimeSyncPill(`انضم متسابق جديد للغرفة: ${u}`);
         }
       });
     }
@@ -1338,7 +1386,7 @@ function listenToActiveRoom(roomId) {
       const leftUsers = prevUsers.filter(u => !newUsers.includes(u));
       leftUsers.forEach(u => {
         if (!currentUser || u !== currentUser.name) {
-          showToast(`🚪 غادر «${u}» الغرفة`, "fa-user-minus");
+          showToast(`غادر «${u}» الغرفة`, "fa-user-minus");
         }
       });
     }
@@ -1399,7 +1447,7 @@ function listenToCurrentUserProfile(userId) {
           setTimeout(() => {
             hideGlobalLoader();
             finalizeUserSession(currentUser, true);
-            showToast(`🌟 مبارك! أصبحت الآن (${newRoleName}) وتم فتح الواجهة الخاصة بك فورياً دون الحاجة لتحديث الصفحة!`, "fa-award", 4500);
+            showToast(`مبارك! أصبحت الآن (${newRoleName}) وتم فتح الواجهة الخاصة بك فورياً دون الحاجة لتحديث الصفحة!`, "fa-award", 4500);
           }, 1000);
         }
       }
@@ -1719,7 +1767,7 @@ function updateArenaUIRealtime(room) {
       const myName = currentUser?.name || currentContestant?.name;
       if (ws.isOpen) {
         if (!myName || ws.openedBy !== myName) {
-          showToast(`🎴 قام (${ws.openedBy}) بفتح محفظة البطاقات التكتيكية للمتسابق!`, "fa-layer-group", 3500);
+          showToast(`قام (${ws.openedBy}) بفتح محفظة البطاقات التكتيكية للمتسابق!`, "fa-layer-group", 3500);
           if (typeof openSynchronizedWallet === "function") {
             openSynchronizedWallet(false, ws.openedBy);
           }
@@ -2205,7 +2253,7 @@ function showDirectUrlDialog(url) {
   modal.querySelector("#btnCopyInDirectUrlModal")?.addEventListener("click", async () => {
     input?.select();
     document.execCommand("copy");
-    showToast("تم نسخ الرابط بنجاح! 📋", "fa-check");
+    showToast("تم نسخ الرابط بنجاح!", "fa-check");
     modal.remove();
   });
   modal.addEventListener("click", (e) => {
@@ -2239,7 +2287,7 @@ function updateImpersonationBanner() {
         const supObj = JSON.parse(prevSupJson);
         localStorage.removeItem("nour_previous_supervisor");
         finalizeUserSession(supObj, true);
-        showToast("تمت العودة لحساب المشرف العام بنجاح 👑", "fa-crown");
+        showToast("تمت العودة لحساب المشرف العام بنجاح", "fa-crown");
       } catch (e) {}
     });
   } else {
@@ -2405,7 +2453,7 @@ if (fullNameInput) {
         loginInstructionText.innerHTML = `كتبت الآن (${count}) أسماء.. متبقي (${remText}) لاكتمال الاسم الرباعي المطلوب.`;
       }
     } else {
-      nameCountBadge.textContent = `${count} أسماء ✓`;
+      nameCountBadge.textContent = `${count} أسماء`;
       nameCountBadge.classList.add("valid");
       validationAlert.classList.add("hidden");
       if (loginInstructionText) {
@@ -2503,14 +2551,17 @@ loginForm?.addEventListener("submit", async (e) => {
   validationAlert.classList.add("hidden");
   btnSubmitLogin.disabled = true;
   btnSubmitLogin.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> جاري التحقق...`;
-  showGlobalLoader("جاري التحقق من الحساب...", "يتم البحث في قاعدة البيانات السحابية لحظياً");
+  showGlobalLoader("جاري تسجيل الدخول وجلب البيانات...", "يرجى الانتظار، يتم جلب حسابك ومزامنة البيانات السحابية لحظياً");
 
   try {
     const norm = normalizeArabic(rawName);
     const isSup = isSupervisor(rawName);
     const docId = getDocumentId(norm);
 
-    // البحث السريع في ذاكرة المشاركين والكاش المتزامن
+    // 1. جلب وتحديث قائمة المشاركين والحسابات سحابياً بالكامل مع شاشة التحميل المستمرة
+    await fetchParticipantsFromCloud(true);
+
+    // 2. البحث الدقيق في كاش المشاركين
     let foundUser = participantsCache.find(p => 
       p.normalizedName === norm || 
       normalizeArabic(p.name || "") === norm ||
@@ -2518,39 +2569,7 @@ loginForm?.addEventListener("submit", async (e) => {
       p.id === docId
     );
 
-    // إذا لم يتم العثور عليه، نبحث بالمعرف المباشر في فايربيس فوراً
-    if (!foundUser) {
-      try {
-        const userDocRef = doc(db, "participants", docId);
-        const docSnap = await withTimeout(getDoc(userDocRef), 3500, null);
-        if (docSnap && docSnap.exists && docSnap.exists()) {
-          foundUser = { id: docSnap.id, ...docSnap.data() };
-          if (!participantsCache.some(x => x.id === foundUser.id)) {
-            participantsCache.push(foundUser);
-            saveParticipants();
-          }
-        }
-      } catch (err) {
-        console.warn("Direct participant getDoc notice:", err);
-      }
-    }
-
-    // إذا لم نجد المستخدم بالمعرف (لأن بعض المعرفات مسجلة كـ std_...)، نجلب مجموعة المشاركين فوراً
-    if (!foundUser && !isSup) {
-      try {
-        await fetchParticipantsFromCloud(true);
-        foundUser = participantsCache.find(p => 
-          p.normalizedName === norm || 
-          normalizeArabic(p.name || "") === norm ||
-          (p.name && p.name.trim().toLowerCase() === rawName.toLowerCase()) ||
-          p.id === docId
-        );
-      } catch (err) {
-        console.warn("Cloud participants search notice:", err);
-      }
-    }
-
-    // 1. المشرف العام محمد منتصر محمد يونس (أو حساب برتبة مشرف) -> دخول مباشر فوري
+    // 3. المشرف العام (أو حساب برتبة مشرف) -> إعداد كامل للبيانات وجدول الحسابات ثم فتح الواجهة
     if (isSup || (foundUser && foundUser.role === "supervisor")) {
       let supUser = foundUser;
       if (!supUser) {
@@ -2565,7 +2584,7 @@ loginForm?.addEventListener("submit", async (e) => {
           lastLoginAt: new Date().toISOString(),
           loginCount: 1
         };
-        participantsCache.push(supUser);
+        participantsCache.unshift(supUser);
         saveParticipants();
         syncParticipantToCloud(supUser).catch(() => {});
       } else {
@@ -2575,20 +2594,29 @@ loginForm?.addEventListener("submit", async (e) => {
         saveParticipants();
         syncParticipantToCloud(supUser).catch(() => {});
       }
-      hideGlobalLoader();
+
+      // جلب بقية البيانات (الاختبارات، الغرف، لوحة الشرف) سحابياً أثناء استمرار شاشة التحميل
+      try {
+        await withTimeout(loadCloudData(), 3000, null);
+      } catch (e) {}
+
+      // تجهيز الواجهة وجدول الحسابات بالكامل
+      renderSupervisorDashboard();
+      renderAccountsTable();
+
+      // فتح الواجهة بعد انتهاء التحميل التام
       finalizeUserSession(supUser, supUser.loginCount > 1);
-      showToast(`مرحباً بك يا مشرف البرنامج! تم الدخول بنجاح`, "fa-crown");
-      setTimeout(() => loadCloudData().catch(() => {}), 150);
+      hideGlobalLoader();
+      showToast("مرحباً بك يا مشرف البرنامج! تم الدخول بنجاح", "fa-crown");
       return;
     }
 
-    // 2. إذا كان المستخدم لديه حساب سابق في قاعدة البيانات (معلم، عارض، أو طالب مسجل) -> يفتح مباشرة
+    // 4. مستخدم مسجل مسبقاً (طالب أو معلم أو عارض)
     if (foundUser) {
       foundUser.lastLoginAt = new Date().toISOString();
       foundUser.loginCount = (foundUser.loginCount || 1) + 1;
       saveParticipants();
 
-      // تحديث فايربيس بهدوء في الخلفية
       try {
         const uRef = doc(db, "participants", foundUser.id || docId);
         updateDoc(uRef, {
@@ -2597,14 +2625,17 @@ loginForm?.addEventListener("submit", async (e) => {
         }).catch(() => {});
       } catch (e) {}
 
-      hideGlobalLoader();
+      try {
+        await withTimeout(loadCloudData(), 2500, null);
+      } catch (e) {}
+
       finalizeUserSession(foundUser, true);
-      showToast(`مرحباً بعودتك يا ${foundUser.name}! تم تسجيل الدخول بنجاح`, "fa-circle-check");
-      setTimeout(() => loadCloudData().catch(() => {}), 150);
+      hideGlobalLoader();
+      showToast("مرحباً بعودتك يا " + foundUser.name + "! تم تسجيل الدخول بنجاح", "fa-circle-check");
       return;
     }
 
-    // 3. مستخدم جديد غير مسجل في قاعدة البيانات: التحقق من كتابة الاسم الرباعي
+    // 5. مستخدم جديد: التحقق من كتابة الاسم الرباعي
     const validation = validateQuadrupleName(rawName);
     if (!validation.isValid) {
       validationAlert.textContent = validation.message;
@@ -2614,7 +2645,7 @@ loginForm?.addEventListener("submit", async (e) => {
       return;
     }
 
-    // طالب جديد -> الانتقال لخطوة اختيار المدرسة والصف
+    // طالب جديد -> الانتقال لاختيار المدرسة والصف
     hideGlobalLoader();
     pendingNewStudent = {
       rawName: rawName,
@@ -2627,11 +2658,11 @@ loginForm?.addEventListener("submit", async (e) => {
     showOnboardingSchoolStep();
   } catch (err) {
     console.error("Login submit error:", err);
+    hideGlobalLoader();
     showToast("حدث خطأ أثناء فحص البيانات، يرجى المحاولة مرة أخرى", "fa-triangle-exclamation");
   } finally {
     btnSubmitLogin.disabled = false;
     btnSubmitLogin.innerHTML = `<span class="btn-text">متابعة والدخول</span><span class="btn-icon"><i class="fa-solid fa-arrow-left"></i></span>`;
-    hideGlobalLoader();
   }
 });
 
@@ -3134,7 +3165,7 @@ function renderAccountsTable() {
       if (success) {
         btn.classList.add("copied");
         btn.innerHTML = `<i class="fa-solid fa-check"></i> تم النسخ!`;
-        showToast("تم نسخ رابط الدخول المباشر للحساب بنجاح! 📋", "fa-copy");
+        showToast("تم نسخ رابط الدخول المباشر للحساب بنجاح!", "fa-copy");
         setTimeout(() => {
           btn.classList.remove("copied");
           btn.innerHTML = `<i class="fa-solid fa-copy"></i> نسخ`;
@@ -3234,7 +3265,7 @@ btnRefreshAccounts?.addEventListener("click", async () => {
   try {
     await fetchParticipantsFromCloud(true);
     renderAccountsTable();
-    showToast(`✅ تم تحديث قائمة الحسابات سحابياً (${participantsCache.length} حساب)`, "fa-circle-check");
+    showToast(`تم تحديث قائمة الحسابات سحابياً (${participantsCache.length} حساب)`, "fa-circle-check");
   } catch (e) {
     renderAccountsTable();
     showToast("تم تحديث السجل بنجاح", "fa-arrows-rotate");
@@ -3328,7 +3359,7 @@ accountModalForm?.addEventListener("submit", async (e) => {
         user.grade = grade;
         await syncParticipantToCloud(user);
       }
-      showToast("تم تحديث بيانات الحساب في السحابة بنجاح! ✓", "fa-circle-check");
+      showToast("تم تحديث بيانات الحساب في السحابة بنجاح!", "fa-circle-check");
     } else {
       // إضافة حساب جديد
       const newId = getDocumentId(norm);
@@ -3346,7 +3377,7 @@ accountModalForm?.addEventListener("submit", async (e) => {
       };
       participantsCache.push(newUser);
       await syncParticipantToCloud(newUser);
-      showToast("تم إنشاء الحساب وحفظه في السحابة بنجاح! ✓", "fa-circle-check");
+      showToast("تم إنشاء الحساب وحفظه في السحابة بنجاح!", "fa-circle-check");
     }
 
     saveParticipants();
@@ -4405,7 +4436,7 @@ quizEditorForm?.addEventListener("submit", async (e) => {
     updateDropdowns();
     if (statActiveQuizzes) statActiveQuizzes.textContent = quizzesCache.length;
 
-    showToast(isEdit ? `تم حفظ تعديل الاختبار «${title}» في السحابة وتحديثه للجميع بنجاح! ✓` : `تم إنشاء الاختبار «${title}» وحفظه سحابياً للجميع بنجاح! ✓`, "fa-circle-check");
+    showToast(isEdit ? `تم حفظ تعديل الاختبار «${title}» في السحابة وتحديثه للجميع بنجاح!` : `تم إنشاء الاختبار «${title}» وحفظه سحابياً للجميع بنجاح!`, "fa-circle-check");
   } catch (err) {
     console.error("Firestore saveQuiz error:", err);
     showToast("تعذر حفظ الاختبار في السحابة: " + (err.message || "يرجى التحقق من اتصالك بالإنترنت"), "fa-triangle-exclamation");
@@ -4503,7 +4534,7 @@ ${userScript}
 
   navigator.clipboard.writeText(engineeredPrompt).then(() => {
     if (promptCopyFeedback) promptCopyFeedback.style.display = "inline-flex";
-    showToast("تم نسخ البرومبت الهندسي بنجاح! الصقه في ChatGPT أو Gemini أو Claude 📋", "fa-clipboard-check");
+    showToast("تم نسخ البرومبت الهندسي بنجاح! الصقه في ChatGPT أو Gemini أو Claude", "fa-clipboard-check");
   }).catch(() => {
     showToast("تعذر النسخ التلقائي، يرجى نسخ النص يدوياً", "fa-triangle-exclamation");
   });
@@ -4569,7 +4600,7 @@ btnImportPastedJsonQuiz?.addEventListener("click", () => {
 
     // فتح الاختبار مباشرة في محرر الاختبارات المنبثق ليتسنى للمشرف مراجعته وتعديل أي تفاصيل!
     openQuizEditor(importedQuiz);
-    showToast("تم استيراد الاختبار بنجاح! راجع الأسئلة وعدلها ثم اضغط حفظ الاختبار 🚀", "fa-circle-check");
+    showToast("تم استيراد الاختبار بنجاح! راجع الأسئلة وعدلها ثم اضغط حفظ الاختبار", "fa-circle-check");
 
   } catch (err) {
     console.error("JSON parsing error:", err);
@@ -5141,7 +5172,7 @@ btnSaveRoomSettings?.addEventListener("click", async () => {
         questionTimer: newTimer,
         lastUpdated: serverTimestamp()
       });
-      showToast("✅ تم حفظ إعدادات الغرفة وصلاحيات الإجابة وتطبيقها عند الجميع فوراً!", "fa-circle-check", 3500);
+      showToast("تم حفظ إعدادات الغرفة وصلاحيات الإجابة وتطبيقها عند الجميع فوراً!", "fa-circle-check", 3500);
     } catch (e) {
       console.warn("Save room settings error:", e);
       await saveRooms(currentLiveRoom);
@@ -5314,7 +5345,7 @@ document.getElementById("btnSupResetTimer")?.addEventListener("click", async () 
     } catch (e) { console.warn("Sup reset timer err:", e); }
   }
   try { soundFX.btnClick(); } catch (e) {}
-  showToast("🔄 تم إعادة ضبط وقت السؤال بالكامل بالتزامن للجميع!", "fa-rotate-left", 2500);
+  showToast("تم إعادة ضبط وقت السؤال بالكامل بالتزامن للجميع!", "fa-rotate-left", 2500);
 });
 
 // --------------------------------------------------------
@@ -5828,7 +5859,7 @@ function renderDrawSectionsList() {
           `}
           <div class="draw-counter-group">
             <span class="draw-counter-badge ${isDrawn ? 'done' : ''}" id="drawBadge_${idx}">
-              ${isDrawn ? `${drawnCount} / ${currentVal} ✓` : `0 / ${currentVal}`}
+              ${isDrawn ? `${drawnCount} / ${currentVal}` : `0 / ${currentVal}`}
             </span>
             <i class="fa-solid fa-circle-check draw-done-badge" id="drawDone_${idx}" style="${isDrawn ? 'opacity:1;' : 'opacity:0;'}"></i>
           </div>
@@ -5953,7 +5984,7 @@ function playSynchronizedSectionDraw(quizData, drawnQuestions, isLeadUser = fals
 
       if (isLeadUser) {
         drawResultActions?.classList.remove("hidden");
-        showToast(`🎲 اكتمل سحب جميع الأقسام (${drawnQuestions.length} سؤالاً) بالتزامن للجميع!`, "fa-dice", 3500);
+        showToast(`اكتمل سحب جميع الأقسام (${drawnQuestions.length} سؤالاً) بالتزامن للجميع!`, "fa-dice", 3500);
       } else {
         if (drawObserverStatusText) {
           drawObserverStatusText.innerHTML = `<i class="fa-solid fa-circle-check" style="color: #16a34a;"></i> تم سحب (${drawnQuestions.length}) سؤالاً بنجاح بالتزامن مع المشرف! في انتظار انطلاق المسابقة للمسرح...`;
@@ -5988,7 +6019,7 @@ function playSynchronizedSectionDraw(quizData, drawnQuestions, isLeadUser = fals
       if (tick >= targetCount) {
         clearInterval(currentDrawInterval);
         if (badge) {
-          badge.textContent = `${targetCount} / ${portion} ✓`;
+          badge.textContent = `${targetCount} / ${portion}`;
           badge.className = "draw-counter-badge done";
         }
         if (row) {
@@ -6447,11 +6478,11 @@ function handleLiveQuestionTimeout() {
   const hasImmunity = !!(activeCardEffect?.effect?.immunity);
   let penalty = 0;
   if (hasImmunity) {
-    showToast("🛡️ درع الأمان (الحصانة): انتهى الوقت ولكن تم إلغاء أي خصم درجات!", "fa-shield-halved", 3500);
+    showToast("درع الأمان (الحصانة): انتهى الوقت ولكن تم إلغاء أي خصم درجات!", "fa-shield-halved", 3500);
     activeCardEffect = null;
   } else {
     penalty = 3;
-    showToast("⏰ انتهى الوقت المحدد للسؤال! ❌ خصم 3 درجات والانتقال للسؤال التالي", "fa-clock", 3500);
+    showToast("انتهى الوقت المحدد للسؤال! تم خصم 3 درجات والانتقال للسؤال التالي", "fa-clock", 3500);
   }
 
   // إذا كان نوع السؤال اختيار من متعدد، نعطل الخيارات ونظهر الإجابة الصحيحة
@@ -6493,25 +6524,28 @@ function showBigQuestionResultOverlay({ isCorrect, isTimeout = false, scoreDelta
     void questionCardEl.offsetWidth;
   }
 
+  const mascotImg = document.getElementById("resultMascotStickerImg");
   if (isCorrect) {
     overlay.classList.add("correct");
+    if (mascotImg) mascotImg.src = "duo-lion.png";
     iconEl.innerHTML = `<i class="fa-solid fa-circle-check"></i>`;
-    titleEl.textContent = "إجابة صحيحة ومتقنة! 🌟";
+    titleEl.textContent = "ما شاء الله! إجابة صحيحة ومتقنة";
     pointsEl.textContent = `+${scoreDelta} درجات`;
     try { soundFX.correct(); } catch (e) {}
   } else if (isTimeout) {
-    // بالضبط زي الإجابة الخطأ مع X أحمر ضخم واهتزاز وصوت الخطأ
     overlay.classList.add("wrong", "timeout");
-    iconEl.innerHTML = `<i class="fa-solid fa-circle-xmark"></i>`;
-    titleEl.textContent = "انتهى الوقت! ❌";
-    pointsEl.textContent = scoreDelta !== 0 ? `${scoreDelta} درجات (خصم)` : "انتهى الوقت المحدد للسؤال ⏰";
+    if (mascotImg) mascotImg.src = "duo-lion-student.png";
+    iconEl.innerHTML = `<i class="fa-solid fa-hourglass-end"></i>`;
+    titleEl.textContent = "انتهى الوقت المحدد للسؤال";
+    pointsEl.textContent = scoreDelta !== 0 ? `${scoreDelta} درجات` : "استعن بالله وركّز في السؤال القادم";
     if (questionCardEl) questionCardEl.classList.add("question-wrong-shake");
     try { soundFX.wrong(); } catch (e) {}
   } else {
     overlay.classList.add("wrong");
+    if (mascotImg) mascotImg.src = "duo-lion-student.png";
     iconEl.innerHTML = `<i class="fa-solid fa-circle-xmark"></i>`;
-    titleEl.textContent = "إجابة غير صحيحة! ❌";
-    pointsEl.textContent = scoreDelta !== 0 ? `${scoreDelta} درجات (خصم)` : "ركّز في السؤال القادم 💪";
+    titleEl.textContent = "إجابة غير دقيقة";
+    pointsEl.textContent = scoreDelta !== 0 ? `${scoreDelta} درجات` : "استعن بالله وركّز في السؤال القادم";
     if (questionCardEl) questionCardEl.classList.add("question-wrong-shake");
     try { soundFX.wrong(); } catch (e) {}
   }
@@ -6604,13 +6638,13 @@ function playQuestionTransitionSequence({ isCorrect, scoreDelta, isPenalty, next
     fb.className = `answer-feedback-banner ${isCorrect ? "correct" : "wrong"}`;
     if (isCorrect) {
       const breakdownText = (cardBonus > 0 && basePoints > 0)
-        ? `+${basePoints} أساسي + ${cardBonus} بطاقات تكتيكية 🎴 تم احتسابها لرصيدك سحابياً`
+        ? `+${basePoints} أساسي + ${cardBonus} بطاقات تكتيكية تم احتسابها لرصيدك سحابياً`
         : `+${scoreDelta} درجات تم احتسابها لرصيدك سحابياً`;
       fb.innerHTML = `
         <div style="display:flex;align-items:center;gap:12px;">
           <i class="fa-solid fa-circle-check" style="font-size:30px;color:#16a34a;"></i>
           <div>
-            <div style="font-weight:900;font-size:16.5px;color:#14532d;">أحسنت! إجابة صحيحة ومتقنة 🌟</div>
+            <div style="font-weight:900;font-size:16.5px;color:#14532d;">ما شاء الله تبارك الله! أحسنت، إجابة متقنة</div>
             <div style="font-size:13px;color:#15803d;font-weight:700;">${breakdownText}</div>
           </div>
         </div>
@@ -6628,8 +6662,8 @@ function playQuestionTransitionSequence({ isCorrect, scoreDelta, isPenalty, next
         <div style="display:flex;align-items:center;gap:12px;">
           <i class="fa-solid fa-circle-xmark" style="font-size:30px;color:#dc2626;"></i>
           <div>
-            <div style="font-weight:900;font-size:16.5px;color:#7f1d1d;">${isTimeout ? "انتهى الوقت المحدد للسؤال! ⏰" : "إجابة غير صحيحة! ❌"}</div>
-            <div style="font-size:13px;color:#991b1b;font-weight:700;">${scoreDelta < 0 ? `تم خصم ${Math.abs(scoreDelta)} درجات من الرصيد ❌` : "المثابرة والمراجعة هما سر التفوق والتميّز"}</div>
+            <div style="font-weight:900;font-size:16.5px;color:#7f1d1d;">${isTimeout ? "انتهى الوقت المحدد للسؤال" : "إجابة غير دقيقة"}</div>
+            <div style="font-size:13px;color:#991b1b;font-weight:700;">${scoreDelta < 0 ? `تم خصم ${Math.abs(scoreDelta)} درجات من الرصيد` : "المثابرة والمراجعة هما سر التفوق والتميّز"}</div>
           </div>
         </div>
         ${isPenalty ? `<div class="score-penalty-badge" style="font-size:16px;">${scoreDelta}</div>` : ''}
@@ -6894,7 +6928,7 @@ function openPreSkipQuestionModal() {
 
       // إضافة 3 درجات فورية للمتسابق بدلاً من نقاط السؤال
       addContestantScore(3);
-      showFloatingCardPill("+3 نقاط تخطي ذكي 💎", "fa-forward-fast", "gold");
+      showFloatingCardPill("+3 نقاط تخطي ذكي", "fa-forward-fast", "gold");
 
       if (currentLiveRoom?.id) {
         updateDoc(doc(db, "live_rooms", currentLiveRoom.id), {
@@ -6905,7 +6939,7 @@ function openPreSkipQuestionModal() {
       }
 
       modalPreSkipQuestion.classList.add("hidden");
-      showToast(`✨ تم اعتماد تخطي السؤال (${targetIdx + 1}) مسبقاً! واحتساب 3 نقاط ذهبية للمتسابق`, "fa-circle-check", 4000);
+      showToast(`تم اعتماد تخطي السؤال (${targetIdx + 1}) مسبقاً! واحتساب 3 نقاط ذهبية للمتسابق`, "fa-circle-check", 4000);
     });
   });
 }
@@ -7053,11 +7087,11 @@ function loadStageQuestion(idx) {
     const hasImmunity = !!(activeCardEffect?.effect?.immunity);
     let penalty = 0;
     if (hasImmunity) {
-      showToast("🛡️ درع الأمان (الحصانة): انتهى الوقت ولكن تم إلغاء أي خصم درجات!", "fa-shield-halved", 3500);
+      showToast("درع الأمان (الحصانة): انتهى الوقت ولكن تم إلغاء أي خصم درجات!", "fa-shield-halved", 3500);
       activeCardEffect = null;
     } else {
       penalty = 3;
-      showToast("⏰ انتهى الوقت المحدد للسؤال! ❌ خصم 3 درجات والانتقال للسؤال التالي", "fa-clock", 3500);
+      showToast("انتهى الوقت المحدد للسؤال! تم خصم 3 درجات والانتقال للسؤال التالي", "fa-clock", 3500);
     }
 
     // إذا كان نوع السؤال اختيار من متعدد (MCQ)، نظهر الإجابة الصحيحة باللون الأخضر ونعطل الخيارات
@@ -7272,21 +7306,21 @@ function loadStageQuestion(idx) {
               const speedRatio = Math.max(0, Math.min(1, (qDuration - elapsedSec) / qDuration));
               const speedBonusPts = Math.round(speedRatio * 2.5 * 10) / 10;
               actualCardBonus += speedBonusPts;
-              showToast(`⚖️ توازن الحكماء: 2.5 دقة + ${speedBonusPts} سرعة!`, "fa-scale-balanced", 2500);
+              showToast(`توازن الحكماء: 2.5 دقة + ${speedBonusPts} سرعة!`, "fa-scale-balanced", 2500);
             }
             if (doublePointsActive) actualCardBonus += basePoints;
             actualCardBonus += cardBonusPoints;
             // مكافأة السرعة: إن أجاب في أقل من 5 ثوانٍ
             if (speedBonusExtra > 0 && elapsedSec < 5) {
               actualCardBonus += speedBonusExtra;
-              showToast(`⚡ سرعة البرق! +${speedBonusExtra} نقاط إضافية (${elapsedSec.toFixed(1)}ث)`, "fa-forward-fast", 2500);
+              showToast(`سرعة البرق! +${speedBonusExtra} نقاط إضافية (${elapsedSec.toFixed(1)}ث)`, "fa-forward-fast", 2500);
             }
           }
           const earnedPoints = basePoints + actualCardBonus;
 
           if (choiceIdx === q.correct) {
             btn.classList.add("correct");
-            showToast(`✅ إجابة صحيحة! (+${earnedPoints} درجات)`, "fa-circle-check");
+            showToast(`إجابة صحيحة! (+${earnedPoints} درجات)`, "fa-circle-check");
             activeCardEffect = null; // استهلاك البطاقة
             advanceToNext(earnedPoints, false, true, choiceIdx, false, actualCardBonus, basePoints);
           } else {
@@ -7301,7 +7335,7 @@ function loadStageQuestion(idx) {
                   b.style.pointerEvents = "auto";
                 }
               });
-              showToast("🔄 فرصة ثانية: إجابتك غير دقيقة، ولديك فرصة أخرى!", "fa-arrow-rotate-left", 3500);
+              showToast("فرصة ثانية: إجابتك غير دقيقة، ولديك فرصة أخرى!", "fa-arrow-rotate-left", 3500);
               activeCardEffect = null;
               return;
             }
@@ -7311,15 +7345,15 @@ function loadStageQuestion(idx) {
             if (correctBtn) correctBtn.classList.add("correct");
 
             if (hasImmunity) {
-              showToast("🛡️ درع الأمان: تم إحباط أي خصم للدرجات!", "fa-shield-halved");
+              showToast("درع الأمان: تم إحباط أي خصم للدرجات!", "fa-shield-halved");
               activeCardEffect = null;
               advanceToNext(0, false, false, choiceIdx, false, 0, 0);
             } else if (penaltyOnWrong > 0) {
-              showToast(`❌ إجابة خاطئة — المخاطرة الكبرى: خصم ${penaltyOnWrong} درجات!`, "fa-fire-flame-curved", 3000);
+              showToast(`إجابة غير دقيقة — المخاطرة الكبرى: خصم ${penaltyOnWrong} درجات!`, "fa-fire-flame-curved", 3000);
               activeCardEffect = null;
               advanceToNext(-penaltyOnWrong, true, false, choiceIdx, false, 0, 0);
             } else {
-              showToast("❌ إجابة غير صحيحة!", "fa-circle-xmark");
+              showToast("إجابة غير دقيقة!", "fa-circle-xmark");
               activeCardEffect = null;
               advanceToNext(0, false, false, choiceIdx, false, 0, 0);
             }
@@ -7405,7 +7439,7 @@ function loadStageQuestion(idx) {
           });
         }
       }
-      showToast("✨ توصيل الحكمة: تم ربط أول زوجين صحيحين تلقائياً وفق مفتاح الإجابة!", "fa-link", 3500);
+      showToast("توصيل الحكمة: تم ربط أول زوجين صحيحين تلقائياً وفق مفتاح الإجابة!", "fa-link", 3500);
     }
 
     let selectedLeftId = null;
@@ -7624,7 +7658,7 @@ function loadStageQuestion(idx) {
 
           setTimeout(() => {
             if (allCorrect) {
-              showToast(`🌟 ما شاء الله! جميع الأزواج صحيحة بالكامل (+${earnedPoints} درجات)`, "fa-circle-check", 3500);
+              showToast(`ما شاء الله! جميع الأزواج صحيحة بالكامل (+${earnedPoints} درجات)`, "fa-circle-check", 3500);
               try { soundFX.celebrate(); } catch (e) {}
             } else {
               showToast(`تم التحقق: (${correctMatchesCount} من ${cleanPairs.length}) أزواج صحيحة (+${finalEarnedScore} درجات)`, "fa-check-double", 3500);
@@ -7713,7 +7747,7 @@ function loadStageQuestion(idx) {
           placedWords.push(lockedWord);
         }
       }
-      showToast("🛡️ حصانة الترتيب: تم تثبيت أول عنصرين في موقعهما الصحيح!", "fa-lock", 3000);
+      showToast("حصانة الترتيب: تم تثبيت أول عنصرين في موقعهما الصحيح!", "fa-lock", 3000);
     }
 
     let isOrderingVerifyingRunning = false;
@@ -7827,7 +7861,7 @@ function loadStageQuestion(idx) {
           setTimeout(() => {
             if (allCorrect) {
               try { soundFX.celebrate(); } catch (e) {}
-              showToast(`🌟 ما شاء الله! جميع الكلمات مرتبة بإتقان تام (+${earnedPoints} درجات)`, "fa-circle-check", 3500);
+              showToast(`ما شاء الله! جميع الكلمات مرتبة بإتقان تام (+${earnedPoints} درجات)`, "fa-circle-check", 3500);
               activeCardEffect = null;
               if (isInitiator) {
                 advanceToNext(earnedPoints, false, true, null, false, actualCardBonus, baseEarned);
@@ -7835,7 +7869,7 @@ function loadStageQuestion(idx) {
             } else {
               try { soundFX.wrong(); } catch (e) {}
               if (activeCardEffect?.effect?.secondChance) {
-                showToast("🔄 فرصة ثانية: الترتيب غير صحيح، أعد ترتيب الكلمات!", "fa-arrow-rotate-left", 3500);
+                showToast("فرصة ثانية: الترتيب غير صحيح، أعد ترتيب الكلمات!", "fa-arrow-rotate-left", 3500);
                 activeCardEffect = null;
                 isOrderingVerifyingRunning = false;
                 // استئناف المؤقت بعد الفرصة الثانية
@@ -7845,20 +7879,20 @@ function loadStageQuestion(idx) {
               }
 
               if (hasImmunity) {
-                showToast("🛡️ درع الأمان: الترتيب غير دقيق ولكن تم إحباط أي خصم!", "fa-shield-halved", 3000);
+                showToast("درع الأمان: الترتيب غير دقيق ولكن تم إحباط أي خصم!", "fa-shield-halved", 3000);
                 activeCardEffect = null;
                 if (isInitiator) {
                   advanceToNext(0, false, false);
                 }
               } else if (penaltyOnWrong > 0) {
-                showToast(`❌ ترتيب غير دقيق — المخاطرة الكبرى: خصم ${penaltyOnWrong} درجات!`, "fa-fire-flame-curved", 3000);
+                showToast(`ترتيب غير دقيق — المخاطرة الكبرى: خصم ${penaltyOnWrong} درجات!`, "fa-fire-flame-curved", 3000);
                 activeCardEffect = null;
                 if (isInitiator) {
                   advanceToNext(-penaltyOnWrong, true, false);
                 }
               } else {
                 const wrongPenalty = 3;
-                showToast(`❌ الترتيب غير دقيق (${correctWordsCount} من ${originalItems.length} صحيحة) — خصم 3 درجات ❌`, "fa-circle-xmark", 3000);
+                showToast(`الترتيب غير دقيق (${correctWordsCount} من ${originalItems.length} صحيحة) — خصم 3 درجات`, "fa-circle-xmark", 3000);
                 activeCardEffect = null;
                 if (isInitiator) {
                   advanceToNext(-wrongPenalty, true, false);
@@ -7985,7 +8019,7 @@ function loadStageQuestion(idx) {
         document.getElementById("btnSupervisorVerifyOrdering")?.addEventListener("click", () => {
           if (isOrderingVerifyingRunning) return;
           if (placedWords.length !== originalItems.length) {
-            showToast("⚠️ لم يتم وضع جميع الكلمات في الترتيب بعد!", "fa-triangle-exclamation");
+            showToast("يرجى وضع جميع الكلمات في الترتيب أولاً", "fa-triangle-exclamation");
             return;
           }
           broadcastOrderingVerificationState();
@@ -8051,7 +8085,7 @@ function loadStageQuestion(idx) {
       document.getElementById("btnSubmitOrdering")?.addEventListener("click", () => {
         if (isOrderingVerifyingRunning) return;
         if (placedWords.length !== originalItems.length) {
-          showToast("⚠️ يرجى ترتيب جميع الكلمات أولاً!", "fa-triangle-exclamation");
+          showToast("يرجى ترتيب جميع الكلمات أولاً", "fa-triangle-exclamation");
           return;
         }
 
@@ -8144,7 +8178,7 @@ function loadStageQuestion(idx) {
       const actualCardBonus = Math.max(0, pts - baseEarned);
       const btn = document.getElementById("btnOralAccept");
       if (btn) btn.disabled = true;
-      showToast(`✅ تم تسجيل التقييم الشفهي: ${rounded.toFixed(2)} من 5 (+${pts} درجات)`, "fa-microphone");
+      showToast(`تم تسجيل التقييم الشفهي: ${rounded.toFixed(2)} من 5 (+${pts} درجات)`, "fa-microphone");
       activeCardEffect = null;
       advanceToNext(pts, false, true, null, false, actualCardBonus, baseEarned);
     }, { once: true });
@@ -8229,7 +8263,7 @@ function finishContestant() {
   if (hasSafetyValve && currentLiveRoom?.highestLockedScore) {
     if (finalScore < currentLiveRoom.highestLockedScore) {
       finalScore = currentLiveRoom.highestLockedScore;
-      showToast(`🗄️ صمام الأمان النهائي: تطبيق أعلى نتيجة مسجلة (${finalScore} نقطة) كحد أدنى مضمون!`, "fa-vault", 4500);
+      showToast(`صمام الأمان النهائي: تطبيق أعلى نتيجة مسجلة (${finalScore} نقطة) كحد أدنى مضمون!`, "fa-vault", 4500);
     }
   }
 
@@ -8241,7 +8275,7 @@ function finishContestant() {
 
   if (currentContestant) {
     recordHonorScore(currentContestant.name, finalScore);
-    showToast(`🏆 اكتملت مسابقة المتسابق (${currentContestant.name})! المجموع النهائي: ${finalScore} نقطة`, "fa-trophy", 4000);
+    showToast(`اكتملت مسابقة المتسابق (${currentContestant.name})! المجموع النهائي: ${finalScore} نقطة`, "fa-trophy", 4000);
   }
 
   // تصفير نقاط الجلسة بعد الحفظ وقبل عرض لوحة الشرف
@@ -8420,7 +8454,7 @@ function showTeacherHelpModal(helperName, contestantName, cardTitle = "استش�
 
   // إذا انعدم وجود أي معلم أو مشرف مؤهل تماماً، عرض تنبيه للمشرف ومنع الاستشارة الوهمية (القاعدة 5.4)
   if (qualifiedList.length === 0) {
-    showToast("⚠️ لا يوجد أي معلّم أو مشرف مؤهل متصل في الغرفة حالياً لتقديم الاستشارة.", "fa-triangle-exclamation", 4500);
+    showToast("لا يوجد أي معلّم أو مشرف مؤهل متصل في الغرفة حالياً لتقديم الاستشارة.", "fa-triangle-exclamation", 4500);
     modal.classList.add("hidden");
     activeTeacherConsultationInProgress = false;
     return;
@@ -8448,7 +8482,7 @@ function showTeacherHelpModal(helperName, contestantName, cardTitle = "استش�
 
   if (descEl) {
     if (isMe) {
-      descEl.innerHTML = `<span style="color:#16a34a;font-weight:900;font-size:16px;">🌟 أنت المعلم المختار!</span><br>وقع الاختيار عليك لمساعدة الطالب <strong>«${escapeHtml(contestantName)}»</strong> وتوجيهه بالإشارة أو النصيحة المفيدة.`;
+      descEl.innerHTML = `<span style="color:#16a34a;font-weight:900;font-size:16px;">أنت المعلم المختار!</span><br>وقع الاختيار عليك لمساعدة الطالب <strong>«${escapeHtml(contestantName)}»</strong> وتوجيهه بالإشارة أو النصيحة المفيدة.`;
     } else if (isPresenter) {
       descEl.innerHTML = `تنبيه على شاشة العارض: المعلم <strong>«${escapeHtml(currentChosen)}»</strong> يتدخل الآن لتقديم الدعم والتوجيه للمتسابق <strong>«${escapeHtml(contestantName)}»</strong>.`;
     } else if (isSupervisorUser) {
@@ -8534,7 +8568,7 @@ function showTeacherHelpModal(helperName, contestantName, cardTitle = "استش�
             lastUpdated: serverTimestamp()
           }).catch(() => {});
         }
-        showToast(`🎲 تم اختيار المعلم (${rand.name}) عشوائياً!`, "fa-chalkboard-user");
+        showToast(`تم اختيار المعلم (${rand.name}) عشوائياً!`, "fa-chalkboard-user");
       }
     };
   }
@@ -8570,9 +8604,9 @@ function showTeacherHelpModal(helperName, contestantName, cardTitle = "استش�
       const newRemaining = isCard33 ? pauseRemaining : (pauseRemaining + 15);
 
       if (writtenHint) {
-        showToast(`💡 توجيه الأستاذ (${currentChosen}): «${writtenHint}»`, "fa-comment-dots", 5000);
+        showToast(`توجيه الأستاذ (${currentChosen}): «${writtenHint}»`, "fa-comment-dots", 5000);
       } else {
-        showToast(isCard33 ? `✅ تم توجيه الطالب واستئناف المؤقت (${newRemaining}ث)` : `✅ تم توجيه الطالب واستئناف المؤقت بـ ${newRemaining} ثانية (+15ث إضافية)!`, "fa-clock", 4000);
+        showToast(isCard33 ? `تم توجيه الطالب واستئناف المؤقت (${newRemaining}ث)` : `تم توجيه الطالب واستئناف المؤقت بـ ${newRemaining} ثانية (+15ث إضافية)!`, "fa-clock", 4000);
       }
 
       resumeLiveTimerAfterWalletSelection(newRemaining);
@@ -8586,10 +8620,10 @@ function showTeacherHelpModal(helperName, contestantName, cardTitle = "استش�
     };
   }
 
-  showFloatingCardPill(`👨‍🏫 استشارة المعلم: ${currentChosen}`, "fa-chalkboard-user", "gold");
+  showFloatingCardPill(`استشارة المعلم: ${currentChosen}`, "fa-chalkboard-user", "gold");
   try { soundFX.celebrate(); } catch (e) {}
   modal.classList.remove("hidden");
-  showToast(`📢 تنبيه بطاقة: تم اختيار الأستاذ (${currentChosen}) لمساعدة المتسابق (${contestantName})!`, "fa-chalkboard-user", 5000);
+  showToast(`تنبيه بطاقة: تم اختيار الأستاذ (${currentChosen}) لمساعدة المتسابق (${contestantName})!`, "fa-chalkboard-user", 5000);
 }
 
 // --------------------------------------------------------
@@ -8688,7 +8722,7 @@ btnNextStudentCycle?.addEventListener("click", () => {
       clearInterval(liveTimerInterval);
       if (currentContestant) {
         recordHonorScore(currentContestant.name, contestantScore);
-        showToast(`✅ تم حفظ نقاط ${currentContestant.name}: ${contestantScore} نقطة`, "fa-check", 2500);
+        showToast(`تم حفظ نقاط ${currentContestant.name}: ${contestantScore} نقطة`, "fa-check", 2500);
       }
       await backToStudentSelect();
     }
@@ -8749,7 +8783,7 @@ function showSynchronizedTacticalCardsModal(cards, nextIdx = null) {
   // رسم البطاقات الثلاث بتأثير 3D Drop and Flip
   cards3DRow.innerHTML = cards.map((card, idx) => {
     const isBuff = card.type === "buff";
-    const badgeText = isBuff ? "ميزة إيجابية 🌟" : "مخاطرة ذكية ⚡";
+    const badgeText = isBuff ? "ميزة إيجابية" : "مخاطرة ذكية";
     const scopeLabel = formatCardScopeLabel(card.scope);
 
     return `
@@ -8848,7 +8882,7 @@ function selectTacticalCard3D(cardId, nextIdx = null) {
 
   // إشعار بالصوت والرسالة
   try { soundFX.correct(); } catch (e) {}
-  showToast(`🎴 تم حفظ بطاقة «${card.title}» في محفظة المتسابق (${contestantName})!`, card.icon || "fa-wallet", 4000);
+  showToast(`تم حفظ بطاقة «${card.title}» في محفظة المتسابق (${contestantName})!`, card.icon || "fa-wallet", 4000);
 
   // بث اختيار البطاقة وإغلاق نافذة الاختيار في الغرفة
   if (currentLiveRoom && currentLiveRoom.id) {
@@ -8890,7 +8924,7 @@ function applySynchronizedChosenCard(chosenCard, chosenBy, nextIdx = null) {
       }
       updateContestantWalletUI();
     }
-    showToast(`🎴 اختار (${chosenBy || 'المتسابق'}) بطاقة «${chosenCard.title}» وحُفظت في محفظته!`, chosenCard.icon || "fa-wallet", 3500);
+    showToast(`اختار (${chosenBy || 'المتسابق'}) بطاقة «${chosenCard.title}» وحُفظت في محفظته!`, chosenCard.icon || "fa-wallet", 3500);
   }
 
   const targetNextIdx = nextIdx !== null ? nextIdx : (currentLiveRoom?.currentQuestionIdx || 0);
@@ -8987,12 +9021,12 @@ function renderContestantWalletCards() {
         <div class="wallet-card-icon-bubble">
           <i class="fa-solid ${c.icon}"></i>
         </div>
-        <span class="wallet-card-tag">${c.type === 'buff' ? 'ميزة إيجابية 🌟' : 'مخاطرة ذكية ⚡'}</span>
+        <span class="wallet-card-tag">${c.type === 'buff' ? 'ميزة إيجابية' : 'مخاطرة ذكية'}</span>
       </div>
       <h4 class="wallet-card-title">${c.title}</h4>
       <p class="wallet-card-desc">${c.desc}</p>
       <button class="btn-use-card" data-card-id="${c.id}" ${!isAllowedToUse ? 'disabled style="opacity:0.6;cursor:not-allowed;"' : ''}>
-        <i class="fa-solid fa-bolt"></i> ${isAllowedToUse ? 'استخدم هذه البطاقة الآن ⚡' : 'المتسابق/المشرف مخوّل بالاستخدام'}
+        <i class="fa-solid fa-bolt"></i> ${isAllowedToUse ? 'استخدم هذه البطاقة الآن' : 'المتسابق/المشرف مخوّل بالاستخدام'}
       </button>
     </div>
   `).join("");
@@ -9029,7 +9063,7 @@ function openSynchronizedWallet(broadcast = true, openedBy = null) {
   const syncText = document.getElementById("walletSyncLiveText");
   if (syncBanner && syncText) {
     syncBanner.classList.remove("hidden");
-    syncText.innerHTML = `مزامنة حية: قام <strong>${openerName}</strong> بفتح محفظة البطاقات التكتيكية 🎴`;
+    syncText.innerHTML = `مزامنة حية: قام <strong>${openerName}</strong> بفتح محفظة البطاقات التكتيكية`;
   }
 
   // تفعيل أنيميشن الانفتاح السلس وإزالته تلقائياً عند انتهاء مدته لئلا يعلق في الـ DOM
@@ -9201,7 +9235,7 @@ function expireCycleCardEffects() {
     currentLiveRoom.activeCardEffects = currentLiveRoom.activeCardEffects.filter(e => e.status === "active");
     syncRoomActiveEffects(currentLiveRoom);
     renderActiveCardEffectsUI(currentLiveRoom);
-    showToast(`🔄 بدأت دورة بطاقات جديدة — انتهت التأثيرات المؤقتة للدورة السابقة مع بقاء بطاقات المحفظة والنقاط المكتسبة!`, "fa-arrows-rotate", 3500);
+    showToast(`بدأت دورة بطاقات جديدة — انتهت التأثيرات المؤقتة للدورة السابقة مع بقاء بطاقات المحفظة والنقاط المكتسبة!`, "fa-arrows-rotate", 3500);
   }
 }
 
@@ -9256,7 +9290,7 @@ function supervisorCancelActiveCardEffect(effectId, reason = null) {
   syncRoomActiveEffects(currentLiveRoom);
   renderActiveCardEffectsUI(currentLiveRoom);
 
-  showToast(`🚫 تم إلغاء تأثير بطاقة «${eff.title}» من قبل المشرف`, "fa-ban", 3500);
+  showToast(`تم إلغاء تأثير بطاقة «${eff.title}» من قبل المشرف`, "fa-ban", 3500);
 }
 
 // رسم وإدارة التأثير البصري البنفسجي الإلزامي والشارات النشطة
@@ -9471,7 +9505,7 @@ function selectCardFromWallet(cardId) {
 
   if (!isCardCompatible(card, curQ, timerContext)) {
     const reason = getIncompatibilityReason(card, curQ, timerContext);
-    showToast(`⚠️ تعذر التفعيل: ${reason}`, "fa-circle-exclamation", 4500);
+    showToast(`تعذر التفعيل: ${reason}`, "fa-circle-exclamation", 4500);
     return;
   }
 
@@ -9536,7 +9570,7 @@ function trigger2SecondCardSelectionShowcase(card, chosenBy, isInitiator, preser
       if (!cardEl.querySelector(".card-selected-ribbon")) {
         const ribbon = document.createElement("div");
         ribbon.className = "card-selected-ribbon";
-        ribbon.innerHTML = `<i class="fa-solid fa-sparkles fa-spin"></i> تم اختيار هذه البطاقة بواسطة ${chosenBy || 'المتسابق'}! ✨`;
+        ribbon.innerHTML = `<i class="fa-solid fa-sparkles fa-spin"></i> تم اختيار هذه البطاقة بواسطة ${chosenBy || 'المتسابق'}!`;
         cardEl.prepend(ribbon);
       }
     }
@@ -9650,7 +9684,7 @@ function executeQuestionSwap() {
         saveRooms(currentLiveRoom);
       }
       loadStageQuestion(currentQuestionIndex);
-      showToast("🔄 تم استبدال السؤال الحالي بسؤال بديل من بنك الأسئلة!", "fa-arrows-rotate", 3500);
+      showToast("تم استبدال السؤال الحالي بسؤال بديل من بنك الأسئلة!", "fa-arrows-rotate", 3500);
     }
   }
 }
@@ -9680,7 +9714,7 @@ function executeDeckReorder() {
     remaining = shuffleArray(remaining);
     currentLiveRoom.drawnQuestions = [...passed, ...remaining];
     saveRooms(currentLiveRoom);
-    showToast("🔀 تم إعادة خلط وترتيب الأسئلة القادمة في القسم بنجاح!", "fa-shuffle", 3500);
+    showToast("تم إعادة ترتيب الأسئلة القادمة في القسم بنجاح!", "fa-shuffle", 3500);
   }
 }
 
@@ -9702,27 +9736,27 @@ function executeCardEffect(card, targetNextIdx = null) {
     case 2: // سرعة وإتقان: -5 ثوانٍ + 2 نقاط عند الصواب
       broadcastTimerModification({ deltaSeconds: -5 });
       registerActiveEffect(card, { speedBonus: 2 });
-      showFloatingCardPill("-5 ثوانٍ مع +2 بونص ⚡", "fa-bolt", "gold");
-      showToast("⚡ سرعة وإتقان: تم إنقاص 5 ثوانٍ، والإجابة الصحيحة تمنحك +2 نقطة إضافية!", "fa-bolt", 3500);
+      showFloatingCardPill("-5 ثوانٍ مع +2 بونص", "fa-bolt", "gold");
+      showToast("سرعة وإتقان: تم إنقاص 5 ثوانٍ، والإجابة الصحيحة تمنحك +2 نقطة إضافية!", "fa-bolt", 3500);
       break;
 
     case 3: // المخاطرة الكبرى: 5 نقاط كاملة عند الصواب وخصم 3 نقاط عند الخطأ
       registerActiveEffect(card, { grandRisk: true, fullMarks: 5, penalty: 3 });
-      showFloatingCardPill("المخاطرة الكبرى (5 صواب / -3 خطأ) 🔥", "fa-fire-flame-curved", "red");
-      showToast("🔥 المخاطرة الكبرى: الصواب يمنح 5 نقاط كاملة، والخطأ يخصم 3 نقاط!", "fa-fire-flame-curved", 3500);
+      showFloatingCardPill("المخاطرة الكبرى (5 صواب / -3 خطأ)", "fa-fire-flame-curved", "red");
+      showToast("المخاطرة الكبرى: الصواب يمنح 5 نقاط كاملة، والخطأ يخصم 3 نقاط!", "fa-fire-flame-curved", 3500);
       break;
 
     case 4: // درع الأمان: حماية تامة من الخصم
       registerActiveEffect(card, { immunity: true });
-      showFloatingCardPill("درع الأمان نشط 🛡️", "fa-shield-halved", "blue");
-      showToast("🛡️ درع الأمان: محمي من أي خصم درجات في هذا السؤال!", "fa-shield-halved", 3500);
+      showFloatingCardPill("درع الأمان نشط", "fa-shield-halved", "blue");
+      showToast("درع الأمان: محمي من أي خصم درجات في هذا السؤال!", "fa-shield-halved", 3500);
       break;
 
     case 5: // حذف خيارين: استبعاد خيارين خاطئين في MCQ
       registerActiveEffect(card, { eliminateOptions: 2 });
       eliminateMCQWrongOptionsImmediately(2);
-      showFloatingCardPill("حذف خيارين خاطئين 🎯", "fa-filter", "blue");
-      showToast("🎯 تم حذف خيارين خاطئين من الخيارات المعروضة!", "fa-filter", 3000);
+      showFloatingCardPill("حذف خيارين خاطئين", "fa-filter", "blue");
+      showToast("تم حذف خيارين خاطئين من الخيارات المعروضة!", "fa-filter", 3000);
       break;
 
     case 6: // استشارة المعلم: إيقاف المؤقت، واختيار معلم، واستئناف المؤقت بـ +15 ثانية
@@ -9743,20 +9777,20 @@ function executeCardEffect(card, targetNextIdx = null) {
 
     case 7: // السؤال الذهبي: مضاعفة النقاط حتى 10 نقاط
       registerActiveEffect(card, { goldenQuestion: true, doublePoints: true, maxPoints: 10 });
-      showFloatingCardPill("السؤال الذهبي (10 درجات) 💰", "fa-coins", "gold");
-      showToast("💰 السؤال الذهبي: مضاعفة درجات هذا السؤال حتى 10 درجات عند الإجابة الصحيحة!", "fa-coins", 3500);
+      showFloatingCardPill("السؤال الذهبي (10 درجات)", "fa-coins", "gold");
+      showToast("السؤال الذهبي: مضاعفة درجات هذا السؤال حتى 10 درجات عند الإجابة الصحيحة!", "fa-coins", 3500);
       break;
 
     case 8: // تجميد الوقت: 10 ثوانٍ
       registerActiveEffect(card, { freezeTime: 10 });
       broadcastTimerModification({ freezeSeconds: 10 });
-      showFloatingCardPill("تجميد الوقت 10 ثوانٍ ❄️", "fa-snowflake", "blue");
-      showToast("❄️ تجميد الوقت: العداد متوقف لمدة 10 ثوانٍ للتفكير بهدوء!", "fa-snowflake", 3000);
+      showFloatingCardPill("تجميد الوقت 10 ثوانٍ", "fa-snowflake", "blue");
+      showToast("تجميد الوقت: العداد متوقف لمدة 10 ثوانٍ للتفكير بهدوء!", "fa-snowflake", 3000);
       break;
 
     case 9: // استبدال السؤال: بموافقة المشرف
       registerActiveEffect(card, { swapQuestion: true });
-      showFloatingCardPill("استبدال السؤال 🔄", "fa-arrows-rotate", "blue");
+      showFloatingCardPill("استبدال السؤال", "fa-arrows-rotate", "blue");
       executeQuestionSwap();
       break;
 
@@ -9776,14 +9810,14 @@ function executeCardEffect(card, targetNextIdx = null) {
     case 12: // نَفَس عميق: +3 ثوانٍ لكل سؤال حتى الدورة التالية
       registerActiveEffect(card, { timeDeltaPerQuestion: 3 });
       broadcastTimerModification({ deltaSeconds: 3 });
-      showFloatingCardPill("+3 ثوانٍ لكل سؤال 🌬️", "fa-wind", "green");
-      showToast("🌬️ نَفَس عميق: +3 ثوانٍ لكل سؤال حتى دورة البطاقات القادمة!", "fa-wind", 3000);
+      showFloatingCardPill("+3 ثوانٍ لكل سؤال", "fa-wind", "green");
+      showToast("نَفَس عميق: +3 ثوانٍ لكل سؤال حتى دورة البطاقات القادمة!", "fa-wind", 3000);
       break;
 
     case 13: // عين الصواب: تلميح تعليمي
       registerActiveEffect(card, { showHint: true });
-      showFloatingCardPill("تلميح عين الصواب 👁️", "fa-eye", "gold");
-      showToast("👁️ عين الصواب: تلميح تعليمي ذكي متاح لك أعلى السؤال!", "fa-eye", 3000);
+      showFloatingCardPill("تلميح عين الصواب", "fa-eye", "gold");
+      showToast("عين الصواب: تلميح تعليمي ذكي متاح لك أعلى السؤال!", "fa-eye", 3000);
       break;
 
     case 14: // تحدي الأبطال: نصف الوقت + 3 نقاط بونص
@@ -9791,44 +9825,44 @@ function executeCardEffect(card, targetNextIdx = null) {
       const halfDelta = -Math.floor(curRem14 / 2);
       broadcastTimerModification({ deltaSeconds: halfDelta });
       registerActiveEffect(card, { halfTime: true, pointsBonus: 3 });
-      showFloatingCardPill("نصف الوقت مع +3 نقاط ⚡", "fa-medal", "gold");
-      showToast(`⚡ تحدي الأبطال: تم تقليص الوقت للنصف، والصواب يمنحك +3 نقاط إضافية!`, "fa-medal", 3500);
+      showFloatingCardPill("نصف الوقت مع +3 نقاط", "fa-medal", "gold");
+      showToast(`تحدي الأبطال: تم تقليص الوقت للنصف، والصواب يمنحك +3 نقاط إضافية!`, "fa-medal", 3500);
       break;
 
     case 15: // فرصة ثانية
       registerActiveEffect(card, { secondChance: true });
-      showFloatingCardPill("فرصة ثانية عند الخطأ 🔁", "fa-arrow-rotate-left", "green");
-      showToast("🔁 فرصة ثانية: في حال الخطأ يُتاح لك محاولة ثانية فورية!", "fa-arrow-rotate-left", 3500);
+      showFloatingCardPill("فرصة ثانية عند الخطأ", "fa-arrow-rotate-left", "green");
+      showToast("فرصة ثانية: في حال الخطأ يُتاح لك محاولة ثانية فورية!", "fa-arrow-rotate-left", 3500);
       break;
 
     case 16: // بركة الإتقان: تسامح مع خطأ تجويدي بسيط في الشفهي
       registerActiveEffect(card, { forgiveMinorOralFault: true });
-      showFloatingCardPill("بركة الإتقان 🤲", "fa-hand-holding-heart", "green");
-      showToast("🤲 بركة الإتقان: تسامح في خطأ تجويدي بسيط في التقييم الشفهي دون خصم!", "fa-hand-holding-heart", 3500);
+      showFloatingCardPill("بركة الإتقان", "fa-hand-holding-heart", "green");
+      showToast("بركة الإتقان: تسامح في خطأ تجويدي بسيط في التقييم الشفهي دون خصم!", "fa-hand-holding-heart", 3500);
       break;
 
     case 17: // حصانة الترتيب: تثبيت أول عنصرين
       registerActiveEffect(card, { lockOrderingItems: 2 });
-      showFloatingCardPill("تثبيت أول عنصرين 🔒", "fa-lock", "gold");
-      showToast("🔒 حصانة الترتيب: تم تثبيت أول عنصرين في موضعهما الصحيح!", "fa-lock", 3500);
+      showFloatingCardPill("تثبيت أول عنصرين", "fa-lock", "gold");
+      showToast("حصانة الترتيب: تم تثبيت أول عنصرين في موضعهما الصحيح!", "fa-lock", 3500);
       break;
 
     case 18: // توصيل الحكمة: توصيل زوجين تلقائياً
       registerActiveEffect(card, { autoMatchPairs: 2 });
-      showFloatingCardPill("توصيل زوجين تلقائياً 🔗", "fa-link", "green");
-      showToast("🔗 توصيل الحكمة: تم ربط زوجين صحيحين تلقائياً!", "fa-link", 3500);
+      showFloatingCardPill("توصيل زوجين تلقائياً", "fa-link", "green");
+      showToast("توصيل الحكمة: تم ربط زوجين صحيحين تلقائياً!", "fa-link", 3500);
       break;
 
     case 19: // نور البيان: كشف القاعدة التجويدية
       registerActiveEffect(card, { showRuleInfo: true });
-      showFloatingCardPill("كشف قاعدة نور البيان 📖", "fa-book-quran", "gold");
-      showToast("📖 نور البيان: تم إظهار القاعدة التجويدية المتصلة بالسؤال!", "fa-book-quran", 3500);
+      showFloatingCardPill("كشف قاعدة نور البيان", "fa-book-quran", "gold");
+      showToast("نور البيان: تم إظهار القاعدة التجويدية المتصلة بالسؤال!", "fa-book-quran", 3500);
       break;
 
     case 20: // مكافأة الثبات: +1 نقطة لكل إجابة متتالية خلال الدورة
       registerActiveEffect(card, { comboStreakBonus: 1 });
-      showFloatingCardPill("مكافأة الثبات (Combo) 📈", "fa-chart-line", "gold");
-      showToast("📈 مكافأة الثبات: +1 نقطة إضافية لكل إجابة صحيحة متتالية خلال الدورة!", "fa-chart-line", 3500);
+      showFloatingCardPill("مكافأة الثبات", "fa-chart-line", "gold");
+      showToast("مكافأة الثبات: +1 نقطة إضافية لكل إجابة صحيحة متتالية خلال الدورة!", "fa-chart-line", 3500);
       break;
 
     case 21: // سهم الانطلاق والتخطي: تخطي السؤال الحالي + 3 نقاط
@@ -9839,27 +9873,27 @@ function executeCardEffect(card, targetNextIdx = null) {
 
     case 22: // درع التقييم: حد أدنى 4 درجات في الشفهي
       registerActiveEffect(card, { minOralRating: 4 });
-      showFloatingCardPill("درع التقييم الشفهي 🛡️", "fa-shield", "blue");
-      showToast("🛡️ درع التقييم: يضمن ألا يقل التقييم الشفهي عن 4 درجات من 5!", "fa-shield", 3500);
+      showFloatingCardPill("درع التقييم الشفهي", "fa-shield", "blue");
+      showToast("درع التقييم: يضمن ألا يقل التقييم الشفهي عن 4 درجات من 5!", "fa-shield", 3500);
       break;
 
     case 23: // صوت الواثق: إزالة التوقيت عن السؤال الشفهي
       registerActiveEffect(card, { noTimeLimitOral: true });
       broadcastTimerModification({ noTimeLimit: true });
-      showFloatingCardPill("صوت الواثق (بلا مؤقت) 🎙️", "fa-microphone", "green");
-      showToast("🎙️ صوت الواثق: إلغاء الضغط الزمني عن السؤال الشفهي والتلاوة بارتياح!", "fa-microphone", 3500);
+      showFloatingCardPill("صوت الواثق (بلا مؤقت)", "fa-microphone", "green");
+      showToast("صوت الواثق: إلغاء الضغط الزمني عن السؤال الشفهي والتلاوة بارتياح!", "fa-microphone", 3500);
       break;
 
     case 24: // إعادة ترتيب الأوراق: إعادة ترتيب الأسئلة القادمة
       registerActiveEffect(card, { reorderRemainingQuestions: true });
-      showFloatingCardPill("إعادة ترتيب الأسئلة القادمة 🔀", "fa-shuffle", "blue");
+      showFloatingCardPill("إعادة ترتيب الأسئلة القادمة", "fa-shuffle", "blue");
       executeDeckReorder();
       break;
 
     case 25: // قلب الموازين: تحويل السؤال إلى 7 نقاط
       registerActiveEffect(card, { bonusCapPoints: 7 });
-      showFloatingCardPill("قلب الموازين (7 درجات) 💎", "fa-gem", "gold");
-      showToast("💎 قلب الموازين: السؤال الحالي يستحق 7 درجات كحد أقصى عند الصواب!", "fa-gem", 3500);
+      showFloatingCardPill("قلب الموازين (7 درجات)", "fa-gem", "gold");
+      showToast("قلب الموازين: السؤال الحالي يستحق 7 درجات كحد أقصى عند الصواب!", "fa-gem", 3500);
       break;
 
     case 26: // التأني والسلامة: +15 ثانية
@@ -9871,38 +9905,38 @@ function executeCardEffect(card, targetNextIdx = null) {
 
     case 27: // عين الحافظ: عرض سياق الآيات
       registerActiveEffect(card, { showVerseContext: true });
-      showFloatingCardPill("سياق الآية الكريمة 🧭", "fa-compass", "gold");
-      showToast("🧭 عين الحافظ: تم إظهار سياق الآية السابقة واللاحقة لمساعدتك!", "fa-compass", 3500);
+      showFloatingCardPill("سياق الآية الكريمة", "fa-compass", "gold");
+      showToast("عين الحافظ: تم إظهار سياق الآية السابقة واللاحقة لمساعدتك!", "fa-compass", 3500);
       break;
 
     case 28: // مضاعف الشرف: +5 نقاط شرف عند الصواب
       registerActiveEffect(card, { honorPointsBonus: 5 });
-      showFloatingCardPill("+5 نقاط شرف إضافية 🚀", "fa-arrow-up-right-dots", "gold");
-      showToast("🚀 مضاعف الشرف: إجابة صحيحة تمنحك +5 نقاط شرف فورية في لوحة الشرف!", "fa-arrow-up-right-dots", 3500);
+      showFloatingCardPill("+5 نقاط شرف إضافية", "fa-arrow-up-right-dots", "gold");
+      showToast("مضاعف الشرف: إجابة صحيحة تمنحك +5 نقاط شرف فورية في لوحة الشرف!", "fa-arrow-up-right-dots", 3500);
       break;
 
     case 29: // اختيار وتخطي السؤال القادم
       registerActiveEffect(card, { preSkipUpcomingQuestion: true, grantPoints: 3 });
-      showFloatingCardPill("تحديد سؤال لاحق لتخطيه 📋", "fa-list-check", "gold");
+      showFloatingCardPill("تحديد سؤال لاحق لتخطيه", "fa-list-check", "gold");
       openPreSkipQuestionModal();
       break;
 
     case 30: // حزام الأمان التجويدي: تسامح في خطأ مد أو غنة
       registerActiveEffect(card, { forgiveMaddGhunnahFault: true });
-      showFloatingCardPill("حزام الأمان التجويدي 🎗️", "fa-circle-check", "green");
-      showToast("🎗️ حزام الأمان: تسامح مع خطأ واحد في أحكام المد أو الغنة دون خصم!", "fa-circle-check", 3500);
+      showFloatingCardPill("حزام الأمان التجويدي", "fa-circle-check", "green");
+      showToast("حزام الأمان: تسامح مع خطأ واحد في أحكام المد أو الغنة دون خصم!", "fa-circle-check", 3500);
       break;
 
     case 31: // الإيقاع السريع: +3 نقاط إذا أجاب في أقل من 5 ثوانٍ
       registerActiveEffect(card, { speedBonusUnder5s: 3 });
-      showFloatingCardPill("الإيقاع السريع (< 5 ثوانٍ) ⚡", "fa-forward-fast", "gold");
-      showToast("⚡ الإيقاع السريع: إجابة صحيحة في أقل من 5 ثوانٍ تمنح +3 نقاط إضافية!", "fa-forward-fast", 3500);
+      showFloatingCardPill("الإيقاع السريع (< 5 ثوانٍ)", "fa-forward-fast", "gold");
+      showToast("الإيقاع السريع: إجابة صحيحة في أقل من 5 ثوانٍ تمنح +3 نقاط إضافية!", "fa-forward-fast", 3500);
       break;
 
     case 32: // نور الصدر: ألوان الترتيل وعلامات الضبط
       registerActiveEffect(card, { coloredQuranHarakat: true });
-      showFloatingCardPill("إبراز علامات الضبط والتجويد 🖍️", "fa-highlighter", "gold");
-      showToast("🖍️ نور الصدر: تم إبراز حركات وضبط الكلمة القرآنية بوضوح تام!", "fa-highlighter", 3500);
+      showFloatingCardPill("إبراز علامات الضبط والتجويد", "fa-highlighter", "gold");
+      showToast("نور الصدر: تم إبراز حركات وضبط الكلمة القرآنية بوضوح تام!", "fa-highlighter", 3500);
       break;
 
     case 33: // مساعدة الزميل: توجيه المعلم مع استمرار المؤقت
@@ -9912,8 +9946,8 @@ function executeCardEffect(card, targetNextIdx = null) {
 
     case 34: // طاقة العزيمة: إعادة شحن العداد إذا كان <= 5 ثوانٍ
       broadcastTimerModification({ reset: true });
-      showFloatingCardPill("إعادة شحن المؤقت بالكامل 🔋", "fa-battery-full", "green");
-      showToast("🔋 طاقة العزيمة: تمت إعادة ضبط مؤقت السؤال إلى مدته الكاملة!", "fa-battery-full", 3500);
+      showFloatingCardPill("إعادة شحن المؤقت بالكامل", "fa-battery-full", "green");
+      showToast("طاقة العزيمة: تمت إعادة ضبط مؤقت السؤال إلى مدته الكاملة!", "fa-battery-full", 3500);
       break;
 
     case 35: // وسام الشرف القرآني: +1 نقطة شرف دائمة فورية
@@ -9921,14 +9955,14 @@ function executeCardEffect(card, targetNextIdx = null) {
         recordHonorScore(currentContestant.name, 1);
       }
       registerActiveEffect(card, { permanentHonorPoint: 1 });
-      showFloatingCardPill("+1 نقطة شرف دائمة 🏅", "fa-award", "gold");
-      showToast("🏅 وسام الشرف القرآني: تم تسجيل نقطة شرف دائمة في رصيد المتسابق!", "fa-award", 4000);
+      showFloatingCardPill("+1 نقطة شرف دائمة", "fa-award", "gold");
+      showToast("وسام الشرف القرآني: تم تسجيل نقطة شرف دائمة في رصيد المتسابق!", "fa-award", 4000);
       break;
 
     case 36: // توازن الحكماء: تقسيم 50/50 بين الدقة والسرعة
       registerActiveEffect(card, { balanceAccuracyAndSpeed: true });
-      showFloatingCardPill("توازن الحكماء (دقة وسرعة) ⚖️", "fa-scale-balanced", "blue");
-      showToast("⚖️ توازن الحكماء: تقسم درجات السؤال بالتساوي بين صحة الإجابة والسرعة!", "fa-scale-balanced", 3500);
+      showFloatingCardPill("توازن الحكماء (دقة وسرعة)", "fa-scale-balanced", "blue");
+      showToast("توازن الحكماء: تقسم درجات السؤال بالتساوي بين صحة الإجابة والسرعة!", "fa-scale-balanced", 3500);
       break;
 
     case 37: // صمام الأمان النهائي: تثبيت أعلى مجموع نقاط حتى النهاية
@@ -9941,33 +9975,33 @@ function executeCardEffect(card, targetNextIdx = null) {
         }).catch(() => {});
       }
       registerActiveEffect(card, { lockHighestScoreUntilEnd: true, lockedScore: currentTotal });
-      showFloatingCardPill("صمام الأمان (حماية المجموع) 🗄️", "fa-vault", "gold");
-      showToast(`🗄️ صمام الأمان النهائي: تم تثبيت أعلى مجموع نقاط (${currentTotal} نقطة) كحد أدنى مضمون للمسابقة!`, "fa-vault", 4500);
+      showFloatingCardPill("صمام الأمان (حماية المجموع)", "fa-vault", "gold");
+      showToast(`صمام الأمان النهائي: تم تثبيت أعلى مجموع نقاط (${currentTotal} نقطة) كحد أدنى مضمون للمسابقة!`, "fa-vault", 4500);
       break;
 
     case 38: // الخط العثماني الميسر: تكبير 150% حتى الدورة القادمة
       registerActiveEffect(card, { zoomQuranScript: 1.5 });
-      showFloatingCardPill("تكبير الخط العثماني 150% 🔍", "fa-magnifying-glass-plus", "blue");
-      showToast("🔍 الخط العثماني الميسر: تم تكبير حجم الخط القرآني بنسبة 150% حتى الدورة القادمة!", "fa-magnifying-glass-plus", 3500);
+      showFloatingCardPill("تكبير الخط العثماني 150%", "fa-magnifying-glass-plus", "blue");
+      showToast("الخط العثماني الميسر: تم تكبير حجم الخط القرآني بنسبة 150% حتى الدورة القادمة!", "fa-magnifying-glass-plus", 3500);
       break;
 
     case 39: // السؤال المشترك: تشاور وتكييف السؤال
       registerActiveEffect(card, { jointTeacherSupervisorReview: true });
-      showFloatingCardPill("السؤال المشترك 👥", "fa-people-arrows", "blue");
-      showToast("👥 السؤال المشترك: إتاحة مراجعة وتكييف جزء السؤال المناسب لتقييم الطالب!", "fa-people-arrows", 3500);
+      showFloatingCardPill("السؤال المشترك", "fa-people-arrows", "blue");
+      showToast("السؤال المشترك: إتاحة مراجعة وتكييف جزء السؤال المناسب لتقييم الطالب!", "fa-people-arrows", 3500);
       showTeacherHelpModal(null, currentContestant?.name, card.title, 39);
       break;
 
     case 40: // ختام المسك: 5 نقاط كاملة كحد أقصى لآخر سؤال
       registerActiveEffect(card, { finaleBonusCap: 5 });
-      showFloatingCardPill("ختام المسك (5 نقاط كاملة) 👑", "fa-crown", "gold");
-      showToast("👑 ختام المسك: آخر سؤال في المسابقة يستحق 5 نقاط كاملة تقديراً للاجتهاد!", "fa-crown", 4000);
+      showFloatingCardPill("ختام المسك (5 نقاط كاملة)", "fa-crown", "gold");
+      showToast("ختام المسك: آخر سؤال في المسابقة يستحق 5 نقاط كاملة تقديراً للاجتهاد!", "fa-crown", 4000);
       break;
 
     default:
       registerActiveEffect(card, {});
-      showFloatingCardPill(`تفعيل «${card.title}» ✨`, card.icon || "fa-bolt", "gold");
-      showToast(`✨ تم تفعيل بطاقة: «${card.title}»!`, card.icon, 3000);
+      showFloatingCardPill(`تفعيل «${card.title}»`, card.icon || "fa-bolt", "gold");
+      showToast(`تم تفعيل بطاقة: «${card.title}»!`, card.icon, 3000);
       break;
   }
 
@@ -10098,7 +10132,7 @@ function renderSupervisorCardsCatalog(activeFilter = "all", searchQuery = "") {
               <i class="fa-solid ${card.icon}"></i>
             </div>
             <div style="display:flex;gap:4px;flex-wrap:wrap;">
-              <span class="wallet-card-tag">${card.type === 'buff' ? 'ميزة إيجابية 🌟' : 'مخاطرة ذكية ⚡'}</span>
+              <span class="wallet-card-tag">${card.type === 'buff' ? 'ميزة إيجابية' : 'مخاطرة ذكية'}</span>
               <span class="badge-scope-pill" style="font-size:11px;background:#f3e8ff;color:#7e22ce;padding:3px 8px;border-radius:12px;font-weight:800;">${scopeLabel}</span>
             </div>
           </div>
@@ -10116,7 +10150,7 @@ function renderSupervisorCardsCatalog(activeFilter = "all", searchQuery = "") {
         </div>
 
         <button class="catalog-card-grant-btn" data-card-id="${card.id}" ${!hasLiveRoom ? 'disabled title="يتطلب وجود غرفة حية مع متسابق نشط لمنح البطاقة"' : ''}>
-          <i class="fa-solid fa-gift"></i> ${hasLiveRoom ? 'منح البطاقة لمحفظة المتسابق الحالي 🎁' : 'منح للمتسابق (يلزم غرفة نشطة)'}
+          <i class="fa-solid fa-gift"></i> ${hasLiveRoom ? 'منح البطاقة لمحفظة المتسابق الحالي' : 'منح للمتسابق (يلزم غرفة نشطة)'}
         </button>
       </div>
     `;
@@ -10143,7 +10177,7 @@ function renderSupervisorCardsCatalog(activeFilter = "all", searchQuery = "") {
         lastUpdated: serverTimestamp()
       }).catch(err => console.warn("Grant card error:", err));
 
-      showToast(`🎁 قام المشرف بمنح بطاقة «${targetCard.title}» لمحفظة المتسابق!`, targetCard.icon, 3500);
+      showToast(`قام المشرف بمنح بطاقة «${targetCard.title}» لمحفظة المتسابق!`, targetCard.icon, 3500);
     });
   });
 }
@@ -10175,9 +10209,9 @@ btnTriggerTacticalCards?.addEventListener("click", () => {
     showToast("المشرف فقط هو المخوّل بفتح جولة البطاقات التكتيكية يدوياً", "fa-lock");
     return;
   }
-  showToast("⚡ جاري فتح جولة البطاقات التكتيكية الثلاثية الأبعاد...", "fa-bolt", 2500);
+  showToast("جاري فتح جولة البطاقات التكتيكية الثلاثية الأبعاد...", "fa-bolt", 2500);
   triggerTacticalCardsModal(() => {
-    showToast("✨ تم إكمال جولة البطاقات التكتيكية بنجاح!", "fa-circle-check");
+    showToast("تم إكمال جولة البطاقات التكتيكية بنجاح!", "fa-circle-check");
   });
 });
 
@@ -10454,7 +10488,7 @@ function showHonorBoardModal(openNextStudentAfter = false, onDone = null, highli
       }
     });
 
-    showToast(`🚀 تقدم مذهل! المتسابق (${highlightStudentName}) تجاوز ${climbCount} ${climbCount === 1 ? 'منافس' : 'منافسين'} وصعد للمركز #${newRank}!`, "fa-rocket", 3500);
+    showToast(`تقدم مذهل! المتسابق (${highlightStudentName}) تجاوز ${climbCount} ${climbCount === 1 ? 'منافس' : 'منافسين'} وصعد للمركز #${newRank}!`, "fa-rocket", 3500);
   }
 
   if (honorCountdownInterval) {
@@ -10573,11 +10607,11 @@ document.getElementById("btnHeaderCloudSync")?.addEventListener("click", async (
     const stats = await loadCloudData(true);
     soundFX?.click();
     if (stats.isOffline) {
-      showToast(`☁️ تم الحفظ والمزامنة محلياً (${stats.users} حساب، ${stats.quizzes} اختبار، ${stats.rooms} غرفة)`, "fa-cloud");
-      showRealtimeSyncPill(`⚡ وضع الاستعداد: تم تحديث الواجهات بالبيانات المحفوظة بنجاح`);
+      showToast(`تم الحفظ والمزامنة محلياً (${stats.users} حساب، ${stats.quizzes} اختبار، ${stats.rooms} غرفة)`, "fa-cloud");
+      showRealtimeSyncPill(`وضع الاستعداد: تم تحديث الواجهات بالبيانات المحفوظة بنجاح`);
     } else {
-      showToast(`✅ تم تحديث السحابة بنجاح! (${stats.users} حساب، ${stats.quizzes} اختبار، ${stats.rooms} غرفة نشطة)`, "fa-cloud-arrow-down");
-      showRealtimeSyncPill(`☁️ اكتمل التحديث السحابي: ${stats.users} حساب · ${stats.quizzes} اختبار · ${stats.rooms} غرفة نشطة`);
+      showToast(`تم تحديث السحابة بنجاح! (${stats.users} حساب، ${stats.quizzes} اختبار، ${stats.rooms} غرفة نشطة)`, "fa-cloud-arrow-down");
+      showRealtimeSyncPill(`اكتمل التحديث السحابي: ${stats.users} حساب · ${stats.quizzes} اختبار · ${stats.rooms} غرفة نشطة`);
     }
   } catch (err) {
     console.error("Cloud sync button notice:", err);
@@ -10604,9 +10638,9 @@ document.getElementById("btnSupervisorRefreshCloud")?.addEventListener("click", 
     const stats = await loadCloudData(true);
     soundFX?.click();
     if (stats.isOffline) {
-      showToast(`☁️ تم تحديث اللوحة بالبيانات المحفوظة (${stats.users} حساب، ${stats.quizzes} اختبار)`, "fa-cloud");
+      showToast(`تم تحديث اللوحة بالبيانات المحفوظة (${stats.users} حساب، ${stats.quizzes} اختبار)`, "fa-cloud");
     } else {
-      showToast(`✅ تم تحديث جميع البيانات من السحابة (${stats.users} حساب، ${stats.quizzes} اختبار، ${stats.rooms} غرفة)`, "fa-circle-check");
+      showToast(`تم تحديث جميع البيانات من السحابة (${stats.users} حساب، ${stats.quizzes} اختبار، ${stats.rooms} غرفة)`, "fa-circle-check");
     }
   } catch (err) {
     console.error("Supervisor cloud refresh notice:", err);
@@ -10914,7 +10948,7 @@ function startStudentPractice(quiz) {
     // تفعيل زر البطاقات التكتيكية في التدريب
     runnerContent.querySelector(".btn-practice-trigger-card")?.addEventListener("click", () => {
       triggerTacticalCardsModal(() => {
-        showToast("✨ تم تطبيق ميزة البطاقة في تدريبك الحالي بنجاح!", "fa-bolt");
+        showToast("تم تطبيق ميزة البطاقة في تدريبك الحالي بنجاح!", "fa-bolt");
       });
     });
 
@@ -10986,7 +11020,7 @@ function startStudentPractice(quiz) {
                 answeredQuestions.add(qKey);
                 earnedScore += (q.points || 5);
                 try { soundFX.correct(); } catch (e) {}
-                showToast(`✅ تم توصيل جميع الأزواج بنجاح! (+${q.points || 5} درجات)`, "fa-circle-check");
+                showToast(`تم توصيل جميع الأزواج بنجاح! (+${q.points || 5} درجات)`, "fa-circle-check");
               }
             } else {
               // خطأ
@@ -11063,7 +11097,7 @@ function startStudentPractice(quiz) {
         document.querySelector(`.btn-prac-check-order[data-sec="${secIdx}"][data-q="${qIdx}"]`)?.addEventListener("click", () => {
           const placedChips = Array.from(slotsEl.querySelectorAll(".ordering-chip")).map(c => c.getAttribute("data-text"));
           if (placedChips.length !== targetItems.length) {
-            showToast("⚠️ يرجى ترتيب جميع الكلمات أولاً!", "fa-triangle-exclamation");
+            showToast("يرجى ترتيب جميع الكلمات أولاً", "fa-triangle-exclamation");
             return;
           }
           const isCorrect = placedChips.every((w, i) => w === targetItems[i]);
@@ -11075,12 +11109,12 @@ function startStudentPractice(quiz) {
               answeredQuestions.add(qKey);
               earnedScore += (q.points || 5);
             }
-            showToast(`✅ أحسنت! الترتيب متقن وصحيح (+${q.points || 5} درجات)`, "fa-circle-check");
+            showToast(`أحسنت! الترتيب متقن وصحيح (+${q.points || 5} درجات)`, "fa-circle-check");
           } else {
             try { soundFX.wrong(); } catch (err) {}
             slotsEl.classList.add("shake-wrong");
             setTimeout(() => slotsEl.classList.remove("shake-wrong"), 500);
-            showToast("❌ الترتيب غير دقيق، حاول مرة أخرى", "fa-xmark");
+            showToast("الترتيب غير دقيق، حاول مرة أخرى", "fa-xmark");
           }
         });
       }
@@ -11198,6 +11232,7 @@ async function initApp() {
   if (directLoginSucceeded) {
     try {
       setupRealtimeCloudListeners();
+    setupPlatformThemedStickers();
     } finally {
       hideGlobalLoader();
     }
@@ -11248,7 +11283,7 @@ async function initApp() {
     showView("hero");
   } else {
     // إشعار خفيف غير معطل للشاشة بالمزامنة السحابية اللحظية
-    showRealtimeSyncPill("⚡ جاري مزامنة أحدث البيانات من السحابة...");
+    showRealtimeSyncPill("جاري مزامنة أحدث البيانات من السحابة...");
   }
 
   try {

@@ -558,15 +558,15 @@ export function getIncompatibilityReason(card, question, context = {}) {
 export function formatCardScopeLabel(scope) {
   switch (scope) {
     case "instant":
-      return "فورية لسؤال واحد ⚡";
+      return "فورية لسؤال واحد";
     case "cycle":
-      return "مستمرة حتى الدورة التالية 🔄";
+      return "مستمرة حتى الدورة التالية";
     case "permanent":
-      return "مكافأة دائمة 🏅";
+      return "مكافأة دائمة";
     case "match":
-      return "مستمرة حتى نهاية المسابقة 🛡️";
+      return "مستمرة حتى نهاية المسابقة";
     default:
-      return "فورية ⚡";
+      return "فورية";
   }
 }
 

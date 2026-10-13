@@ -514,7 +514,7 @@
                   <i class="fa-solid fa-pen-to-square"></i> إنشاء اختبار يدوي
                 </button>
                 <button id="btnOpenAIQuizModal" class="btn-duo-blue">
-                  <i class="fa-solid fa-wand-magic-sparkles"></i> توليد بالذكاء الاصطناعي ⚡
+                  <i class="fa-solid fa-wand-magic-sparkles"></i> توليد بالذكاء الاصطناعي
                 </button>
               </div>
             </div>
@@ -607,14 +607,14 @@
               </div>
 
               <div class="catalog-filters-row">
-                <button class="filter-pill-btn active" data-filter="all">الكل (40) ✨</button>
-                <button class="filter-pill-btn" data-filter="buff">مزايا إيجابية (30) 🌟</button>
-                <button class="filter-pill-btn" data-filter="risk">مخاطرات ذكية (10) ⚡</button>
-                <button class="filter-pill-btn" data-filter="instant">فورية لسؤال ⚡</button>
-                <button class="filter-pill-btn" data-filter="cycle">مستمرة للدورة 🔄</button>
-                <button class="filter-pill-btn" data-filter="timer">الوقت والمؤقت ⏱️</button>
-                <button class="filter-pill-btn" data-filter="score">النقاط والمكافآت 🏆</button>
-                <button class="filter-pill-btn" data-filter="help">المساعدة والتيسير 🤝</button>
+                <button class="filter-pill-btn active" data-filter="all"><i class="fa-solid fa-layer-group"></i> الكل (40)</button>
+                <button class="filter-pill-btn" data-filter="buff"><i class="fa-solid fa-star"></i> مزايا إيجابية (30)</button>
+                <button class="filter-pill-btn" data-filter="risk"><i class="fa-solid fa-bolt"></i> مخاطرات ذكية (10)</button>
+                <button class="filter-pill-btn" data-filter="instant"><i class="fa-solid fa-stopwatch"></i> فورية لسؤال</button>
+                <button class="filter-pill-btn" data-filter="cycle"><i class="fa-solid fa-arrows-rotate"></i> مستمرة للدورة</button>
+                <button class="filter-pill-btn" data-filter="timer"><i class="fa-solid fa-clock"></i> الوقت والمؤقت</button>
+                <button class="filter-pill-btn" data-filter="score"><i class="fa-solid fa-award"></i> النقاط والمكافآت</button>
+                <button class="filter-pill-btn" data-filter="help"><i class="fa-solid fa-handshake-angle"></i> المساعدة والتيسير</button>
               </div>
             </div>
 
@@ -852,7 +852,7 @@
                   </div>
                   <div class="wallet-card-texts">
                     <div class="wallet-card-text">محفظة البطاقات</div>
-                    <div class="wallet-card-hint">انقر للاستخدام ⚡</div>
+                    <div class="wallet-card-hint"><i class="fa-solid fa-layer-group"></i> انقر للاستخدام</div>
                   </div>
                 </div>
               </div>
@@ -894,9 +894,12 @@
             <!-- شريط البطاقات التكتيكية النشطة باللون البنفسجي الأنيق المعتمد -->
             <div id="stagePurpleActiveCardsBar" class="purple-active-cards-bar hidden"></div>
 
-            <!-- غطاء أنيميشن النتيجة الكبير (صح أخضر أو خطأ/انتهاء وقت أحمر طالع من تحت بجمالية فائقة) -->
+            <!-- غطاء أنيميشن النتيجة الكبير مع ستيكر تميمة المنصة بثيم نور البيان -->
             <div id="stageQuestionResultOverlay" class="question-result-overlay hidden">
               <div class="result-badge-anim-wrap">
+                <div id="resultMascotStickerWrap" class="result-mascot-sticker-wrap">
+                  <img id="resultMascotStickerImg" class="result-mascot-sticker-img" src="duo-lion.png" alt="ستيكر منصة نور البيان" />
+                </div>
                 <div class="result-badge-icon" id="resultOverlayIcon">
                   <i class="fa-solid fa-circle-check"></i>
                 </div>
@@ -944,6 +947,29 @@
               <!-- حاوية الخيارات التفاعلية للأسئلة العادية (MCQ / Ordering / Matching) -->
               <div id="stageInteractiveArea" class="interactive-question-area">
                 <!-- يتم تعبئة الخيارات ديناميكياً -->
+              </div>
+
+              <!-- شريط ملصقات التشجيع والتفاعل بثيم منصة نور البيان -->
+              <div id="stageThemedStickersBar" class="stage-themed-stickers-bar">
+                <span style="font-size:12px; font-weight:800; color:#475569; display:inline-flex; align-items:center; gap:5px;"><i class="fa-solid fa-sparkles" style="color:#eab308;"></i> ملصقات المنصة:</span>
+                <button type="button" class="themed-sticker-btn" data-sticker="quran" title="مصحف نور البيان المبارك">
+                  <i class="fa-solid fa-book-quran" style="color:#16a34a; font-size:16px;"></i> <span>نور القرآن</span>
+                </button>
+                <button type="button" class="themed-sticker-btn" data-sticker="lion" title="أسد نور البيان البطل">
+                  <img src="duo-lion.png" alt="أسد نور البيان" /> <span>بطل البيان</span>
+                </button>
+                <button type="button" class="themed-sticker-btn" data-sticker="crown" title="تاج الوقار القرآني">
+                  <i class="fa-solid fa-crown" style="color:#ca8a04; font-size:16px;"></i> <span>تاج الوقار</span>
+                </button>
+                <button type="button" class="themed-sticker-btn" data-sticker="crescent" title="هلال الإتقان المبارك">
+                  <i class="fa-solid fa-moon" style="color:#3b82f6; font-size:16px;"></i> <span>هلال الإتقان</span>
+                </button>
+                <button type="button" class="themed-sticker-btn" data-sticker="honor" title="وسام الشرف القرآني">
+                  <i class="fa-solid fa-award" style="color:#d97706; font-size:16px;"></i> <span>وسام الشرف</span>
+                </button>
+                <button type="button" class="themed-sticker-btn" data-sticker="dua" title="بركة وتوفيق">
+                  <i class="fa-solid fa-hands-praying" style="color:#059669; font-size:16px;"></i> <span>دعاء بالتوفيق</span>
+                </button>
               </div>
             </div>
 
@@ -1416,7 +1442,7 @@
 
           <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
             <button type="button" id="btnCopyAIEngineeredPrompt" class="btn-duo-blue" style="padding: 12px 22px;">
-              <i class="fa-solid fa-copy"></i> إنشاء ونسخ البرومبت الهندسي للذكاء الاصطناعي 📋
+              <i class="fa-solid fa-copy"></i> إنشاء ونسخ البرومبت الهندسي للذكاء الاصطناعي
             </button>
             <span id="promptCopyFeedback" style="font-size: 13px; font-weight: 800; color: var(--duo-green); display: none;">
               <i class="fa-solid fa-circle-check"></i> تم نسخ البرومبت بنجاح! الصقه في ChatGPT أو Gemini
@@ -1437,7 +1463,7 @@
 
           <div class="modal-actions-flex" style="margin-top: 14px;">
             <button type="button" id="btnImportPastedJsonQuiz" class="btn-duo-green" style="padding: 12px 24px;">
-              <i class="fa-solid fa-file-import"></i> استيراد وفتح الاختبار في المحرر فوراً 🚀
+              <i class="fa-solid fa-file-import"></i> استيراد وفتح الاختبار في المحرر فوراً
             </button>
             <button type="button" class="btn-duo-outline" data-close-modal="aiQuizModal">إلغاء</button>
           </div>
@@ -1584,7 +1610,7 @@
             <i class="fa-solid fa-repeat" style="color: #8b5cf6;"></i> تكرار ظهور البطاقات التكتيكية
           </label>
           <select id="roomCardFrequencySelect" class="form-control form-select" style="font-weight: 800;">
-            <option value="4" selected>كل 4 أسئلة (الافتراضي الموصى به) 🌟</option>
+            <option value="4" selected>كل 4 أسئلة (الافتراضي الموصى به)</option>
             <option value="1">كل سؤال (بعد كل سؤال مباشرة)</option>
             <option value="2">كل سؤالين (كل 2 أسئلة)</option>
             <option value="3">كل 3 أسئلة</option>
@@ -1660,7 +1686,7 @@
       <div style="width: 70px; height: 70px; border-radius: 50%; background: #fef08a; color: #ca8a04; display: inline-flex; align-items: center; justify-content: center; font-size: 32px; margin-bottom: 12px;">
         <i class="fa-solid fa-chalkboard-user"></i>
       </div>
-      <h3 style="font-size: 21px; font-weight: 900; color: #854d0e; margin-bottom: 6px;">📢 نافذة استشارة المعلم</h3>
+      <h3 style="font-size: 21px; font-weight: 900; color: #854d0e; margin-bottom: 6px;"><i class="fa-solid fa-chalkboard-user"></i> نافذة استشارة المعلم</h3>
       <p id="teacherHelpDescription" style="font-size: 14px; color: #475569; margin-bottom: 12px; line-height: 1.5;">
         المؤقت متوقف حالياً. يتم اختيار أحد المعلمين أو المشرفين المؤهلين لتقديم توجيه وإرشاد للمتسابق.
       </p>
@@ -1758,7 +1784,7 @@
           <i class="fa-solid fa-bolt"></i>
         </div>
       </div>
-      <div class="announcement-card-tag" id="announcementCardTag">⚡ تم اختيار بطاقة تكتيكية!</div>
+      <div class="announcement-card-tag" id="announcementCardTag"><i class="fa-solid fa-wand-magic-sparkles"></i> تم اختيار بطاقة تكتيكية!</div>
       <h2 class="announcement-card-title" id="announcementCardTitle">اسم البطاقة</h2>
       <div class="announcement-user-pill" id="announcementUserPill">
         <i class="fa-solid fa-user-graduate"></i> <span id="announcementUserName">المتسابق</span> قام باختيار هذه البطاقة
@@ -1864,7 +1890,7 @@
             <i class="fa-solid fa-repeat" style="color: #8b5cf6;"></i> تكرار ظهور البطاقات التكتيكية
           </label>
           <select id="settingsCardFrequencySelect" class="form-control form-select" style="font-weight: 800;">
-            <option value="4" selected>كل 4 أسئلة (الافتراضي الموصى به) 🌟</option>
+            <option value="4" selected>كل 4 أسئلة (الافتراضي الموصى به)</option>
             <option value="1">كل سؤال (بعد كل سؤال مباشرة)</option>
             <option value="2">كل سؤالين (كل 2 أسئلة)</option>
             <option value="3">كل 3 أسئلة</option>
@@ -2003,7 +2029,7 @@
   <!-- شريط مؤشر المزامنة السحابية اللحظي غير المزعج -->
   <div id="realtimeSyncPill" class="realtime-sync-pill hidden" aria-live="polite">
     <i class="fa-solid fa-arrows-rotate fa-spin"></i>
-    <span id="realtimeSyncText">تم استلام تحديث جديد من السحابة وتحديث البيانات فورياً ✓</span>
+    <span id="realtimeSyncText">تم استلام تحديث جديد من السحابة وتحديث البيانات فورياً</span>
   </div>
 
   <!-- عنصر التوست للإشعارات السريعة (نسخ الرابط المباشر، الحفظ) -->
