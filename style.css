@@ -8901,20 +8901,20 @@ button:disabled .fa-spin,
 }
 
 .team-intro-card.team-right {
-  animation: slideInFromRight 0.85s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: slideInFromRight 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .team-intro-card.team-left {
-  animation: slideInFromLeft 0.85s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: slideInFromLeft 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-/* خروج عكسي سلس (اليمين يذهب يساراً، واليسار يذهب يميناً) */
+/* خروج عكسي سلس وفوري (اليمين يذهب يساراً، واليسار يذهب يميناً) */
 .team-intro-card.reverse-exit-left {
-  animation: slideOutToLeft 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+  animation: slideOutToLeft 0.38s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
 }
 
 .team-intro-card.reverse-exit-right {
-  animation: slideOutToRight 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+  animation: slideOutToRight 0.38s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
 }
 
 @keyframes slideInFromRight {
@@ -9136,11 +9136,11 @@ button:disabled .fa-spin,
 }
 
 .team-rolling-card.animate-enter-flip {
-  animation: rollingCardEnter 0.95s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: rollingCardEnter 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .team-rolling-card.animate-exit-flip {
-  animation: rollingCardExit 0.75s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: rollingCardExit 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 @keyframes rollingCardEnter {

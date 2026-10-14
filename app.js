@@ -11850,40 +11850,30 @@ function runTeamEntranceCinematicShowcase() {
   overlay.classList.remove("hidden");
   try { soundFX.celebrate(); } catch (e) {}
 
-  // تسليط الضوء الذهبي المتتابع على كل طالب لمدة 4 ثوانٍ لكل فريق
-  let sIdxA = 0;
+  // تسليط الضوء السريع والحماسي المتزامن على أعضاء الفريقين
+  let sIdx = 0;
   const membersA = teamA.members || [];
   const membersB = teamB.members || [];
-  const delayA = Math.max(700, Math.floor(3800 / Math.max(1, membersA.length)));
-  const delayB = Math.max(700, Math.floor(3800 / Math.max(1, membersB.length)));
+  const maxMembers = Math.max(membersA.length, membersB.length);
+  const quickDelay = 180;
 
-  function highlightNextA() {
-    membersA.forEach((_, i) => {
-      document.getElementById(`spotlight_A_${i}`)?.classList.remove("highlighted");
-    });
-    if (sIdxA < membersA.length) {
-      document.getElementById(`spotlight_A_${sIdxA}`)?.classList.add("highlighted");
-      try { soundFX.btnClick(); } catch (e) {}
-      sIdxA++;
-      setTimeout(highlightNextA, delayA);
-    } else {
-      let sIdxB = 0;
-      function highlightNextB() {
-        membersB.forEach((_, i) => {
-          document.getElementById(`spotlight_B_${i}`)?.classList.remove("highlighted");
-        });
-        if (sIdxB < membersB.length) {
-          document.getElementById(`spotlight_B_${sIdxB}`)?.classList.add("highlighted");
-          try { soundFX.btnClick(); } catch (e) {}
-          sIdxB++;
-          setTimeout(highlightNextB, delayB);
-        }
+  function highlightWave() {
+    if (sIdx < maxMembers) {
+      if (sIdx < membersA.length) {
+        document.getElementById(`spotlight_A_${sIdx}`)?.classList.add("highlighted");
       }
-      highlightNextB();
+      if (sIdx < membersB.length) {
+        document.getElementById(`spotlight_B_${sIdx}`)?.classList.add("highlighted");
+      }
+      try { soundFX.btnClick(); } catch (e) {}
+      sIdx++;
+      setTimeout(highlightWave, quickDelay);
+    } else {
+      document.querySelectorAll(".student-spotlight-item").forEach(el => el.classList.add("highlighted"));
     }
   }
 
-  setTimeout(highlightNextA, 900);
+  setTimeout(highlightWave, 250);
 }
 
 document.getElementById("btnLaunchTeamContest")?.addEventListener("click", async () => {
@@ -11904,7 +11894,7 @@ async function executeTeamContestLaunch() {
 
   if (controls) controls.classList.add("hidden");
 
-  // خروج البطاقات بالعكس (اليمين يذهب يساراً، واليسار يذهب يميناً)
+  // خروج البطاقات بالعكس فورياً (اليمين يذهب يساراً، واليسار يذهب يميناً)
   if (cardA) {
     cardA.classList.remove("team-right");
     cardA.classList.add("reverse-exit-left");
@@ -11946,10 +11936,10 @@ async function executeTeamContestLaunch() {
             await saveRooms(currentLiveRoom);
             launchTeamRound(1);
           }
-        }, 800);
+        }, 400);
       }
     }, 1000);
-  }, 750);
+  }, 350);
 }
 
 // --------------------------------------------------------
@@ -12002,10 +11992,10 @@ function showTeamRoundBanner(roundNum, onComplete) {
   setTimeout(() => {
     overlay.classList.add("hidden");
     if (typeof onComplete === "function") onComplete();
-  }, 2800);
+  }, 1300);
 }
 
-// البطاقة الدوارة لاختيار الفريق والطالب (تتقلب وتتدحرج من اليمين للمنتصف، تظهر اسم الفريق، ثم تتلاشى لاختيار طالب عشوائي بروليت متحرك، ثم تتشقلب لليسار)
+// البطاقة الدوارة لاختيار الفريق والطالب (تتقلب وتتدحرج من اليمين للمنتصف سريعاً، تظهر اسم الفريق، ثم روليت سريع لاختيار الطالب، ثم تتشقلب لليسار)
 function showTeamRollingStudentCard(team, studentName, onComplete) {
   const wrapper = document.getElementById("teamFlippingModalWrapper");
   const card = document.getElementById("teamRollingCard");
@@ -12043,21 +12033,20 @@ function showTeamRollingStudentCard(team, studentName, onComplete) {
   if (studentSubhead) studentSubhead.textContent = "جاري سحب المتسابق للإجابة...";
   if (targetStudent) targetStudent.textContent = "جاري السحب...";
 
-  // إظهار النافذة وبدء دخول البطاقة المتدحرجة من اليمين للمنتصف
+  // إظهار النافذة وبدء دخول البطاقة المتدحرجة من اليمين للمنتصف سريعاً
   wrapper.classList.remove("hidden");
   card.className = "team-rolling-card animate-enter-flip";
   try { soundFX.pop(); } catch (e) {}
 
-  // بعد استقرار البطاقة في المنتصف (850ms)، إبقاء اسم الفريق لحظة ثم الانتقال لاختيار الطالب
+  // بعد استقرار البطاقة في المنتصف (350ms)، إبقاء اسم الفريق لحظة وجيزة ثم الانتقال لاختيار الطالب
   setTimeout(() => {
     try { soundFX.whoosh(); } catch (e) {}
 
-    // انتقال سلس من اسم الفريق إلى مرحلة الروليت لاختيار الطالب
     setTimeout(() => {
       if (phaseTeam) phaseTeam.classList.add("hidden");
       if (phaseStudent) phaseStudent.classList.remove("hidden");
 
-      // تشغيل روليت دوران أسماء طلاب الفريق بانميشن رائع وتناقص سرعة
+      // تشغيل روليت سريع وحماسي لأسماء طلاب الفريق
       const members = (team.members && team.members.length > 0) 
         ? team.members 
         : [{ name: studentName }];
@@ -12066,8 +12055,8 @@ function showTeamRollingStudentCard(team, studentName, onComplete) {
       if (!namesList.includes(studentName)) namesList.push(studentName);
 
       let step = 0;
-      const totalSteps = 12;
-      let delay = 60;
+      const totalSteps = 6;
+      let delay = 40;
 
       function spinNextStudent() {
         step++;
@@ -12076,10 +12065,10 @@ function showTeamRollingStudentCard(team, studentName, onComplete) {
         try { soundFX.btnClick(); } catch (e) {}
 
         if (step < totalSteps) {
-          delay += 18; // إبطاء تدريجي للدوران
+          delay += 14;
           setTimeout(spinNextStudent, delay);
         } else {
-          // التوقف النهائي على اسم الطالب المختار
+          // التوقف النهائي الحاسم على اسم الطالب المختار
           if (targetStudent) {
             targetStudent.innerHTML = `<i class="fa-solid fa-crown" style="color:#facc15;margin-left:6px;"></i> ${escapeHtml(studentName)}`;
           }
@@ -12087,7 +12076,7 @@ function showTeamRollingStudentCard(team, studentName, onComplete) {
           if (rouletteBox) rouletteBox.classList.add("settled");
           try { soundFX.correct(); } catch (e) {}
 
-          // إبقاء اسم الطالب ظاهراً للبطل والجميع ثم تشقلب البطاقة وخروجها لليسار
+          // إبقاء اسم الطالب ظاهراً للبطل ثم تشقلب البطاقة سريعاً وخروجها لليسار
           setTimeout(() => {
             card.className = "team-rolling-card animate-exit-flip";
             try { soundFX.pop(); } catch (e) {}
@@ -12095,14 +12084,14 @@ function showTeamRollingStudentCard(team, studentName, onComplete) {
             setTimeout(() => {
               wrapper.classList.add("hidden");
               if (typeof onComplete === "function") onComplete();
-            }, 750);
-          }, 1400);
+            }, 350);
+          }, 600);
         }
       }
 
       spinNextStudent();
-    }, 900);
-  }, 850);
+    }, 280);
+  }, 350);
 }
 
 // بطاقات الفرق الجانبية المتحركة (Score Flyers)
@@ -12170,12 +12159,24 @@ function executeNextTeamQuestion(qIndex) {
   const questions = currentLiveRoom.roundQuestions || [];
   if (questions.length === 0) return;
 
+  const isSup = currentUser && (currentUser.role === "supervisor" || isSupervisor(currentUser.name) || currentUser.name === currentLiveRoom?.leaderName);
+
   // فحص الانتقال للفقرة التالية
   const totalPerRound = 4;
   if (qIndex >= totalPerRound) {
     if (currentActiveTeamRound < 4) {
+      if (isSup) {
+        currentLiveRoom.currentTeamRound = currentActiveTeamRound + 1;
+        currentLiveRoom.currentQuestionIdx = 0;
+        currentLiveRoom.teamActiveSolver = null;
+        saveRooms(currentLiveRoom);
+      }
       launchTeamRound(currentActiveTeamRound + 1);
     } else {
+      if (isSup) {
+        currentLiveRoom.phase = "team_finale";
+        saveRooms(currentLiveRoom);
+      }
       showTeamGrandFinaleModal();
     }
     return;
@@ -12198,6 +12199,25 @@ function executeNextTeamQuestion(qIndex) {
     isRebound: false,
     qIndex: qIndex
   };
+
+  // المشرف هو قائد العرض: يكتب حالة السؤال والمتسابق للسحابة فوراً لتظهر عند الجميع بلحظتها وبدون أي تأخير
+  if (isSup) {
+    const solverStamp = Date.now();
+    window.lastHandledTeamSolverStartedAt = solverStamp;
+    currentLiveRoom.currentQuestionIdx = qIndex;
+    currentLiveRoom.currentTeamRound = currentActiveTeamRound;
+    currentLiveRoom.teamActiveSolver = {
+      teamId: targetTeam.id,
+      teamName: targetTeam.name,
+      teamColor: targetTeam.color,
+      studentName: chosenStudent.name,
+      qIndex: qIndex,
+      roundNum: currentActiveTeamRound,
+      isRebound: false,
+      startedAt: solverStamp
+    };
+    saveRooms(currentLiveRoom);
+  }
 
   showTeamRollingStudentCard(targetTeam, chosenStudent.name, () => {
     renderTeamQuestion(questions[qIndex % questions.length], qIndex);
@@ -12318,16 +12338,25 @@ async function handleTeamQuestionResult(isCorrect, choiceIdx, earnedPoints) {
     currentLiveRoom.teamPlayerScores = currentLiveRoom.teamPlayerScores || {};
     currentLiveRoom.teamPlayerScores[solverName] = (currentLiveRoom.teamPlayerScores[solverName] || 0) + earnedPoints;
 
+    currentLiveRoom.lastTeamAnswerEvent = {
+      isCorrect: true,
+      choiceIdx,
+      earnedPoints,
+      studentName: solverName,
+      winningTeamId: activeTeam.id,
+      timestamp: Date.now()
+    };
+
     await saveRooms(currentLiveRoom);
     updateTeamScoreFlyers(activeTeam.id, earnedPoints);
 
     setTimeout(() => {
       executeNextTeamQuestion(currentActiveTeamSolver.qIndex + 1);
-    }, 2500);
+    }, 1000);
   } else {
     // إجابة خاطئة:
     if (currentRound === 1 && !currentActiveTeamSolver.isRebound) {
-      // الفقرة 1: رد الفعل! منح الفرصة للفريق الخصم
+      // الفقرة 1: رد الفعل! منح الفرصة فوراً للفريق الخصم
       const reboundOverlay = document.getElementById("reboundBannerOverlay");
       const reboundText = document.getElementById("reboundBannerText");
       const oppMembers = oppTeam.members || [];
@@ -12347,31 +12376,67 @@ async function handleTeamQuestionResult(isCorrect, choiceIdx, earnedPoints) {
         qIndex: currentActiveTeamSolver.qIndex
       };
 
+      currentLiveRoom.teamActiveSolver = {
+        teamId: oppTeam.id,
+        teamName: oppTeam.name,
+        teamColor: oppTeam.color,
+        studentName: oppStudent.name,
+        qIndex: currentActiveTeamSolver.qIndex,
+        roundNum: 1,
+        isRebound: true,
+        startedAt: Date.now()
+      };
+
+      currentLiveRoom.lastTeamAnswerEvent = {
+        isCorrect: false,
+        isRebound: true,
+        reboundTeamName: oppTeam.name,
+        reboundStudentName: oppStudent.name,
+        timestamp: Date.now()
+      };
+      await saveRooms(currentLiveRoom);
+
       setTimeout(() => {
         reboundOverlay?.classList.add("hidden");
         const questions = currentLiveRoom.roundQuestions || [];
         renderTeamQuestion(questions[currentActiveTeamSolver.qIndex % questions.length], currentActiveTeamSolver.qIndex);
-      }, 2600);
+      }, 1400);
     } else if (currentRound === 2) {
       // الفقرة 2: احذر! خصم كامل النقاط من رصيد الفريق
       currentLiveRoom.teamScores = currentLiveRoom.teamScores || {};
       const curScore = currentLiveRoom.teamScores[activeTeam.id] || 0;
       currentLiveRoom.teamScores[activeTeam.id] = Math.max(0, curScore - earnedPoints);
+
+      currentLiveRoom.lastTeamAnswerEvent = {
+        isCorrect: false,
+        penalty: true,
+        teamId: activeTeam.id,
+        teamName: activeTeam.name,
+        deductedPoints: earnedPoints,
+        timestamp: Date.now()
+      };
       await saveRooms(currentLiveRoom);
 
-      showToast(`⚠️ فقرة احذر: تم خصم ${earnedPoints} درجات من رصيد ${activeTeam.name}!`, "fa-triangle-exclamation", 3500);
+      showToast(`⚠️ فقرة احذر: تم خصم ${earnedPoints} درجات من رصيد ${activeTeam.name}!`, "fa-triangle-exclamation", 2200);
       updateTeamScoreFlyers();
 
       setTimeout(() => {
         executeNextTeamQuestion(currentActiveTeamSolver.qIndex + 1);
-      }, 2500);
+      }, 1000);
     } else {
-      // لا نقاط لأحد والانتقال للسؤال التالي
-      showToast("❌ لم يتم احتساب نقاط لهذا السؤال — استعدوا للسؤال القادم!", "fa-circle-xmark", 2500);
+      // لا نقاط لأحد والانتقال السريع للسؤال التالي
+      currentLiveRoom.lastTeamAnswerEvent = {
+        isCorrect: false,
+        timestamp: Date.now()
+      };
+      await saveRooms(currentLiveRoom);
+
+      showToast("❌ لم يتم احتساب نقاط لهذا السؤال — استعدوا للسؤال القادم!", "fa-circle-xmark", 1800);
       updateTeamScoreFlyers();
+
       setTimeout(() => {
         executeNextTeamQuestion(currentActiveTeamSolver.qIndex + 1);
-      }, 2500);
+      }, 1000);
     }
   }
 }
@@ -12472,10 +12537,25 @@ function syncTeamStageRealtime(room) {
     return;
   }
 
-  // إذا كان المستخدم طالباً أو عارضاً أو غير المشرف، وتغير السؤال الحالي
-  if (!isSup && room.currentQuestionIdx !== undefined && room.currentQuestionIdx !== window.lastSyncedTeamQIdx) {
-    window.lastSyncedTeamQIdx = room.currentQuestionIdx;
-    executeNextTeamQuestion(room.currentQuestionIdx);
+  // مزامنة فورية ومطابقة تامة لاختيار السؤال والمتسابق الذي يظهر عند المشرف ليعرض عند الجميع فوراً
+  if (!isSup && room.teamActiveSolver && room.teamActiveSolver.startedAt && room.teamActiveSolver.startedAt !== window.lastHandledTeamSolverStartedAt) {
+    window.lastHandledTeamSolverStartedAt = room.teamActiveSolver.startedAt;
+    currentActiveTeamRound = room.teamActiveSolver.roundNum || 1;
+    const targetTeam = room.teams?.find(t => t.id === room.teamActiveSolver.teamId) || room.teams?.[0] || { name: room.teamActiveSolver.teamName, color: room.teamActiveSolver.teamColor || "blue" };
+    const oppTeam = room.teams?.find(t => t.id !== targetTeam.id) || room.teams?.[1];
+
+    currentActiveTeamSolver = {
+      team: targetTeam,
+      opponentTeam: oppTeam,
+      studentName: room.teamActiveSolver.studentName,
+      isRebound: room.teamActiveSolver.isRebound || false,
+      qIndex: room.teamActiveSolver.qIndex
+    };
+
+    const questions = room.roundQuestions || [];
+    showTeamRollingStudentCard(targetTeam, room.teamActiveSolver.studentName, () => {
+      renderTeamQuestion(questions[room.teamActiveSolver.qIndex % questions.length], room.teamActiveSolver.qIndex);
+    });
   }
 
   // مزامنة أحداث الإجابة للجميع (كإشعار رد الفعل أو الفوز)
@@ -12483,6 +12563,18 @@ function syncTeamStageRealtime(room) {
     window.lastHandledTeamAnswerTs = room.lastTeamAnswerEvent.timestamp;
     if (room.lastTeamAnswerEvent.winningTeamId) {
       updateTeamScoreFlyers(room.lastTeamAnswerEvent.winningTeamId, room.lastTeamAnswerEvent.earnedPoints || 5);
+    }
+    if (room.lastTeamAnswerEvent.isRebound) {
+      const reboundOverlay = document.getElementById("reboundBannerOverlay");
+      const reboundText = document.getElementById("reboundBannerText");
+      if (reboundText) {
+        reboundText.textContent = `فرصة رد الفعل! السؤال ينتقل إلى ${room.lastTeamAnswerEvent.reboundTeamName} - البطل ${room.lastTeamAnswerEvent.reboundStudentName}!`;
+      }
+      reboundOverlay?.classList.remove("hidden");
+      try { soundFX.pop(); } catch (e) {}
+      setTimeout(() => {
+        reboundOverlay?.classList.add("hidden");
+      }, 1400);
     }
   }
 }
