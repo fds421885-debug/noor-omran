@@ -11758,22 +11758,71 @@ function renderTeamLobbyInfo(room) {
 // --------------------------------------------------------
 let isTeamEntranceActive = false;
 
+// --------------------------------------------------------
+// استخراج وتأمين توزيع أسئلة الاختبار كاملة بالتساوي على الفقرات الأربع
+// --------------------------------------------------------
+function ensureTeamQuestionsPopulated(room) {
+  if (!room || !room.isTeamMatch) return;
+  if (!room.roundQuestions || !Array.isArray(room.roundQuestions) || room.roundQuestions.length === 0 || !room.roundQuestionConfig) {
+    const quiz = (room.quizData && room.quizData.sections) 
+      ? room.quizData 
+      : (quizzesCache.find(q => q.id === room.quizId) || quizzesCache[0]);
+    
+    let allQ = [];
+    if (quiz && Array.isArray(quiz.sections)) {
+      quiz.sections.forEach(s => {
+        (s.questions || []).forEach(q => allQ.push({ ...q, sectionName: s.sectionName }));
+      });
+    }
+
+    if (allQ.length === 0) {
+      INITIAL_QUIZZES.forEach(qz => {
+        (qz.sections || []).forEach(s => {
+          (s.questions || []).forEach(q => allQ.push({ ...q, sectionName: s.sectionName }));
+        });
+      });
+    }
+
+    // ضمان وجود 4 أسئلة على الأقل لتغطية الفقرات الأربع بالتساوي دون انقطاع
+    if (allQ.length > 0 && allQ.length < 4) {
+      const origQ = [...allQ];
+      while (allQ.length < 4) {
+        allQ.push(...origQ.slice(0, 4 - allQ.length));
+      }
+    }
+
+    allQ = allQ.sort(() => Math.random() - 0.5);
+
+    const totalQ = allQ.length;
+    const baseCount = Math.floor(totalQ / 4);
+    const remainder = totalQ % 4;
+
+    const roundConfig = {};
+    let currentStart = 0;
+    for (let r = 1; r <= 4; r++) {
+      const count = Math.max(1, baseCount + (r <= remainder ? 1 : 0));
+      roundConfig[r] = {
+        start: currentStart,
+        count: count
+      };
+      currentStart += count;
+    }
+
+    room.roundQuestions = allQ;
+    room.drawnQuestions = allQ;
+    room.roundQuestionConfig = roundConfig;
+  }
+}
+
 async function startTeamContestLobbyToEntrance() {
   if (!currentLiveRoom || !currentLiveRoom.isTeamMatch) return;
-  const quiz = (currentLiveRoom?.quizData && currentLiveRoom.quizData.sections) 
-    ? currentLiveRoom.quizData 
-    : (quizzesCache.find(q => q.id === currentLiveRoom?.quizId) || quizzesCache[0]);
-  
-  let allQ = [];
-  if (quiz && Array.isArray(quiz.sections)) {
-    quiz.sections.forEach(s => {
-      (s.questions || []).forEach(q => allQ.push({ ...q, sectionName: s.sectionName }));
-    });
-  }
-  // خلط متوازن للأسئلة
-  allQ = allQ.sort(() => Math.random() - 0.5);
-  currentLiveRoom.roundQuestions = allQ;
-  currentLiveRoom.drawnQuestions = allQ;
+  ensureTeamQuestionsPopulated(currentLiveRoom);
+
+  currentLiveRoom.teamMemberTurnPool = {
+    [currentLiveRoom.teams[0].id]: [],
+    [currentLiveRoom.teams[1].id]: []
+  };
+  currentLiveRoom.lastPickedStudentByTeam = {};
   currentLiveRoom.phase = "team_intro";
   currentLiveRoom.teamIntroTimestamp = Date.now();
   currentLiveRoom.currentTeamRound = 1;
@@ -12145,7 +12194,97 @@ function updateTeamScoreFlyers(winningTeamId = null, deltaPoints = 0) {
 // تشغيل الجولة الحالية للمسابقة
 // --------------------------------------------------------
 let currentActiveTeamSolver = null;
-let currentActiveTeamRound = 1;
+let currentActiveTeamRound = null;
+
+// سحب عشوائي عادل لطلاب الفريق يضمن مشاركة الجميع ومنع تكرار نفس الطالب
+function pickFairRandomStudentForTeam(team, room) {
+  let members = team?.members || [];
+  if (!Array.isArray(members) || members.length === 0) {
+    members = [
+      { name: `بطل ${team?.name || 'الفريق'} (1)` },
+      { name: `بطل ${team?.name || 'الفريق'} (2)` }
+    ];
+  }
+  if (members.length === 1) {
+    const single = members[0];
+    return typeof single === "object" ? single : { name: single };
+  }
+
+  room.teamMemberTurnPool = room.teamMemberTurnPool || {};
+  let called = room.teamMemberTurnPool[team.id] || [];
+
+  // ترشيح الطلاب الذين لم يشاركوا في الدورة الحالية
+  let available = members.filter(m => {
+    const mName = typeof m === "object" && m.name ? m.name : String(m);
+    return !called.includes(mName);
+  });
+
+  // إذا شارك جميع طلاب الفريق، تصفير السجل والبدء في دورة جديدة
+  if (available.length === 0) {
+    called = [];
+    room.teamMemberTurnPool[team.id] = [];
+    available = [...members];
+  }
+
+  // منع تكرار نفس الطالب مرتين متتاليتين إذا وُجد غيره
+  const lastPicked = room.lastPickedStudentByTeam?.[team.id];
+  if (available.length > 1 && lastPicked) {
+    const poolWithoutLast = available.filter(m => {
+      const mName = typeof m === "object" && m.name ? m.name : String(m);
+      return mName !== lastPicked;
+    });
+    if (poolWithoutLast.length > 0) {
+      available = poolWithoutLast;
+    }
+  }
+
+  // قرعة عشوائية حقيقية
+  const randIdx = Math.floor(Math.random() * available.length);
+  const chosenStudent = available[randIdx];
+  const chosenName = typeof chosenStudent === "object" && chosenStudent.name ? chosenStudent.name : String(chosenStudent);
+
+  // تسجيل الاختيار في السجل
+  called.push(chosenName);
+  room.teamMemberTurnPool[team.id] = called;
+  room.lastPickedStudentByTeam = room.lastPickedStudentByTeam || {};
+  room.lastPickedStudentByTeam[team.id] = chosenName;
+
+  return typeof chosenStudent === "object" ? chosenStudent : { name: chosenName };
+}
+
+// احتساب عدد أسئلة الفقرة الحالية بناءً على توزيع بنك أسئلة الاختبار
+function getTeamRoundQuestionCount(roundNum, room) {
+  if (room && room.roundQuestionConfig && (room.roundQuestionConfig[roundNum] || room.roundQuestionConfig[String(roundNum)])) {
+    const cfg = room.roundQuestionConfig[roundNum] || room.roundQuestionConfig[String(roundNum)];
+    return cfg.count;
+  }
+  const totalQ = room?.roundQuestions?.length || 0;
+  if (totalQ >= 4) {
+    const base = Math.floor(totalQ / 4);
+    const rem = totalQ % 4;
+    return Math.max(1, base + (roundNum <= rem ? 1 : 0));
+  }
+  return 1;
+}
+
+// احتساب رقم السؤال التسلسلي الشامل في الاختبار
+function getTeamQuestionGlobalIndex(roundNum, qIndexInRound, room) {
+  if (room && room.roundQuestionConfig && (room.roundQuestionConfig[roundNum] || room.roundQuestionConfig[String(roundNum)])) {
+    const cfg = room.roundQuestionConfig[roundNum] || room.roundQuestionConfig[String(roundNum)];
+    return cfg.start + qIndexInRound;
+  }
+  const totalQ = room?.roundQuestions?.length || 0;
+  if (totalQ >= 4) {
+    let offset = 0;
+    const base = Math.floor(totalQ / 4);
+    const rem = totalQ % 4;
+    for (let r = 1; r < roundNum; r++) {
+      offset += base + (r <= rem ? 1 : 0);
+    }
+    return offset + qIndexInRound;
+  }
+  return qIndexInRound;
+}
 
 function launchTeamRound(roundNum) {
   currentActiveTeamRound = roundNum;
@@ -12160,22 +12299,25 @@ function launchTeamRound(roundNum) {
 
 function executeNextTeamQuestion(qIndex) {
   if (!currentLiveRoom || !currentLiveRoom.isTeamMatch) return;
+  ensureTeamQuestionsPopulated(currentLiveRoom);
   const questions = currentLiveRoom.roundQuestions || [];
   if (questions.length === 0) return;
 
   const isSup = currentUser && (currentUser.role === "supervisor" || isSupervisor(currentUser.name) || currentUser.name === currentLiveRoom?.leaderName);
 
-  // فحص الانتقال للفقرة التالية
-  const totalPerRound = 4;
-  if (qIndex >= totalPerRound) {
+  // فحص الانتقال للفقرة التالية وفق عدد أسئلة الفقرة الموزعة
+  const countInThisRound = getTeamRoundQuestionCount(currentActiveTeamRound, currentLiveRoom);
+  if (qIndex >= countInThisRound) {
     if (currentActiveTeamRound < 4) {
+      const nextRound = currentActiveTeamRound + 1;
+      currentActiveTeamRound = nextRound;
       if (isSup) {
-        currentLiveRoom.currentTeamRound = currentActiveTeamRound + 1;
+        currentLiveRoom.currentTeamRound = nextRound;
         currentLiveRoom.currentQuestionIdx = 0;
         currentLiveRoom.teamActiveSolver = null;
         saveRooms(currentLiveRoom);
       }
-      launchTeamRound(currentActiveTeamRound + 1);
+      launchTeamRound(nextRound);
     } else {
       if (isSup) {
         currentLiveRoom.phase = "team_finale";
@@ -12193,15 +12335,20 @@ function executeNextTeamQuestion(qIndex) {
   // تحديد الفريق المستهدف بالتناوب
   const targetTeam = (qIndex % 2 === 0) ? teamA : teamB;
   const opponentTeam = (qIndex % 2 === 0) ? teamB : teamA;
-  const members = targetTeam.members || [];
-  const chosenStudent = members[qIndex % Math.max(1, members.length)] || { name: "المتسابق" };
+
+  // اختيار عشوائي عادل للطالب يضمن عدم التكرار ومشاركة الجميع
+  const chosenStudent = pickFairRandomStudentForTeam(targetTeam, currentLiveRoom);
+
+  // احتساب رقم السؤال التسلسلي الشامل في بنك أسئلة الاختبار
+  const globalQIdx = getTeamQuestionGlobalIndex(currentActiveTeamRound, qIndex, currentLiveRoom);
 
   currentActiveTeamSolver = {
     team: targetTeam,
     opponentTeam: opponentTeam,
     studentName: chosenStudent.name,
     isRebound: false,
-    qIndex: qIndex
+    qIndex: qIndex,
+    globalQIndex: globalQIdx
   };
 
   // المشرف هو قائد العرض: يكتب حالة السؤال والمتسابق للسحابة فوراً لتظهر عند الجميع بلحظتها وبدون أي تأخير
@@ -12215,21 +12362,25 @@ function executeNextTeamQuestion(qIndex) {
     teamColor: targetTeam.color,
     studentName: chosenStudent.name,
     qIndex: qIndex,
+    globalQIndex: globalQIdx,
     roundNum: currentActiveTeamRound,
     isRebound: false,
     startedAt: solverStamp
   };
   saveRooms(currentLiveRoom);
 
+  const targetQuestion = questions[globalQIdx % questions.length];
   showTeamRollingStudentCard(targetTeam, chosenStudent.name, () => {
-    renderTeamQuestion(questions[qIndex % questions.length], qIndex);
+    renderTeamQuestion(targetQuestion, globalQIdx, qIndex);
   });
 }
 
-function renderTeamQuestion(q, qIndex) {
+function renderTeamQuestion(q, globalQIdx, qIndex) {
   if (!q || !stageInteractiveArea) return;
 
-  if (stageQuestionNumber) stageQuestionNumber.textContent = `السؤال ${qIndex + 1} • ${TEAM_ROUNDS_CONFIG[currentActiveTeamRound]?.name || ''}`;
+  const totalInQuiz = currentLiveRoom?.roundQuestions?.length || 1;
+  const displayQNum = (typeof globalQIdx === "number") ? (globalQIdx + 1) : ((qIndex || 0) + 1);
+  if (stageQuestionNumber) stageQuestionNumber.textContent = `السؤال ${displayQNum} من ${totalInQuiz} • ${TEAM_ROUNDS_CONFIG[currentActiveTeamRound]?.name || ''}`;
   if (stageSectionName) stageSectionName.textContent = q.sectionName || "القسم العام";
   if (stageQuestionText) {
     stageQuestionText.className = `question-text-content font-${q.font || 'quran'}`;
@@ -12296,14 +12447,43 @@ function renderTeamQuestion(q, qIndex) {
       });
     }
   } else {
-    // الأسئلة الأخرى: عرض تحكم المشرف التلقائي
+    // الأسئلة الأخرى (شفهي، ترتيب، توصيل): عرض محتوى السؤال بوضوح وتحكم المشرف
+    let specificContentHtml = "";
+    if (q.targetOral) {
+      specificContentHtml = `
+        <div style="margin: 12px auto; padding: 12px 18px; background: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 12px; font-size: 18px; font-weight: 800; color: #0f172a; max-width: 540px;">
+          📖 النص القرآني المطلوب تلاوته: <span class="font-${q.font || 'quran'}" style="color: #2563eb; display:inline-block; margin-top: 4px;">${escapeHtml(q.targetOral)}</span>
+        </div>
+      `;
+    } else if (Array.isArray(q.items) && q.items.length > 0) {
+      specificContentHtml = `
+        <div style="display:flex;justify-content:center;gap:8px;margin:12px auto;flex-wrap:wrap;max-width:540px;">
+          ${q.items.map(it => `<span style="padding:8px 16px;background:#f1f5f9;border:1px solid #cbd5e1;border-radius:8px;font-weight:800;font-size:16px;color:#1e293b;">${escapeHtml(it)}</span>`).join("")}
+        </div>
+      `;
+    } else if (Array.isArray(q.pairs) && q.pairs.length > 0) {
+      specificContentHtml = `
+        <div style="margin: 10px auto; max-width: 520px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+          ${q.pairs.map(p => `
+            <div style="padding:8px 12px;background:#f1f5f9;border-radius:8px;font-weight:700;font-size:14px;text-align:center;">
+              ${escapeHtml(Array.isArray(p) ? p[0] : (p.left || ''))}
+            </div>
+            <div style="padding:8px 12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;font-weight:700;font-size:14px;text-align:center;color:#1d4ed8;">
+              ${escapeHtml(Array.isArray(p) ? p[1] : (p.right || ''))}
+            </div>
+          `).join("")}
+        </div>
+      `;
+    }
+
     stageInteractiveArea.innerHTML = `
       <div style="text-align:center;padding:20px;">
         <div style="font-weight:900;font-size:16px;color:#1e293b;margin-bottom:12px;">
           المتسابق المعني بالإجابة: <strong style="color:#2563eb;">${escapeHtml(currentActiveTeamSolver.studentName)}</strong> (${escapeHtml(currentActiveTeamSolver.team.name)})
         </div>
+        ${specificContentHtml}
         ${isSup ? `
-          <div style="display:flex;justify-content:center;gap:12px;">
+          <div style="display:flex;justify-content:center;gap:12px;margin-top:14px;">
             <button type="button" id="btnTeamEvaluateCorrect" class="btn-duo-green" style="padding:10px 24px;">
               <i class="fa-solid fa-circle-check"></i> إجابة صحيحة (+5 درجات)
             </button>
@@ -12312,7 +12492,7 @@ function renderTeamQuestion(q, qIndex) {
             </button>
           </div>
         ` : `
-          <div style="font-size:13px;color:#64748b;font-weight:700;">في انتظار تقييم المشرف لإجابة المتسابق...</div>
+          <div style="font-size:13px;color:#64748b;font-weight:700;margin-top:10px;">في انتظار تقييم المشرف لإجابة المتسابق...</div>
         `}
       </div>
     `;
@@ -12354,8 +12534,13 @@ async function handleTeamQuestionResult(isCorrect, choiceIdx, earnedPoints) {
   const answerTimestamp = Date.now();
   window.lastHandledTeamAnswerTs = answerTimestamp;
 
+  const currentGlobalQIdx = (typeof currentActiveTeamSolver.globalQIndex === "number")
+    ? currentActiveTeamSolver.globalQIndex
+    : getTeamQuestionGlobalIndex(currentRound, currentActiveTeamSolver.qIndex, currentLiveRoom);
+
   const answerPayload = {
     questionIdx: currentActiveTeamSolver.qIndex,
+    globalQIndex: currentGlobalQIdx,
     choiceIdx: choiceIdx,
     isCorrect: isCorrect,
     earnedPoints: isCorrect ? earnedPoints : (currentRound === 2 ? -earnedPoints : 0),
@@ -12372,8 +12557,7 @@ async function handleTeamQuestionResult(isCorrect, choiceIdx, earnedPoints) {
   if (!isCorrect && currentRound === 1 && !currentActiveTeamSolver.isRebound) {
     const reboundOverlay = document.getElementById("reboundBannerOverlay");
     const reboundText = document.getElementById("reboundBannerText");
-    const oppMembers = oppTeam.members || [];
-    const oppStudent = oppMembers[Math.floor(Math.random() * Math.max(1, oppMembers.length))] || { name: "المتسابق الثاني" };
+    const oppStudent = pickFairRandomStudentForTeam(oppTeam, currentLiveRoom);
 
     answerPayload.isRebound = true;
     answerPayload.reboundTeamName = oppTeam.name;
@@ -12384,7 +12568,8 @@ async function handleTeamQuestionResult(isCorrect, choiceIdx, earnedPoints) {
       opponentTeam: activeTeam,
       studentName: oppStudent.name,
       isRebound: true,
-      qIndex: currentActiveTeamSolver.qIndex
+      qIndex: currentActiveTeamSolver.qIndex,
+      globalQIndex: currentGlobalQIdx
     };
 
     currentLiveRoom.teamActiveSolver = {
@@ -12393,6 +12578,7 @@ async function handleTeamQuestionResult(isCorrect, choiceIdx, earnedPoints) {
       teamColor: oppTeam.color,
       studentName: oppStudent.name,
       qIndex: currentActiveTeamSolver.qIndex,
+      globalQIndex: currentGlobalQIdx,
       roundNum: 1,
       isRebound: true,
       startedAt: answerTimestamp
@@ -12411,7 +12597,8 @@ async function handleTeamQuestionResult(isCorrect, choiceIdx, earnedPoints) {
     setTimeout(() => {
       reboundOverlay?.classList.add("hidden");
       const questions = currentLiveRoom.roundQuestions || [];
-      renderTeamQuestion(questions[currentActiveTeamSolver.qIndex % questions.length], currentActiveTeamSolver.qIndex);
+      const targetQuestion = questions[currentGlobalQIdx % questions.length];
+      renderTeamQuestion(targetQuestion, currentGlobalQIdx, currentActiveTeamSolver.qIndex);
     }, 2200);
     return;
   }
@@ -12499,6 +12686,11 @@ document.getElementById("btnRestartTeamContest")?.addEventListener("click", asyn
     currentLiveRoom.teamPlayerScores = {};
     currentLiveRoom.currentTeamRound = 1;
     currentLiveRoom.currentQuestionIdx = 0;
+    currentLiveRoom.teamMemberTurnPool = {
+      [currentLiveRoom.teams[0].id]: [],
+      [currentLiveRoom.teams[1].id]: []
+    };
+    currentLiveRoom.lastPickedStudentByTeam = {};
     currentLiveRoom.phase = "team_intro";
     await saveRooms(currentLiveRoom);
   }
@@ -12513,6 +12705,7 @@ document.getElementById("btnCloseTeamContest")?.addEventListener("click", () => 
 function syncTeamStageRealtime(room) {
   // مزامنة حالة مسرح الفرق اللحظية لجميع الأجهزة
   if (!room || !room.isTeamMatch) return;
+  ensureTeamQuestionsPopulated(room);
   showArenaPhase("stage");
 
   // إخفاء أي شاشة تعريفية للفرق فوراً
@@ -12534,29 +12727,48 @@ function syncTeamStageRealtime(room) {
   // إذا تغيرت الفقرة (Round)
   if (room.currentTeamRound && room.currentTeamRound !== currentActiveTeamRound) {
     currentActiveTeamRound = room.currentTeamRound;
-    launchTeamRound(room.currentTeamRound);
-    return;
+    if (!room.teamActiveSolver || !room.teamActiveSolver.startedAt) {
+      launchTeamRound(room.currentTeamRound);
+    }
   }
 
   // مزامنة فورية ومطابقة تامة لاختيار السؤال والمتسابق الذي يظهر عند المشرف ليعرض عند الجميع فوراً
   if (room.teamActiveSolver && room.teamActiveSolver.startedAt && room.teamActiveSolver.startedAt !== window.lastHandledTeamSolverStartedAt) {
     window.lastHandledTeamSolverStartedAt = room.teamActiveSolver.startedAt;
-    currentActiveTeamRound = room.teamActiveSolver.roundNum || 1;
+    currentActiveTeamRound = room.teamActiveSolver.roundNum || currentActiveTeamRound;
     const targetTeam = room.teams?.find(t => t.id === room.teamActiveSolver.teamId) || room.teams?.[0] || { name: room.teamActiveSolver.teamName, color: room.teamActiveSolver.teamColor || "blue" };
     const oppTeam = room.teams?.find(t => t.id !== targetTeam.id) || room.teams?.[1];
+
+    const globalQIdx = (typeof room.teamActiveSolver.globalQIndex === "number")
+      ? room.teamActiveSolver.globalQIndex
+      : getTeamQuestionGlobalIndex(currentActiveTeamRound, room.teamActiveSolver.qIndex, room);
 
     currentActiveTeamSolver = {
       team: targetTeam,
       opponentTeam: oppTeam,
       studentName: room.teamActiveSolver.studentName,
       isRebound: room.teamActiveSolver.isRebound || false,
-      qIndex: room.teamActiveSolver.qIndex
+      qIndex: room.teamActiveSolver.qIndex,
+      globalQIndex: globalQIdx
     };
 
     const questions = room.roundQuestions || [];
-    showTeamRollingStudentCard(targetTeam, room.teamActiveSolver.studentName, () => {
-      renderTeamQuestion(questions[room.teamActiveSolver.qIndex % questions.length], room.teamActiveSolver.qIndex);
-    });
+    const targetQuestion = questions[globalQIdx % questions.length];
+
+    // إخفاء أي لافتة فقرة متبقية فور وصول بطاقة السؤال
+    const roundBannerOverlay = document.getElementById("teamRoundBannerOverlay");
+    if (roundBannerOverlay && !roundBannerOverlay.classList.contains("hidden")) {
+      roundBannerOverlay.classList.add("hidden");
+    }
+
+    if (room.teamActiveSolver.isRebound) {
+      // في حالة رد الفعل، لا حاجة لإعادة تدوير بطاقة السحب، يتم عرض لافتة رد الفعل والانتقال المباشر للسؤال
+      renderTeamQuestion(targetQuestion, globalQIdx, room.teamActiveSolver.qIndex);
+    } else {
+      showTeamRollingStudentCard(targetTeam, room.teamActiveSolver.studentName, () => {
+        renderTeamQuestion(targetQuestion, globalQIdx, room.teamActiveSolver.qIndex);
+      });
+    }
   }
 
   // مزامنة أحداث الإجابة للجميع في نظام الفرق (سواء أجاب الطالب أو المشرف)
@@ -12567,6 +12779,11 @@ function syncTeamStageRealtime(room) {
     // إيقاف مؤقت السؤال عند وصول الإجابة لجميع الأجهزة
     clearInterval(liveTimerInterval);
 
+    const questions = room.roundQuestions || [];
+    const answerGlobalQIdx = (typeof ev.globalQIndex === "number")
+      ? ev.globalQIndex
+      : getTeamQuestionGlobalIndex(ev.roundNum || currentActiveTeamRound, ev.questionIdx, room);
+
     // إذا كانت الإجابة صادرة من جهاز آخر (مثلاً الطالب أجاب والمشرف يشاهد):
     if (!currentUser || ev.answeredBy !== currentUser.name) {
       if (ev.choiceIdx !== null && ev.choiceIdx !== undefined && stageInteractiveArea) {
@@ -12575,8 +12792,7 @@ function syncTeamStageRealtime(room) {
           choiceBtn.classList.add(ev.isCorrect ? "correct" : "wrong");
         }
         if (!ev.isCorrect && !ev.isRebound) {
-          const questions = room.roundQuestions || [];
-          const curQ = questions[ev.questionIdx % questions.length];
+          const curQ = questions[answerGlobalQIdx % questions.length];
           if (curQ && curQ.correct !== undefined) {
             const corBtn = stageInteractiveArea.querySelector(`[data-choice="${curQ.correct}"]`);
             if (corBtn) corBtn.classList.add("correct");
@@ -12616,10 +12832,9 @@ function syncTeamStageRealtime(room) {
 
       setTimeout(() => {
         reboundOverlay?.classList.add("hidden");
-        const questions = room.roundQuestions || [];
-        const curQ = questions[ev.questionIdx % questions.length];
+        const curQ = questions[answerGlobalQIdx % questions.length];
         if (curQ) {
-          renderTeamQuestion(curQ, ev.questionIdx);
+          renderTeamQuestion(curQ, answerGlobalQIdx, ev.questionIdx);
         }
       }, 2200);
     } else {
