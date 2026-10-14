@@ -9136,11 +9136,11 @@ button:disabled .fa-spin,
 }
 
 .team-rolling-card.animate-enter-flip {
-  animation: rollingCardEnter 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: rollingCardEnter 0.65s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .team-rolling-card.animate-exit-flip {
-  animation: rollingCardExit 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: rollingCardExit 0.55s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 @keyframes rollingCardEnter {
