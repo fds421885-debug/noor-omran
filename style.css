@@ -8662,3 +8662,859 @@ button:disabled .fa-spin,
   text-shadow: 0 0 26px rgba(88, 204, 2, 0.45);
   padding: 22px 32px;
 }
+
+/* ========================================================
+   نظام مسابقات الفرق التنافسي (Teams Mode Styling & Cinematic FX)
+   ======================================================== */
+
+/* تبديل نمط المسابقة في نافذة إنشاء الغرفة (فردي vs فرق) */
+.competition-mode-switch-group {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.competition-mode-card {
+  border: 2px solid var(--border-duo);
+  border-radius: 16px;
+  padding: 12px 14px;
+  background: #ffffff;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  align-items: center;
+  position: relative;
+}
+
+.competition-mode-card input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.competition-mode-card.active {
+  border-color: #2563eb;
+  background: #eff6ff;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.15);
+  transform: translateY(-2px);
+}
+
+.mode-card-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: right;
+}
+
+.mode-card-content i {
+  font-size: 24px;
+  color: #2563eb;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: rgba(37, 99, 235, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.competition-mode-card.active i {
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.mode-card-content strong {
+  display: block;
+  font-size: 14.5px;
+  font-weight: 900;
+  color: #1e293b;
+}
+
+.mode-card-content span {
+  display: block;
+  font-size: 11.5px;
+  color: #64748b;
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+/* بطاقة تحديد الفرق في نافذة إنشاء الغرفة */
+.teams-selection-wrapper {
+  background: #f8fafc;
+  border: 2px dashed #cbd5e1;
+  border-radius: 16px;
+  padding: 16px;
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.teams-grid-select {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.team-select-box {
+  background: #ffffff;
+  border: 2px solid var(--border-duo);
+  border-radius: 12px;
+  padding: 10px;
+}
+
+.team-select-box label {
+  font-size: 12px;
+  font-weight: 800;
+  color: #334155;
+  display: block;
+  margin-bottom: 6px;
+}
+
+.btn-open-create-team {
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 800;
+  background: #f1f5f9;
+  border: 1.5px dashed #94a3b8;
+  color: #334155;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.btn-open-create-team:hover {
+  background: #e2e8f0;
+  border-color: #2563eb;
+  color: #1d4ed8;
+}
+
+/* ========================================================
+   العرض التقديمي السينمائي للفرق (Cinematic Team Entrance)
+   ======================================================== */
+.team-entrance-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  background: radial-gradient(circle at center, #0f172a 0%, #020617 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 40px 24px;
+  overflow: hidden;
+  opacity: 1;
+  transition: opacity 0.5s ease;
+}
+
+.team-entrance-overlay.hidden {
+  display: none !important;
+}
+
+.team-entrance-header {
+  text-align: center;
+  color: #ffffff;
+  z-index: 10;
+}
+
+.team-entrance-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 18px;
+  border-radius: 30px;
+  background: rgba(250, 204, 21, 0.15);
+  border: 1.5px solid #facc15;
+  color: #facc15;
+  font-size: 14px;
+  font-weight: 900;
+  margin-bottom: 8px;
+}
+
+.team-entrance-title {
+  font-size: clamp(24px, 4vw, 36px);
+  font-weight: 900;
+  color: #ffffff;
+  text-shadow: 0 4px 15px rgba(0, 0, 0, 0.6);
+  margin: 0;
+}
+
+.team-entrance-arena {
+  width: 100%;
+  max-width: 1200px;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 30px;
+  position: relative;
+  flex: 1;
+  margin: 20px 0;
+}
+
+.team-vs-divider {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  z-index: 10;
+}
+
+.vs-circle {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ef4444, #b91c1c);
+  color: #ffffff;
+  font-size: 26px;
+  font-weight: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 35px rgba(239, 68, 68, 0.7);
+  border: 3px solid #fecaca;
+  animation: pulseVs 1.8s infinite ease-in-out;
+}
+
+@keyframes pulseVs {
+  0% { transform: scale(1); box-shadow: 0 0 20px rgba(239, 68, 68, 0.6); }
+  50% { transform: scale(1.1); box-shadow: 0 0 45px rgba(239, 68, 68, 0.9); }
+  100% { transform: scale(1); box-shadow: 0 0 20px rgba(239, 68, 68, 0.6); }
+}
+
+/* بطاقات الفرق المنزلقة من اليمين واليسار */
+.team-intro-card {
+  border-radius: 24px;
+  padding: 24px;
+  color: #ffffff;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+  position: relative;
+  transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+  min-height: 380px;
+}
+
+.team-intro-card.team-right {
+  animation: slideInFromRight 0.85s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.team-intro-card.team-left {
+  animation: slideInFromLeft 0.85s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* خروج عكسي سلس (اليمين يذهب يساراً، واليسار يذهب يميناً) */
+.team-intro-card.reverse-exit-left {
+  animation: slideOutToLeft 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+}
+
+.team-intro-card.reverse-exit-right {
+  animation: slideOutToRight 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+}
+
+@keyframes slideInFromRight {
+  0% { transform: translateX(120vw) scale(0.9); opacity: 0; }
+  100% { transform: translateX(0) scale(1); opacity: 1; }
+}
+
+@keyframes slideInFromLeft {
+  0% { transform: translateX(-120vw) scale(0.9); opacity: 0; }
+  100% { transform: translateX(0) scale(1); opacity: 1; }
+}
+
+@keyframes slideOutToLeft {
+  0% { transform: translateX(0) scale(1); opacity: 1; }
+  100% { transform: translateX(-120vw) scale(0.9); opacity: 0; }
+}
+
+@keyframes slideOutToRight {
+  0% { transform: translateX(0) scale(1); opacity: 1; }
+  100% { transform: translateX(120vw) scale(0.9); opacity: 0; }
+}
+
+.team-intro-card-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.2);
+  padding-bottom: 16px;
+  margin-bottom: 16px;
+}
+
+.team-intro-card-icon {
+  width: 54px;
+  height: 54px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.25);
+  font-size: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+}
+
+.team-intro-card-title {
+  font-size: 22px;
+  font-weight: 900;
+  margin: 0;
+}
+
+.team-intro-card-members {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+}
+
+/* تسليط الضوء الأصفر/الذهبي على كل طالب */
+.student-spotlight-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1.5px solid rgba(255, 255, 255, 0.15);
+  font-size: 15px;
+  font-weight: 800;
+  transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.student-spotlight-item.highlighted {
+  background: rgba(250, 204, 21, 0.3) !important;
+  border: 2.5px solid #facc15 !important;
+  box-shadow: 0 0 25px rgba(250, 204, 21, 0.85) !important;
+  transform: scale(1.04) translateX(4px) !important;
+  color: #fef08a !important;
+}
+
+.student-spotlight-item .spotlight-crown {
+  opacity: 0;
+  color: #facc15;
+  transition: opacity 0.3s ease;
+}
+
+.student-spotlight-item.highlighted .spotlight-crown {
+  opacity: 1;
+}
+
+/* عداد 3 ثواني الدائري لانطلاق الجولات */
+.team-start-countdown-wrapper {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  z-index: 100;
+}
+
+.team-countdown-circle {
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #facc15 0%, #ca8a04 100%);
+  border: 5px solid #fef08a;
+  box-shadow: 0 0 50px rgba(250, 204, 21, 0.9);
+  color: #0f172a;
+  font-size: 64px;
+  font-weight: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: countdownPop 1s ease-in-out infinite;
+}
+
+@keyframes countdownPop {
+  0% { transform: scale(0.8); opacity: 0.8; }
+  50% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(0.8); opacity: 0.8; }
+}
+
+.team-countdown-label {
+  font-size: 24px;
+  font-weight: 900;
+  color: #ffffff;
+  text-shadow: 0 4px 14px rgba(0, 0, 0, 0.8);
+}
+
+/* ========================================================
+   لافتة إعلان الفقرة (Round Intro Banner Modal)
+   ======================================================== */
+.team-round-banner-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 88888;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: fadeIn 0.3s ease;
+}
+
+.team-round-banner-box {
+  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+  border: 3px solid #facc15;
+  border-radius: 28px;
+  padding: 36px 48px;
+  text-align: center;
+  color: #ffffff;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6), 0 0 40px rgba(250, 204, 21, 0.35);
+  animation: roundBannerRise 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  max-width: 580px;
+  width: 100%;
+}
+
+@keyframes roundBannerRise {
+  0% { transform: translateY(60px) scale(0.9); opacity: 0; }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+.round-banner-tag {
+  display: inline-block;
+  padding: 6px 18px;
+  border-radius: 9999px;
+  background: rgba(250, 204, 21, 0.2);
+  color: #facc15;
+  font-size: 14px;
+  font-weight: 900;
+  margin-bottom: 12px;
+}
+
+.round-banner-title {
+  font-size: 34px;
+  font-weight: 900;
+  color: #ffffff;
+  margin: 0 0 12px;
+}
+
+.round-banner-rule {
+  font-size: 16px;
+  color: #cbd5e1;
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* ========================================================
+   البطاقة الدوارة لاختيار الفريق والطالب (Rolling Flipping Card)
+   تتقلب وتتدحرج من اليمين إلى المنتصف ثم تخرج لليسار
+   ======================================================== */
+.team-flipping-modal-wrapper {
+  position: fixed;
+  inset: 0;
+  z-index: 88887;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.team-rolling-card {
+  width: 320px;
+  min-height: 220px;
+  border-radius: 24px;
+  padding: 24px;
+  color: #ffffff;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.6);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.team-rolling-card.animate-enter-flip {
+  animation: rollingCardEnter 0.95s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.team-rolling-card.animate-exit-flip {
+  animation: rollingCardExit 0.75s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes rollingCardEnter {
+  0% {
+    transform: translateX(110vw) rotate(180deg) scale(0.6);
+    opacity: 0;
+  }
+  70% {
+    transform: translateX(0) rotate(-10deg) scale(1.05);
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(0) rotate(0deg) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes rollingCardExit {
+  0% {
+    transform: translateX(0) rotate(0deg) scale(1);
+    opacity: 1;
+  }
+  30% {
+    transform: translateX(-15px) rotate(8deg) scale(1.04);
+  }
+  100% {
+    transform: translateX(-110vw) rotate(-220deg) scale(0.6);
+    opacity: 0;
+  }
+}
+
+.rolling-card-phase-view {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  animation: fadeIn 0.35s ease-out;
+}
+
+.rolling-card-icon-halo {
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.22);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  color: #facc15;
+  box-shadow: 0 0 25px rgba(250, 204, 21, 0.5);
+  margin-bottom: 10px;
+}
+
+.rolling-card-subhead {
+  font-size: 13px;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.88);
+  letter-spacing: 0.3px;
+  margin-bottom: 6px;
+}
+
+.rolling-card-main-title {
+  font-size: 28px;
+  font-weight: 900;
+  color: #ffffff;
+  text-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+  margin-bottom: 4px;
+}
+
+.rolling-card-team-badge {
+  font-size: 13px;
+  font-weight: 900;
+  padding: 4px 16px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.22);
+  margin-bottom: 8px;
+  color: #f8fafc;
+  display: inline-block;
+}
+
+.rolling-roulette-box {
+  width: 100%;
+  padding: 10px 16px;
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1.5px dashed rgba(255, 255, 255, 0.3);
+  margin-top: 6px;
+  transition: all 0.3s ease;
+}
+
+.rolling-roulette-box.settled {
+  background: rgba(234, 179, 8, 0.2);
+  border: 2px solid #facc15;
+  box-shadow: 0 0 25px rgba(250, 204, 21, 0.6);
+}
+
+.rolling-card-target-student {
+  font-size: 24px;
+  font-weight: 900;
+  color: #ffffff;
+  text-shadow: 0 3px 10px rgba(0, 0, 0, 0.5);
+  transition: all 0.15s ease;
+}
+
+.rolling-roulette-box.settled .rolling-card-target-student {
+  color: #fef08a;
+  transform: scale(1.05);
+}
+
+/* ========================================================
+   بطاقات الفرق الجانبية المتحركة (Score Flyers Left/Right)
+   تظهر وتكبر عند إضافة النقاط وتختفي بسلاسة
+   ======================================================== */
+.team-score-flyers-container {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 88880;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 24px;
+}
+
+.team-side-flyer {
+  width: 240px;
+  padding: 16px 20px;
+  border-radius: 20px;
+  color: #ffffff;
+  box-shadow: 0 15px 40px rgba(0, 0, 0, 0.35);
+  transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  opacity: 0;
+  transform: translateX(0);
+}
+
+.team-side-flyer.flyer-right {
+  transform: translateX(280px);
+}
+
+.team-side-flyer.flyer-left {
+  transform: translateX(-280px);
+}
+
+.team-side-flyer.visible {
+  opacity: 1;
+  transform: translateX(0) !important;
+}
+
+.team-side-flyer.team-card-pulse-win {
+  transform: scale(1.14) !important;
+  box-shadow: 0 0 45px rgba(250, 204, 21, 0.9), 0 20px 50px rgba(0, 0, 0, 0.4) !important;
+  border: 3px solid #facc15 !important;
+}
+
+.side-flyer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.side-flyer-name {
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.side-flyer-score {
+  font-size: 28px;
+  font-weight: 900;
+  color: #facc15;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+/* ========================================================
+   إشعار فرصة رد الفعل للفريق الخصم (Rebound Banner)
+   ======================================================== */
+.rebound-banner-overlay {
+  position: fixed;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
+  border: 2px solid #a5b4fc;
+  border-radius: 20px;
+  padding: 16px 28px;
+  color: #ffffff;
+  box-shadow: 0 15px 40px rgba(49, 46, 129, 0.5);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  z-index: 88889;
+  animation: bounceInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes bounceInUp {
+  0% { transform: translate(-50%, 80px); opacity: 0; }
+  100% { transform: translate(-50%, 0); opacity: 1; }
+}
+
+.rebound-icon-box {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: #f59e0b;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+}
+
+/* ========================================================
+   فقرة تحت الضغط (Under Pressure Showdown HUD)
+   ======================================================== */
+.pressure-hud-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto 16px;
+}
+
+.pressure-heroes-duel {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 16px;
+}
+
+.pressure-hero-card {
+  background: #ffffff;
+  border: 2.5px solid var(--border-duo);
+  border-radius: 18px;
+  padding: 16px;
+  text-align: center;
+  transition: all 0.3s ease;
+}
+
+.pressure-hero-card.active-turn {
+  border-color: #f59e0b;
+  box-shadow: 0 0 25px rgba(245, 158, 11, 0.4);
+  transform: scale(1.03);
+  background: #fffbeb;
+}
+
+.pressure-dots-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.pressure-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #e2e8f0;
+  border: 2px solid #cbd5e1;
+  transition: all 0.3s ease;
+}
+
+.pressure-dot.correct {
+  background: #22c55e !important;
+  border-color: #16a34a !important;
+  box-shadow: 0 0 10px rgba(34, 197, 94, 0.6);
+}
+
+.pressure-dot.wrong {
+  background: #ef4444 !important;
+  border-color: #dc2626 !important;
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.6);
+}
+
+/* ========================================================
+   فقرة واحد لواحد (Head to Head Buzzer Grid)
+   ======================================================== */
+.head-to-head-pairs-container {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 10px 4px;
+  margin-bottom: 16px;
+  justify-content: center;
+}
+
+.head-to-head-pair-card {
+  padding: 8px 14px;
+  border-radius: 12px;
+  background: #f8fafc;
+  border: 2px solid var(--border-duo);
+  font-size: 13px;
+  font-weight: 800;
+  color: #475569;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.head-to-head-pair-card.active {
+  border-color: #2563eb;
+  background: #eff6ff;
+  color: #1d4ed8;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
+}
+
+/* ========================================================
+   منصة التتويج النهائي للفرق الفائزة (Grand Finale Podium)
+   ======================================================== */
+.team-grand-finale-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  background: radial-gradient(circle at center, #1e1b4b 0%, #09090b 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 30px 20px;
+  color: #ffffff;
+  overflow-y: auto;
+  animation: fadeIn 0.5s ease;
+}
+
+.team-grand-finale-box {
+  max-width: 680px;
+  width: 100%;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+.grand-trophy-icon {
+  font-size: 72px;
+  color: #facc15;
+  filter: drop-shadow(0 0 35px rgba(250, 204, 21, 0.8));
+  animation: trophyFloat 2.5s infinite ease-in-out;
+}
+
+@keyframes trophyFloat {
+  0% { transform: translateY(0); }
+  50% { transform: translateY(-12px) scale(1.05); }
+  100% { transform: translateY(0); }
+}
+
+.winning-team-card {
+  width: 100%;
+  border-radius: 24px;
+  padding: 24px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.05) 100%);
+  border: 3px solid #facc15;
+  box-shadow: 0 0 40px rgba(250, 204, 21, 0.5);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.mvp-student-card {
+  width: 100%;
+  border-radius: 20px;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #3b0764 0%, #1e1b4b 100%);
+  border: 2px solid #d8b4fe;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 10px 30px rgba(109, 40, 217, 0.35);
+}
+

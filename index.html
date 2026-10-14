@@ -1552,6 +1552,30 @@
       </div>
 
       <form id="createRoomForm" class="modal-body-form">
+        <!-- خيار تحديد نمط المسابقة: فردي أم فرق -->
+        <div class="competition-mode-switch-group">
+          <label class="competition-mode-card active" id="modeCardIndividual" data-comp-mode="individual">
+            <input type="radio" name="competitionMode" value="individual" checked>
+            <div class="mode-card-content">
+              <i class="fa-solid fa-user"></i>
+              <div>
+                <strong>نمط فردي</strong>
+                <span>متسابق فردي مع بطاقات تكتيكية ولوحة الشرف</span>
+              </div>
+            </div>
+          </label>
+          <label class="competition-mode-card" id="modeCardTeams" data-comp-mode="teams">
+            <input type="radio" name="competitionMode" value="teams">
+            <div class="mode-card-content">
+              <i class="fa-solid fa-users-rays"></i>
+              <div>
+                <strong>نمط الفرق التنافسي</strong>
+                <span>مواجهة بين فريقين، 4 فقرات وتتويج جماعي</span>
+              </div>
+            </div>
+          </label>
+        </div>
+
         <div class="input-group">
           <label class="input-label">اسم الغرفة / الفعالية <span class="required-star">*</span></label>
           <input type="text" id="newRoomNameInput" class="form-control" placeholder="مثال: تصفيات نور البيان - صف أول" required>
@@ -1560,7 +1584,31 @@
             <button type="button" class="preset-chip" data-preset="تصفيات نور البيان - صف أول"><i class="fa-solid fa-award"></i> صف أول</button>
             <button type="button" class="preset-chip" data-preset="تصفيات نور البيان - صف ثاني"><i class="fa-solid fa-star"></i> صف ثاني</button>
             <button type="button" class="preset-chip" data-preset="نهائيات مسابقة نور البيان"><i class="fa-solid fa-crown"></i> نهائيات المسابقة</button>
-            <button type="button" class="preset-chip" data-preset="تحدي القراءة والمدود"><i class="fa-solid fa-book-quran"></i> تحدي القراءة</button>
+            <button type="button" class="preset-chip" data-preset="تحدي الفرق الكبرى"><i class="fa-solid fa-shield-halved"></i> تحدي الفرق</button>
+          </div>
+        </div>
+
+        <!-- قسم اختيار الفرق التنافسية (يظهر فقط عند تفعيل نمط الفرق) -->
+        <div id="teamsSelectionContainer" class="teams-selection-wrapper hidden">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <label class="input-label" style="margin:0;font-weight:900;color:#1e293b;">
+              <i class="fa-solid fa-shield-cat" style="color:#2563eb;"></i> اختيار الفريقين المتنافسين
+            </label>
+            <button type="button" id="btnOpenCreateTeamModal" class="btn-open-create-team">
+              <i class="fa-solid fa-plus"></i> إنشاء فريق جديد
+            </button>
+          </div>
+          <div class="teams-grid-select">
+            <div class="team-select-box">
+              <label><i class="fa-solid fa-flag" style="color:#2563eb;"></i> الفريق الأول (اليمين):</label>
+              <select id="selectTeamA" class="form-control form-select" required></select>
+              <div id="previewTeamA" style="margin-top:6px;font-size:12px;color:#64748b;font-weight:700;"></div>
+            </div>
+            <div class="team-select-box">
+              <label><i class="fa-solid fa-flag" style="color:#dc2626;"></i> الفريق الثاني (اليسار):</label>
+              <select id="selectTeamB" class="form-control form-select" required></select>
+              <div id="previewTeamB" style="margin-top:6px;font-size:12px;color:#64748b;font-weight:700;"></div>
+            </div>
           </div>
         </div>
 
@@ -1577,7 +1625,7 @@
           </div>
           <div class="input-group" style="margin-top:10px;margin-bottom:0;">
             <label class="input-label">
-              <i class="fa-solid fa-hashtag"></i> عدد الأسئلة لكل طالب
+              <i class="fa-solid fa-hashtag"></i> عدد الأسئلة لكل طالب / فقرة
               <span style="font-size:11px;color:#94a3b8;font-weight:600;">(اتركه فارغاً لاستخدام كل أسئلة الاختبار)</span>
             </label>
             <input type="number" id="questionsPerStudentInput" class="form-control"
@@ -1592,35 +1640,36 @@
           </div>
         </div>
 
-        <!-- بطاقة ميزة البطاقات التكتيكية بأسلوب دولينجو -->
-        <div class="tactical-cards-feature-card">
-          <div class="tactical-icon-box">
-            <i class="fa-solid fa-bolt"></i>
+        <!-- خيارات البطاقات التكتيكية (تختفي في نمط الفرق) -->
+        <div id="tacticalCardsSettingsGroup">
+          <div class="tactical-cards-feature-card">
+            <div class="tactical-icon-box">
+              <i class="fa-solid fa-bolt"></i>
+            </div>
+            <div class="tactical-info-box">
+              <strong>نظام البطاقات التكتيكية (40 بطاقة)</strong>
+              <p>تفعيل ظهور البطاقات التكتيكية تلقائياً لدعم المتسابق وإشعال الحماس</p>
+            </div>
+            <label class="duo-checkbox-container">
+              <input type="checkbox" id="roomTacticalCardsToggle" checked>
+              <span class="duo-checkbox-checkmark"></span>
+            </label>
           </div>
-          <div class="tactical-info-box">
-            <strong>نظام البطاقات التكتيكية (40 بطاقة)</strong>
-            <p>تفعيل ظهور البطاقات التكتيكية تلقائياً لدعم المتسابق وإشعال الحماس</p>
-          </div>
-          <label class="duo-checkbox-container">
-            <input type="checkbox" id="roomTacticalCardsToggle" checked>
-            <span class="duo-checkbox-checkmark"></span>
-          </label>
-        </div>
 
-        <!-- تكرار ظهور البطاقات التكتيكية: كل سؤال أو كل كم سؤال -->
-        <div class="input-group" id="roomCardFrequencyGroup" style="margin-top: 10px; margin-bottom: 5px;">
-          <label class="input-label" style="font-weight: 800; color: #1e293b;">
-            <i class="fa-solid fa-repeat" style="color: #8b5cf6;"></i> تكرار ظهور البطاقات التكتيكية
-          </label>
-          <select id="roomCardFrequencySelect" class="form-control form-select" style="font-weight: 800;">
-            <option value="4" selected>كل 4 أسئلة (الافتراضي الموصى به)</option>
-            <option value="1">كل سؤال (بعد كل سؤال مباشرة)</option>
-            <option value="2">كل سؤالين (كل 2 أسئلة)</option>
-            <option value="3">كل 3 أسئلة</option>
-            <option value="5">كل 5 أسئلة</option>
-            <option value="quarter">كل ربع المسابقة</option>
-            <option value="off">تعطيل البطاقات التكتيكية</option>
-          </select>
+          <div class="input-group" id="roomCardFrequencyGroup" style="margin-top: 10px; margin-bottom: 5px;">
+            <label class="input-label" style="font-weight: 800; color: #1e293b;">
+              <i class="fa-solid fa-repeat" style="color: #8b5cf6;"></i> تكرار ظهور البطاقات التكتيكية
+            </label>
+            <select id="roomCardFrequencySelect" class="form-control form-select" style="font-weight: 800;">
+              <option value="4" selected>كل 4 أسئلة (الافتراضي الموصى به)</option>
+              <option value="1">كل سؤال (بعد كل سؤال مباشرة)</option>
+              <option value="2">كل سؤالين (كل 2 أسئلة)</option>
+              <option value="3">كل 3 أسئلة</option>
+              <option value="5">كل 5 أسئلة</option>
+              <option value="quarter">كل ربع المسابقة</option>
+              <option value="off">تعطيل البطاقات التكتيكية</option>
+            </select>
+          </div>
         </div>
 
         <div class="modal-actions-flex">
@@ -2024,6 +2073,258 @@
         </button>
         <button type="button" id="btnCloseBroadcastBanner" class="btn-close-broadcast" title="إغلاق التنبيه">
           <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================== -->
+  <!-- عناصر وشاشات نظام مسابقات الفرق التنافسي (Teams Mode) -->
+  <!-- ======================================================== -->
+
+  <!-- مودال إنشاء وحفظ فريق جديد -->
+  <div id="createTeamModal" class="modal-overlay hidden">
+    <div class="duo-modal-box" style="max-width: 580px;">
+      <div class="modal-header">
+        <div class="modal-title-with-icon">
+          <div class="modal-icon-bubble blue">
+            <i class="fa-solid fa-users-gear"></i>
+          </div>
+          <div>
+            <h3>إنشاء وتجهيز فريق جديد</h3>
+            <span class="modal-subtitle">تسمية الفريق واختيار لونه وتحديد طلابه مع إمكانية إضافة طلاب جدد</span>
+          </div>
+        </div>
+        <button class="btn-modal-close" data-close-modal="createTeamModal" title="إغلاق">&times;</button>
+      </div>
+
+      <form id="createTeamForm" class="modal-body-form">
+        <div class="input-group">
+          <label class="input-label">اسم الفريق <span class="required-star">*</span></label>
+          <input type="text" id="newTeamNameInput" class="form-control" placeholder="مثال: فرسان القرآن، أشبال الهدى..." required>
+        </div>
+
+        <div class="input-group">
+          <label class="input-label">لون وهوية الفريق</label>
+          <select id="newTeamColorSelect" class="form-control form-select">
+            <option value="blue" selected>🔵 أزرق ملكي (Royal Blue)</option>
+            <option value="red">🔴 أحمر ياقوتي (Crimson Red)</option>
+            <option value="emerald">🟢 أخضر زمردي (Emerald Green)</option>
+            <option value="gold">🟡 ذهبي لامع (Bright Gold)</option>
+            <option value="purple">🟣 بنفسجي ملكي (Imperial Purple)</option>
+            <option value="amber">🟠 برتقالي ناري (Fiery Amber)</option>
+          </select>
+        </div>
+
+        <div class="input-group">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+            <label class="input-label" style="margin:0;">
+              <i class="fa-solid fa-user-group"></i> اختيار طلاب الفريق
+            </label>
+            <span id="selectedTeamMembersCountBadge" style="font-size:12px;font-weight:800;color:#2563eb;">0 طلاب محددين</span>
+          </div>
+
+          <div style="position:relative;margin-bottom:8px;">
+            <input type="text" id="searchTeamStudentsInput" class="form-control form-control-sm" placeholder="بحث سريع في قائمة الطلاب..." style="padding-right:32px;">
+            <i class="fa-solid fa-magnifying-glass" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);color:#94a3b8;font-size:13px;"></i>
+          </div>
+
+          <div id="teamStudentsChecklistContainer" style="max-height:180px;overflow-y:auto;border:1.5px solid var(--border-duo);border-radius:12px;padding:8px;background:#f8fafc;display:flex;flex-direction:column;gap:6px;">
+            <!-- يتم تعبئة قائمة الطلاب هنا ديناميكياً -->
+          </div>
+        </div>
+
+        <!-- إضافة طالب غير موجود سلفاً وحفظه فورياً في النظام -->
+        <div style="background:#f0fdf4;border:1.5px dashed #86efac;border-radius:12px;padding:12px;margin-bottom:14px;">
+          <div style="font-size:13px;font-weight:900;color:#166534;margin-bottom:6px;display:flex;align-items:center;gap:6px;">
+            <i class="fa-solid fa-user-plus"></i> إضافة طالب جديد غير مسجل وإدراجه بالفريق:
+          </div>
+          <div style="display:grid;grid-template-columns:1fr auto;gap:8px;">
+            <input type="text" id="inlineStudentNameInput" class="form-control form-control-sm" placeholder="الاسم الرباعي للطالب الجديد...">
+            <button type="button" id="btnInlineAddStudentToTeam" class="btn-duo-green btn-sm" style="white-space:nowrap;">
+              <i class="fa-solid fa-plus"></i> حفظ وإضافة للفريق
+            </button>
+          </div>
+        </div>
+
+        <div class="modal-actions-flex">
+          <button type="button" class="btn-duo-outline" data-close-modal="createTeamModal">إلغاء</button>
+          <button type="submit" id="btnSubmitSaveTeam" class="btn-duo-blue">
+            <i class="fa-solid fa-floppy-disk"></i> حفظ الفريق واعتماده سحابياً
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- العرض التقديمي السينمائي للفرق (Cinematic Team Entrance Overlay) -->
+  <div id="teamEntranceOverlay" class="team-entrance-overlay hidden">
+    <div class="team-entrance-header">
+      <div class="team-entrance-badge">
+        <i class="fa-solid fa-crown"></i>
+        <span>مواجهة الفرق التنافسية الكبرى</span>
+      </div>
+      <h2 class="team-entrance-title">انطلاق تحدي الأبطال</h2>
+    </div>
+
+    <div class="team-entrance-arena">
+      <!-- بطاقة الفريق الأول (اليمين) -->
+      <div id="introCardTeamA" class="team-intro-card team-right">
+        <div class="team-intro-card-header">
+          <div class="team-intro-card-icon" id="introTeamAIcon">
+            <i class="fa-solid fa-shield-halved"></i>
+          </div>
+          <div>
+            <h3 class="team-intro-card-title" id="introTeamAName">الفريق الأول</h3>
+            <span style="font-size:13px;opacity:0.85;" id="introTeamACount">0 أعضاء</span>
+          </div>
+        </div>
+        <div class="team-intro-card-members" id="introTeamAMembers">
+          <!-- قائمة الطلاب مع أنيميشن تسليط الضوء -->
+        </div>
+      </div>
+
+      <!-- دائرة المواجهة VS -->
+      <div class="team-vs-divider">
+        <div class="vs-circle">VS</div>
+        <span style="color:#facc15;font-weight:900;font-size:14px;letter-spacing:1px;">تحدي الفرق</span>
+      </div>
+
+      <!-- بطاقة الفريق الثاني (اليسار) -->
+      <div id="introCardTeamB" class="team-intro-card team-left">
+        <div class="team-intro-card-header">
+          <div class="team-intro-card-icon" id="introTeamBIcon">
+            <i class="fa-solid fa-shield-halved"></i>
+          </div>
+          <div>
+            <h3 class="team-intro-card-title" id="introTeamBName">الفريق الثاني</h3>
+            <span style="font-size:13px;opacity:0.85;" id="introTeamBCount">0 أعضاء</span>
+          </div>
+        </div>
+        <div class="team-intro-card-members" id="introTeamBMembers">
+          <!-- قائمة الطلاب مع أنيميشن تسليط الضوء -->
+        </div>
+      </div>
+    </div>
+
+    <!-- عداد 3 ثواني الدائري التنازلي -->
+    <div id="teamStartCountdownWrapper" class="team-start-countdown-wrapper hidden">
+      <div class="team-countdown-circle" id="teamCountdownSecCircle">3</div>
+      <div class="team-countdown-label">ستبدأ المسابقة الحماسية!</div>
+    </div>
+
+    <!-- زر تحكم المشرف: انطلاق المسابقة -->
+    <div id="teamEntranceControls" style="z-index:20;margin-top:10px;">
+      <button type="button" id="btnLaunchTeamContest" class="btn-duo-yellow" style="font-size:18px;padding:14px 36px;box-shadow:0 8px 30px rgba(250,204,21,0.5);">
+        <i class="fa-solid fa-play"></i> انطلاق المسابقة الآن!
+      </button>
+      <div id="teamEntranceObserverNote" class="hidden" style="color:#cbd5e1;font-size:14px;font-weight:800;display:flex;align-items:center;gap:8px;">
+        <i class="fa-solid fa-hourglass-half fa-spin" style="color:#facc15;"></i> في انتظار إطلاق المشرف للجولة...
+      </div>
+    </div>
+  </div>
+
+  <!-- لافتة إعلان الفقرة الحالية (Round Intro Banner Modal) -->
+  <div id="teamRoundBannerOverlay" class="team-round-banner-overlay hidden">
+    <div class="team-round-banner-box">
+      <span class="round-banner-tag" id="teamRoundBannerTag">الفقرة الأولى</span>
+      <h3 class="round-banner-title" id="teamRoundBannerTitle">فقرة رد الفعل</h3>
+      <p class="round-banner-rule" id="teamRoundBannerRule">
+        إذا أجاب فريقك خطأ، تُمنح الفرصة فوراً للفريق الخصم للإجابة وخطف النقاط!
+      </p>
+    </div>
+  </div>
+
+  <!-- البطاقة الدوارة لاختيار الفريق والطالب (Rolling Flipping Card) -->
+  <div id="teamFlippingModalWrapper" class="team-flipping-modal-wrapper hidden">
+    <div id="teamRollingCard" class="team-rolling-card">
+      <!-- مرحلة 1: ظهور الفريق الموجه إليه السؤال أولاً -->
+      <div id="rollingCardPhaseTeam" class="rolling-card-phase-view">
+        <div class="rolling-card-icon-halo">
+          <i id="rollingTeamHeaderIcon" class="fa-solid fa-shield-halved"></i>
+        </div>
+        <div class="rolling-card-subhead">السؤال موجه إلى فريق</div>
+        <div class="rolling-card-main-title" id="rollingCardTeamNameBig">فرسان القرآن</div>
+      </div>
+
+      <!-- مرحلة 2: تلاشي الفريق وظهور روليت اختيار الطالب بالأنيميشن -->
+      <div id="rollingCardPhaseStudent" class="rolling-card-phase-view hidden">
+        <div class="rolling-card-team-badge" id="rollingCardTeamBadge">فرسان القرآن</div>
+        <div class="rolling-card-subhead" id="rollingStudentSubhead">جاري سحب المتسابق...</div>
+        <div class="rolling-roulette-box" id="rollingRouletteBox">
+          <div class="rolling-card-target-student" id="rollingCardTargetStudent">...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- بطاقات الفرق الجانبية المتحركة لعرض النقاط وتكبيرها عند الفوز -->
+  <div id="teamScoreFlyersContainer" class="team-score-flyers-container">
+    <div id="flyerTeamA" class="team-side-flyer flyer-right">
+      <div class="side-flyer-header">
+        <span class="side-flyer-name" id="flyerTeamAName">الفريق الأول</span>
+        <i class="fa-solid fa-shield" style="color:#facc15;"></i>
+      </div>
+      <div class="side-flyer-score" id="flyerTeamAScore">0</div>
+      <div style="font-size:11.5px;opacity:0.85;font-weight:700;">درجة متراكمة</div>
+    </div>
+
+    <div id="flyerTeamB" class="team-side-flyer flyer-left">
+      <div class="side-flyer-header">
+        <span class="side-flyer-name" id="flyerTeamBName">الفريق الثاني</span>
+        <i class="fa-solid fa-shield" style="color:#facc15;"></i>
+      </div>
+      <div class="side-flyer-score" id="flyerTeamBScore">0</div>
+      <div style="font-size:11.5px;opacity:0.85;font-weight:700;">درجة متراكمة</div>
+    </div>
+  </div>
+
+  <!-- إشعار فرصة رد الفعل للفريق الخصم عند الخطأ -->
+  <div id="reboundBannerOverlay" class="rebound-banner-overlay hidden">
+    <div class="rebound-icon-box">
+      <i class="fa-solid fa-bolt-lightning"></i>
+    </div>
+    <div>
+      <div style="font-size:13px;color:#facc15;font-weight:900;">⚡ فرصة رد الفعل التكتيكية!</div>
+      <div style="font-size:15px;font-weight:900;" id="reboundBannerText">السؤال ينتقل الآن إلى الفريق الخصم لخطف النقاط!</div>
+    </div>
+  </div>
+
+  <!-- منصة التتويج النهائي للفرق الفائزة (Grand Finale Podium) -->
+  <div id="teamGrandFinaleOverlay" class="team-grand-finale-overlay hidden">
+    <div class="team-grand-finale-box">
+      <div class="grand-trophy-icon">
+        <i class="fa-solid fa-trophy"></i>
+      </div>
+      <h2 style="font-size:36px;font-weight:900;color:#facc15;margin:0;">مبروك للفريق البطل! 🏆</h2>
+      <p style="font-size:16px;color:#cbd5e1;margin:0;">اكتملت جميع الفقرات الأربع بجدارة وإتقان وتألق كبير</p>
+
+      <div class="winning-team-card" id="winningTeamCardDisplay">
+        <div style="font-size:16px;font-weight:900;color:#facc15;">الفريق الفائز بالمركز الأول:</div>
+        <h3 id="winningTeamName" style="font-size:32px;font-weight:900;margin:0;">--</h3>
+        <div id="winningTeamScore" style="font-size:36px;font-weight:900;color:#facc15;">0 نقطة</div>
+        <div id="winningTeamMembersList" style="font-size:14px;color:#e2e8f0;font-weight:800;margin-top:4px;"></div>
+      </div>
+
+      <div class="mvp-student-card" id="mvpStudentCardDisplay">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="width:48px;height:48px;border-radius:50%;background:#facc15;color:#0f172a;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:900;">
+            <i class="fa-solid fa-star"></i>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:12px;color:#fef08a;font-weight:800;">⭐ نجم المسابقة وهداف البطولة (MVP):</div>
+            <div id="mvpStudentName" style="font-size:18px;font-weight:900;color:#ffffff;">--</div>
+          </div>
+        </div>
+        <div id="mvpStudentScore" style="font-size:20px;font-weight:900;color:#facc15;">0 نقطة</div>
+      </div>
+
+      <div style="display:flex;gap:12px;margin-top:14px;">
+        <button type="button" id="btnRestartTeamContest" class="btn-duo-yellow" style="font-size:16px;padding:12px 28px;">
+          <i class="fa-solid fa-rotate-right"></i> أعد الكَرّة (مباراة جديدة)
+        </button>
+        <button type="button" id="btnCloseTeamContest" class="btn-duo-outline" style="color:#ffffff;border-color:#64748b;font-size:16px;padding:12px 24px;">
+          <i class="fa-solid fa-house"></i> خروج للرئيسية
         </button>
       </div>
     </div>
