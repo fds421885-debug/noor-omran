@@ -2528,33 +2528,90 @@ async function checkDirectUrlAuthentication(overrideToken = null) {
 // --------------------------------------------------------
 if (fullNameInput) {
   fullNameInput.addEventListener("input", () => {
-    const val = fullNameInput.value.trim();
-    const words = val.length > 0 ? val.split(/\s+/).filter(w => w.length > 0) : [];
-    const count = words.length;
+    const rawVal = fullNameInput.value;
+    const val = rawVal.trim();
 
+    if (!val) {
+      if (nameProgressBar) nameProgressBar.style.width = "0%";
+      if (nameCountBadge) {
+        nameCountBadge.textContent = "0 / 4 أسماء";
+        nameCountBadge.classList.remove("valid");
+      }
+      if (loginInstructionText) {
+        loginInstructionText.innerHTML = `يرجى كتابة الاسم للمتابعة والدخول للمسابقة.`;
+      }
+      validationAlert?.classList.add("hidden");
+      return;
+    }
+
+    // 1. فحص فوري: هل المدخل هو المشرف العام؟
+    if (isSupervisor(val)) {
+      if (nameProgressBar) nameProgressBar.style.width = "100%";
+      if (nameCountBadge) {
+        nameCountBadge.textContent = "👑 المشرف العام";
+        nameCountBadge.classList.add("valid");
+      }
+      if (loginInstructionText) {
+        loginInstructionText.innerHTML = `أهلاً بك يا مشرف البرنامج! اضغط <strong>«متابعة والدخول»</strong> لفتح لوحة التحكم فورياً.`;
+      }
+      validationAlert?.classList.add("hidden");
+      return;
+    }
+
+    // 2. فحص فوري: هل الحساب مسجل مسبقاً (معلم، عارض، طالب)؟
+    const norm = normalizeArabic(val);
+    const existing = participantsCache.find(p => 
+      p.normalizedName === norm || 
+      normalizeArabic(p.name || "") === norm ||
+      (p.name && p.name.trim().toLowerCase() === val.toLowerCase())
+    );
+    if (existing) {
+      if (nameProgressBar) nameProgressBar.style.width = "100%";
+      if (nameCountBadge) {
+        const roleLabels = { supervisor: "مشرف", teacher: "معلم", presenter: "عارض", student: "طالب" };
+        nameCountBadge.textContent = `✔ ${roleLabels[existing.role] || "حساب مسجل"}`;
+        nameCountBadge.classList.add("valid");
+      }
+      if (loginInstructionText) {
+        loginInstructionText.innerHTML = `أهلاً بك يا <strong>${escapeHtml(existing.name)}</strong>! حسابك جاهز، اضغط <strong>«متابعة والدخول»</strong>.`;
+      }
+      validationAlert?.classList.add("hidden");
+      return;
+    }
+
+    // 3. مستخدم جديد: احتساب عدد الكلمات
+    const words = val.split(/\s+/).filter(w => w.length > 0);
+    const count = words.length;
     const progressPercent = Math.min(100, Math.round((count / 4) * 100));
     if (nameProgressBar) nameProgressBar.style.width = `${progressPercent}%`;
 
-    if (count === 0) {
-      nameCountBadge.textContent = "0 / 4 أسماء";
-      nameCountBadge.classList.remove("valid");
-      if (loginInstructionText) {
-        loginInstructionText.innerHTML = `يرجى كتابة الاسم الرباعي كاملاً (4 أسماء على الأقل) واختيار المدرسة والصف للمتابعة.`;
+    validationAlert?.classList.add("hidden");
+
+    if (count < 3) {
+      if (nameCountBadge) {
+        nameCountBadge.textContent = `${count} / 4 أسماء`;
+        nameCountBadge.classList.remove("valid");
       }
-    } else if (count < 4) {
-      nameCountBadge.textContent = `${count} / 4 أسماء`;
-      nameCountBadge.classList.remove("valid");
       const remaining = 4 - count;
       const remText = remaining === 1 ? "اسم واحد" : remaining === 2 ? "اسمين" : "3 أسماء";
       if (loginInstructionText) {
-        loginInstructionText.innerHTML = `كتبت الآن (${count}) أسماء.. متبقي (${remText}) لاكتمال الاسم الرباعي المطلوب.`;
+        loginInstructionText.innerHTML = `كتبت (${count}) أسماء.. يرجى إكمال الاسم (متبقي ${remText}).`;
+      }
+    } else if (count === 3) {
+      if (nameCountBadge) {
+        nameCountBadge.textContent = `3 / 4 أسماء`;
+        nameCountBadge.classList.add("valid");
+      }
+      if (loginInstructionText) {
+        loginInstructionText.innerHTML = `الاسم جاهز، ويفضل كتابة الاسم الرباعي كاملاً لضمان التميز. اضغط <strong>«متابعة والدخول»</strong>.`;
       }
     } else {
-      nameCountBadge.textContent = `${count} أسماء`;
-      nameCountBadge.classList.add("valid");
-      validationAlert.classList.add("hidden");
+      if (nameCountBadge) {
+        nameCountBadge.textContent = `${count} أسماء`;
+        nameCountBadge.classList.add("valid");
+      }
       if (loginInstructionText) {
-        loginInstructionText.innerHTML = `الاسم الرباعي مكتمل وجاهز تماماً! اختر مدرستك وصفك ثم اضغط <strong>«تسجيل ودخول»</strong>.`;
+        loginInstructionText.innerHTML = `الاسم مكتمل وجاهز تماماً! اضغط <strong>«متابعة والدخول»</strong> للمتابعة.`;
       }
     }
   });
@@ -2633,116 +2690,120 @@ function resetLoginSteps() {
 }
 
 // --------------------------------------------------------
-// معالجة تسجيل الدخول الذكية:
-// 1. المشرف، المعلمون، العارض، والطلاب السابقون -> يفتح حسابهم مباشرة
-// 2. الطالب الجديد -> يدخل اسمه فتظهر أمامه خيارات المدارس بشكل جميل، ثم الصفوف
+// معالجة تسجيل الدخول الذكية واللحظية
 // --------------------------------------------------------
 loginForm?.addEventListener("submit", async (e) => {
   e.preventDefault();
 
   const rawName = fullNameInput.value.trim();
   if (!rawName) {
-    validationAlert.textContent = "يرجى كتابة الاسم للمتابعة.";
-    validationAlert.classList.remove("hidden");
+    if (validationAlert) {
+      validationAlert.textContent = "يرجى كتابة الاسم للمتابعة.";
+      validationAlert.classList.remove("hidden");
+    }
     fullNameInput.focus();
     return;
   }
 
-  validationAlert.classList.add("hidden");
+  validationAlert?.classList.add("hidden");
   sessionStorage.removeItem("nour_supervisor_impersonation");
   localStorage.removeItem("nour_previous_supervisor");
   document.getElementById("impersonationNoticeBar")?.remove();
-  btnSubmitLogin.disabled = true;
-  btnSubmitLogin.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> جاري التحقق...`;
-  showGlobalLoader("جاري تسجيل الدخول وجلب البيانات...", "يرجى الانتظار، يتم جلب حسابك ومزامنة البيانات السحابية لحظياً");
 
-  try {
-    const norm = normalizeArabic(rawName);
-    const isSup = isSupervisor(rawName);
-    const docId = getDocumentId(norm);
+  const norm = normalizeArabic(rawName);
+  const isSup = isSupervisor(rawName);
+  const docId = getDocumentId(norm);
 
-    // 1. جلب وتحديث قائمة المشاركين والحسابات سحابياً بالكامل مع شاشة التحميل المستمرة
-    await fetchParticipantsFromCloud(true);
-
-    // 2. البحث الدقيق في كاش المشاركين
-    let foundUser = participantsCache.find(p => 
-      p.normalizedName === norm || 
-      normalizeArabic(p.name || "") === norm ||
-      (p.name && p.name.trim().toLowerCase() === rawName.toLowerCase()) ||
-      p.id === docId
-    );
-
-    // 3. المشرف العام (أو حساب برتبة مشرف) -> إعداد كامل للبيانات وجدول الحسابات ثم فتح الواجهة
-    if (isSup || (foundUser && foundUser.role === "supervisor")) {
-      let supUser = foundUser;
-      if (!supUser) {
-        supUser = {
-          id: docId,
-          name: MASTER_SUPERVISOR_NAME,
-          normalizedName: norm,
-          role: "supervisor",
-          school: "مدرسة نور البيان المركزية",
-          grade: "جميع الفئات",
-          firstLoginAt: new Date().toISOString(),
-          lastLoginAt: new Date().toISOString(),
-          loginCount: 1
-        };
-        participantsCache.unshift(supUser);
-        saveParticipants();
-        syncParticipantToCloud(supUser).catch(() => {});
-      } else {
-        supUser.role = "supervisor";
-        supUser.lastLoginAt = new Date().toISOString();
-        supUser.loginCount = (supUser.loginCount || 1) + 1;
-        saveParticipants();
-        syncParticipantToCloud(supUser).catch(() => {});
-      }
-
-      // جلب بقية البيانات (الاختبارات، الغرف، لوحة الشرف) سحابياً أثناء استمرار شاشة التحميل
-      try {
-        await withTimeout(loadCloudData(), 3000, null);
-      } catch (e) {}
-
-      // تجهيز الواجهة وجدول الحسابات بالكامل
-      renderSupervisorDashboard();
-      renderAccountsTable();
-
-      // فتح الواجهة بعد انتهاء التحميل التام
-      finalizeUserSession(supUser, supUser.loginCount > 1);
-      hideGlobalLoader();
-      showToast("مرحباً بك يا مشرف البرنامج! تم الدخول بنجاح", "fa-crown");
-      return;
+  // 1. الدخول الفوري السريع للمشرف العام دون أي انتظار لشبكة أو تعليق
+  if (isSup) {
+    let supUser = participantsCache.find(p => p.role === "supervisor" || isSupervisor(p.name));
+    if (!supUser) {
+      supUser = {
+        id: docId,
+        name: MASTER_SUPERVISOR_NAME,
+        normalizedName: norm,
+        role: "supervisor",
+        school: "مدرسة نور البيان المركزية",
+        grade: "جميع الفئات",
+        firstLoginAt: new Date().toISOString(),
+        lastLoginAt: new Date().toISOString(),
+        loginCount: 1
+      };
+      participantsCache.unshift(supUser);
+      saveParticipants();
+      syncParticipantToCloud(supUser).catch(() => {});
+    } else {
+      supUser.lastLoginAt = new Date().toISOString();
+      supUser.loginCount = (supUser.loginCount || 1) + 1;
+      saveParticipants();
+      syncParticipantToCloud(supUser).catch(() => {});
     }
 
-    // 4. مستخدم مسجل مسبقاً (طالب أو معلم أو عارض)
+    renderSupervisorDashboard();
+    renderAccountsTable();
+    finalizeUserSession(supUser, true);
+    showToast("مرحباً بك يا مشرف البرنامج! تم الدخول بنجاح", "fa-crown");
+    loadCloudData().catch(() => {});
+    return;
+  }
+
+  // 2. فحص الحساب المسجل محلياً في الذاكرة والكاش
+  let foundUser = participantsCache.find(p => 
+    p.normalizedName === norm || 
+    normalizeArabic(p.name || "") === norm ||
+    (p.name && p.name.trim().toLowerCase() === rawName.toLowerCase()) ||
+    p.id === docId
+  );
+
+  if (foundUser) {
+    foundUser.lastLoginAt = new Date().toISOString();
+    foundUser.loginCount = (foundUser.loginCount || 1) + 1;
+    saveParticipants();
+    finalizeUserSession(foundUser, true);
+    showToast("مرحباً بعودتك يا " + foundUser.name + "! تم تسجيل الدخول بنجاح", "fa-circle-check");
+    try {
+      updateDoc(doc(db, "participants", foundUser.id || docId), {
+        lastLoginAt: serverTimestamp(),
+        loginCount: foundUser.loginCount
+      }).catch(() => {});
+    } catch (e) {}
+    loadCloudData().catch(() => {});
+    return;
+  }
+
+  // 3. إن لم يوجد محلياً، نبحث سريعاً في السحابة
+  btnSubmitLogin.disabled = true;
+  btnSubmitLogin.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> جاري التحقق...`;
+  showGlobalLoader("جاري التحقق من الحساب...", "يرجى الانتظار للحظات...");
+
+  try {
+    const cloudUsers = await withTimeout(fetchParticipantsFromCloud(true), 2500, null);
+    if (Array.isArray(cloudUsers)) {
+      foundUser = cloudUsers.find(p => 
+        p.normalizedName === norm || 
+        normalizeArabic(p.name || "") === norm ||
+        (p.name && p.name.trim().toLowerCase() === rawName.toLowerCase()) ||
+        p.id === docId
+      );
+    }
+
     if (foundUser) {
       foundUser.lastLoginAt = new Date().toISOString();
       foundUser.loginCount = (foundUser.loginCount || 1) + 1;
       saveParticipants();
-
-      try {
-        const uRef = doc(db, "participants", foundUser.id || docId);
-        updateDoc(uRef, {
-          lastLoginAt: serverTimestamp(),
-          loginCount: foundUser.loginCount
-        }).catch(() => {});
-      } catch (e) {}
-
-      try {
-        await withTimeout(loadCloudData(), 2500, null);
-      } catch (e) {}
-
       finalizeUserSession(foundUser, true);
       hideGlobalLoader();
       showToast("مرحباً بعودتك يا " + foundUser.name + "! تم تسجيل الدخول بنجاح", "fa-circle-check");
       return;
     }
 
-    // 5. مستخدم جديد: التحقق من كتابة الاسم الرباعي
-    const validation = validateQuadrupleName(rawName);
-    if (!validation.isValid) {
-      validationAlert.textContent = validation.message;
-      validationAlert.classList.remove("hidden");
+    // 4. مستخدم جديد تماماً: فحص الاسم
+    const words = rawName.split(/\s+/).filter(w => w.length > 0);
+    if (words.length < 3) {
+      if (validationAlert) {
+        validationAlert.textContent = "يرجى كتابة الاسم الثلاثي أو الرباعي كاملاً (3 أسماء على الأقل) للمتابعة.";
+        validationAlert.classList.remove("hidden");
+      }
       fullNameInput.focus();
       hideGlobalLoader();
       return;
@@ -2762,7 +2823,19 @@ loginForm?.addEventListener("submit", async (e) => {
   } catch (err) {
     console.error("Login submit error:", err);
     hideGlobalLoader();
-    showToast("حدث خطأ أثناء فحص البيانات، يرجى المحاولة مرة أخرى", "fa-triangle-exclamation");
+    const words = rawName.split(/\s+/).filter(w => w.length > 0);
+    if (words.length >= 3) {
+      pendingNewStudent = {
+        rawName: rawName,
+        norm: norm,
+        docId: docId,
+        school: "",
+        grade: ""
+      };
+      showOnboardingSchoolStep();
+    } else {
+      showToast("يرجى كتابة الاسم كاملاً للمتابعة", "fa-triangle-exclamation");
+    }
   } finally {
     btnSubmitLogin.disabled = false;
     btnSubmitLogin.innerHTML = `<span class="btn-text">متابعة والدخول</span><span class="btn-icon"><i class="fa-solid fa-arrow-left"></i></span>`;
