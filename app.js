@@ -1,28 +1,9 @@
 
 // ========================================================
-// تفاعل ملصقات منصة نور البيان في المسرح الحي بثيم مبهج
+// تفاعل ملصقات منصة نور البيان (تم إزالتها لضمان تركيز المسابقة ووقار الأجواء القرآنية)
 // ========================================================
 function setupPlatformThemedStickers() {
-  const container = document.getElementById("stageThemedStickersBar");
-  if (!container) return;
-
-  const stickersConfig = {
-    quran: { title: "نور القرآن", icon: '<i class="fa-solid fa-book-quran" style="color:#16a34a; font-size:22px;"></i>' },
-    lion: { title: "بطل البيان", icon: '<img src="duo-lion.png" style="width:26px; height:26px; object-fit:contain;" />' },
-    crown: { title: "تاج الوقار", icon: '<i class="fa-solid fa-crown" style="color:#ca8a04; font-size:22px;"></i>' },
-    crescent: { title: "هلال الإتقان", icon: '<i class="fa-solid fa-moon" style="color:#3b82f6; font-size:22px;"></i>' },
-    honor: { title: "وسام الشرف", icon: '<i class="fa-solid fa-award" style="color:#d97706; font-size:22px;"></i>' },
-    dua: { title: "دعاء بالتوفيق", icon: '<i class="fa-solid fa-hands-praying" style="color:#059669; font-size:22px;"></i>' }
-  };
-
-  container.querySelectorAll(".themed-sticker-btn").forEach(btn => {
-    btn.onclick = () => {
-      const type = btn.getAttribute("data-sticker");
-      const cfg = stickersConfig[type] || stickersConfig.lion;
-      triggerFloatingThemedSticker(cfg.title, cfg.icon);
-      try { soundFX.pop(); } catch (e) {}
-    };
-  });
+  // تفاعلات الملصقات ملغاة لضمان بيئة مسابقات قرانية هادئة ونقية
 }
 
 function triggerFloatingThemedSticker(title, iconHtml) {
@@ -658,6 +639,10 @@ document.querySelectorAll(".nav-tab").forEach(tabBtn => {
         renderAccountsTable();
       }
       fetchParticipantsFromCloud(true).then(() => renderAccountsTable()).catch(() => {});
+    }
+
+    if (targetTabId === "tabTeams") {
+      renderTeamsManagementTab();
     }
 
     // تحديث البيانات السحابية في الخلفية بهدوء دون تجميد الواجهة
@@ -2234,6 +2219,7 @@ async function loadCloudData(forceServer = false) {
     try { renderStudentPracticeQuizzes(); } catch (e) { console.warn("renderStudentPracticeQuizzes notice:", e); }
     try { renderLiveRoomsList(); } catch (e) { console.warn("renderLiveRoomsList notice:", e); }
     try { renderHonorLeaderboardTab(); } catch (e) { console.warn("renderHonorLeaderboardTab notice:", e); }
+    try { renderTeamsManagementTab(); } catch (e) { console.warn("renderTeamsManagementTab notice:", e); }
 
     if (currentUser && (currentUser.role === "supervisor" || currentUser.role === "teacher" || currentUser.role === "presenter")) {
       try { renderSupervisorDashboard(); } catch (e) { console.warn("renderSupervisorDashboard notice:", e); }
@@ -3140,6 +3126,9 @@ function renderSupervisorDashboard() {
 
   // 8. قسم البطاقات التكتيكية الكامل
   try { renderSupervisorCardsCatalog(); } catch (e) {}
+
+  // 9. تبويب إدارة الفرق التنافسية
+  try { renderTeamsManagementTab(); } catch (e) {}
 }
 
 // --------------------------------------------------------
@@ -3375,6 +3364,85 @@ const modalAccountName = document.getElementById("modalAccountName");
 const modalAccountRole = document.getElementById("modalAccountRole");
 const modalAccountSchool = document.getElementById("modalAccountSchool");
 const modalAccountGrade = document.getElementById("modalAccountGrade");
+const accountModeSelectorGroup = document.getElementById("accountModeSelectorGroup");
+const singleAccountNameGroup = document.getElementById("singleAccountNameGroup");
+const batchAccountNamesGroup = document.getElementById("batchAccountNamesGroup");
+const modalBatchNamesInput = document.getElementById("modalBatchNamesInput");
+
+// مستمع التبديل بين النمط الفردي والجماعي في إضافة الحسابات
+document.querySelectorAll("input[name='accountAddMode']").forEach(radio => {
+  radio.addEventListener("change", (e) => {
+    const isBatch = e.target.value === "batch";
+    if (isBatch) {
+      singleAccountNameGroup?.classList.add("hidden");
+      batchAccountNamesGroup?.classList.remove("hidden");
+      modalBatchNamesInput?.focus();
+    } else {
+      singleAccountNameGroup?.classList.remove("hidden");
+      batchAccountNamesGroup?.classList.add("hidden");
+      modalAccountName?.focus();
+    }
+  });
+});
+
+// نافذة تعديل ومراجعة الاسم غير الرباعي في الإضافة الجماعية
+function requestNameCorrection(rawName, reason) {
+  return new Promise((resolve) => {
+    const modal = document.getElementById("editInvalidNameModal");
+    const notice = document.getElementById("invalidNameReasonNotice");
+    const input = document.getElementById("correctionQuadrupleNameInput");
+    const btnConfirm = document.getElementById("btnConfirmCorrectedName");
+    const btnSkip = document.getElementById("btnSkipInvalidName");
+    const btnCancel = document.getElementById("btnCancelBatchProcess");
+
+    if (!modal || !input) {
+      resolve({ action: "skip" });
+      return;
+    }
+
+    if (notice) {
+      notice.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> <strong>الاسم غير المستوفي:</strong> «${escapeHtml(rawName)}»<br><small style="margin-top:4px;display:block;">${escapeHtml(reason)}</small>`;
+    }
+    input.value = rawName;
+    modal.classList.remove("hidden");
+    input.focus();
+
+    const cleanup = () => {
+      if (btnConfirm) btnConfirm.onclick = null;
+      if (btnSkip) btnSkip.onclick = null;
+      if (btnCancel) btnCancel.onclick = null;
+      modal.classList.add("hidden");
+    };
+
+    if (btnConfirm) {
+      btnConfirm.onclick = () => {
+        const corrected = input.value.trim();
+        const check = validateQuadrupleName(corrected);
+        if (!check.isValid) {
+          showToast(check.message, "fa-triangle-exclamation");
+          input.focus();
+          return;
+        }
+        cleanup();
+        resolve({ action: "corrected", name: corrected });
+      };
+    }
+
+    if (btnSkip) {
+      btnSkip.onclick = () => {
+        cleanup();
+        resolve({ action: "skip" });
+      };
+    }
+
+    if (btnCancel) {
+      btnCancel.onclick = () => {
+        cleanup();
+        resolve({ action: "cancel" });
+      };
+    }
+  });
+}
 
 function openAccountModal(user = null) {
   if (!schoolsCache || schoolsCache.length === 0) schoolsCache = [...DEFAULT_SCHOOLS];
@@ -3394,6 +3462,11 @@ function openAccountModal(user = null) {
     modalAccountRole.value = user.role || "student";
     if (modalAccountSchool) modalAccountSchool.value = user.school || schoolsCache[0] || "";
     if (modalAccountGrade) modalAccountGrade.value = user.grade || gradesCache[0] || "";
+
+    // إخفاء محدد النمط الجماعي عند التعديل
+    accountModeSelectorGroup?.classList.add("hidden");
+    singleAccountNameGroup?.classList.remove("hidden");
+    batchAccountNamesGroup?.classList.add("hidden");
   } else {
     accountModalTitle.innerHTML = `<i class="fa-solid fa-user-plus"></i> إضافة حساب جديد`;
     editAccountId.value = "";
@@ -3401,6 +3474,14 @@ function openAccountModal(user = null) {
     modalAccountRole.value = "student";
     if (modalAccountSchool) modalAccountSchool.value = schoolsCache[0] || "";
     if (modalAccountGrade) modalAccountGrade.value = gradesCache[0] || "";
+
+    // إظهار محدد النمط (فردي / جماعي) وضبطه على فردي كافتراضي
+    accountModeSelectorGroup?.classList.remove("hidden");
+    const rSingle = document.querySelector("input[name='accountAddMode'][value='single']");
+    if (rSingle) rSingle.checked = true;
+    singleAccountNameGroup?.classList.remove("hidden");
+    batchAccountNamesGroup?.classList.add("hidden");
+    if (modalBatchNamesInput) modalBatchNamesInput.value = "";
   }
   accountModal.classList.remove("hidden");
 }
@@ -3417,12 +3498,111 @@ accountModalForm?.addEventListener("submit", async (e) => {
   const btnSubmit = accountModalForm.querySelector("button[type='submit']");
   const origBtnHtml = btnSubmit ? btnSubmit.innerHTML : "";
 
-  const name = modalAccountName.value.trim();
   const role = modalAccountRole.value;
   const school = modalAccountSchool.value;
   const grade = modalAccountGrade.value;
   const targetId = editAccountId.value;
+  const mode = document.querySelector("input[name='accountAddMode']:checked")?.value || "single";
 
+  // --------------------------------------------------------
+  // حالة الإضافة الجماعية (دفعة أسماء مع التحقق والمراجعة الرباعية)
+  // --------------------------------------------------------
+  if (!targetId && mode === "batch") {
+    const rawText = modalBatchNamesInput ? modalBatchNamesInput.value.trim() : "";
+    if (!rawText) {
+      showToast("يرجى كتابة الأسماء الرباعية أولاً (كل اسم في سطر مستقل)", "fa-triangle-exclamation");
+      return;
+    }
+
+    const lines = rawText.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+    if (lines.length === 0) {
+      showToast("يرجى كتابة اسم رباعي واحد على الأقل", "fa-triangle-exclamation");
+      return;
+    }
+
+    accountModalForm.dataset.submitting = "true";
+    if (btnSubmit) {
+      btnSubmit.disabled = true;
+      btnSubmit.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> جاري مراجعة وحفظ الأسماء...';
+    }
+
+    let addedCount = 0;
+    let cancelled = false;
+    const remainingLines = [];
+
+    for (let i = 0; i < lines.length; i++) {
+      let currentName = lines[i];
+      let valid = validateQuadrupleName(currentName);
+
+      if (!valid.isValid) {
+        // نوقف العملية فورياً ونفتح نافذة التعديل للمشرف مع عرض الاسم
+        const correctionResult = await requestNameCorrection(currentName, valid.message);
+        if (correctionResult.action === "cancel") {
+          cancelled = true;
+          remainingLines.push(...lines.slice(i));
+          break;
+        } else if (correctionResult.action === "skip") {
+          continue;
+        } else if (correctionResult.action === "corrected") {
+          currentName = correctionResult.name;
+        }
+      }
+
+      const norm = normalizeArabic(currentName);
+      const newId = getDocumentId(norm);
+      const nowIso = new Date().toISOString();
+
+      let existing = participantsCache.find(p => p.id === newId || p.normalizedName === norm);
+      if (existing) {
+        existing.name = currentName;
+        existing.role = role;
+        existing.school = school;
+        existing.grade = grade;
+        await syncParticipantToCloud(existing);
+      } else {
+        const newUser = {
+          id: newId,
+          name: currentName,
+          normalizedName: norm,
+          role,
+          school,
+          grade,
+          firstLoginAt: nowIso,
+          lastLoginAt: nowIso,
+          loginCount: 1,
+          totalScore: 0
+        };
+        participantsCache.push(newUser);
+        await syncParticipantToCloud(newUser);
+      }
+      addedCount++;
+    }
+
+    saveParticipants();
+    renderAccountsTable();
+    renderSupervisorDashboard();
+
+    if (cancelled) {
+      if (modalBatchNamesInput) modalBatchNamesInput.value = remainingLines.join("\n");
+      showToast(`تم إيقاف المراجعة. تم حفظ (${addedCount}) حسابات بنجاح، والأسماء المتبقية محفوظة لتعديلها.`, "fa-circle-info");
+    } else {
+      accountModal.classList.add("hidden");
+      if (modalBatchNamesInput) modalBatchNamesInput.value = "";
+      showToast(`تمت مراجعة وإضافة (${addedCount}) حسابات بنجاح في السحابة!`, "fa-circle-check");
+    }
+
+    if (btnSubmit) {
+      btnSubmit.disabled = false;
+      btnSubmit.innerHTML = origBtnHtml;
+    }
+    delete accountModalForm.dataset.submitting;
+    return;
+  }
+
+  // --------------------------------------------------------
+  // حالة الإضافة الفردية / التعديل
+  // --------------------------------------------------------
+  const name = modalAccountName.value.trim();
   const valid = validateQuadrupleName(name);
   if (!valid.isValid) {
     showToast(valid.message, "fa-triangle-exclamation");
@@ -3451,7 +3631,7 @@ accountModalForm?.addEventListener("submit", async (e) => {
       }
       showToast("تم تحديث بيانات الحساب في السحابة بنجاح!", "fa-circle-check");
     } else {
-      // إضافة حساب جديد
+      // إضافة حساب جديد فردي
       const newId = getDocumentId(norm);
       const nowIso = new Date().toISOString();
       const newUser = {
@@ -3463,7 +3643,8 @@ accountModalForm?.addEventListener("submit", async (e) => {
         grade,
         firstLoginAt: nowIso,
         lastLoginAt: nowIso,
-        loginCount: 1
+        loginCount: 1,
+        totalScore: 0
       };
       participantsCache.push(newUser);
       await syncParticipantToCloud(newUser);
@@ -3532,6 +3713,43 @@ formAddNewSchool?.addEventListener("submit", (e) => {
   updateDropdowns();
   newSchoolInput.value = "";
   showToast(`تمت إضافة مدرسة (${val}) بنجاح`, "fa-circle-check");
+});
+
+// إضافة مجموعة مدارس دفعة واحدة (كل مدرسة في سطر)
+document.getElementById("btnSubmitBatchSchools")?.addEventListener("click", () => {
+  if (!currentUser || currentUser.role !== "supervisor") {
+    showToast("هذه الصلاحية خاصة بالمشرف العام فقط", "fa-shield-halved");
+    return;
+  }
+  const batchEl = document.getElementById("newSchoolsBatchInput");
+  const raw = batchEl ? batchEl.value.trim() : "";
+  if (!raw) {
+    showToast("يرجى كتابة أسماء المدارس أولاً (كل مدرسة في سطر مستقل)", "fa-triangle-exclamation");
+    return;
+  }
+  const lines = raw.split(/\r?\n/).map(s => s.trim()).filter(s => s.length > 0);
+  if (lines.length === 0) {
+    showToast("يرجى كتابة اسم مدرسة واحدة على الأقل", "fa-triangle-exclamation");
+    return;
+  }
+
+  let addedCount = 0;
+  lines.forEach(schoolName => {
+    if (!schoolsCache.includes(schoolName)) {
+      schoolsCache.push(schoolName);
+      addedCount++;
+    }
+  });
+
+  if (addedCount > 0) {
+    saveSchools();
+    renderSchoolsAndGradesTags();
+    updateDropdowns();
+    if (batchEl) batchEl.value = "";
+    showToast(`تمت إضافة (${addedCount}) مدارس جديدة إلى القائمة بنجاح!`, "fa-circle-check");
+  } else {
+    showToast("جميع المدارس المدخلة مسجلة مسبقاً في القائمة", "fa-circle-info");
+  }
 });
 
 // إضافة صف / فئة جديدة
@@ -8406,10 +8624,8 @@ function loadStageQuestion(idx) {
         teacherVotingRow?.classList.add("hidden");
         oralObserverStatusMsg?.classList.remove("hidden");
       }
-      stageThemedStickersBar?.classList.add("hidden");
     } else {
       oralEvalBar.classList.add("hidden");
-      stageThemedStickersBar?.classList.remove("hidden");
     }
   }
 
@@ -10943,20 +11159,71 @@ document.getElementById("btnSupervisorRefreshCloud")?.addEventListener("click", 
   }
 });
 
-// زر إعادة تعيين لوحة الشرف (للمشرف العام)
-document.getElementById("btnResetHonorBoard")?.addEventListener("click", () => {
+// زر إعادة تعيين لوحة الشرف (للمشرف العام) - يصفر لوحة الشرف ونقاط حسابات جميع الطلاب فورياً وسحابياً
+document.getElementById("btnResetHonorBoard")?.addEventListener("click", async () => {
   const isSup = currentUser && (currentUser.role === "supervisor" || isSupervisor(currentUser.name));
   if (!isSup) {
     showToast("صلاحية إعادة تعيين لوحة الشرف خاصة بالمشرف العام فقط", "fa-triangle-exclamation");
     return;
   }
-  showInAppConfirm("هل أنت متأكد من رغبتك في تصفير لوحة الشرف لجميع المتسابقين؟", () => {
+
+  const confirmed = await showInAppConfirm({
+    title: "تصفير لوحة الشرف ونقاط الطلاب",
+    message: "هل أنت متأكد من تصفير لوحة الشرف وإعادة تعيين نقاط جميع الطلاب إلى الصفر؟ سيتم تصفير النقاط في حسابات الطلاب سحابياً ولحظياً.",
+    confirmText: "نعم، تصفير النقاط بالكامل",
+    cancelText: "إلغاء وتراجع",
+    type: "danger",
+    icon: "fa-trash-can"
+  });
+
+  if (!confirmed) return;
+
+  showGlobalLoader("جاري تصفير النقاط...", "يتم الآن تصفير لوحة الشرف ونقاط جميع الطلاب سحابياً ومحلياً...");
+
+  try {
+    // 1. تصفير لوحة الشرف محلياً وسحابياً
     honorLeaderboardCache = [];
     localStorage.setItem("nour_honor_board", JSON.stringify([]));
-    syncHonorBoardToCloud();
+    await syncHonorBoardToCloud();
+
+    // 2. تصفير نقاط جميع الطلاب في سجل الحسابات وسحابياً
+    if (Array.isArray(participantsCache)) {
+      const updatePromises = [];
+      participantsCache.forEach(p => {
+        p.totalScore = 0;
+        p.score = 0;
+        if (p.id && db) {
+          const pRef = doc(db, "participants", p.id);
+          updatePromises.push(
+            setDoc(pRef, { totalScore: 0, score: 0, lastUpdated: serverTimestamp() }, { merge: true })
+              .catch(e => console.warn("Sync reset error for", p.id, e))
+          );
+        }
+      });
+      await Promise.all(updatePromises);
+      saveParticipants();
+    }
+
+    // 3. تحديث حساب المستخدم الحالي إن كان طالباً أو مسجلاً
+    if (currentUser) {
+      currentUser.totalScore = 0;
+      currentUser.score = 0;
+      localStorage.setItem("active_quran_user", JSON.stringify(currentUser));
+      localStorage.setItem("nour_saved_user", JSON.stringify(currentUser));
+      const scoreEl = document.getElementById("studentTotalScoreDisplay");
+      if (scoreEl) scoreEl.textContent = "0 نقطة";
+    }
+
+    // 4. تحديث الجداول واللوحة
+    renderAccountsTable();
     renderHonorLeaderboardTab();
-    showToast("تمت إعادة تعيين لوحة الشرف بنجاح", "fa-circle-check");
-  });
+    showToast("تمت إعادة تعيين لوحة الشرف وتصفير نقاط الطلاب في جميع الحسابات بنجاح!", "fa-circle-check");
+  } catch (err) {
+    console.error("Reset honor board error:", err);
+    showToast("حدث خطأ أثناء تصفير النقاط: " + (err.message || ""), "fa-triangle-exclamation");
+  } finally {
+    hideGlobalLoader();
+  }
 });
 
 // دالة عرض وتحديث لوحة الشرف التفاعلية في التبويب وواجهة الطالب
@@ -11573,19 +11840,25 @@ function renderTeamsSelectOptions() {
   const selA = document.getElementById("selectTeamA");
   const selB = document.getElementById("selectTeamB");
   if (!selA || !selB) return;
-  const optionsHtml = teamsCache.map((t, idx) => `
-    <option value="${t.id}" data-color="${t.color}" ${idx === 0 ? 'selected' : ''}>
-      ${t.name} (${t.members ? t.members.length : 0} طلاب)
-    </option>
-  `).join("");
-  selA.innerHTML = optionsHtml;
-  selB.innerHTML = teamsCache.map((t, idx) => `
-    <option value="${t.id}" data-color="${t.color}" ${idx === 1 ? 'selected' : ''}>
-      ${t.name} (${t.members ? t.members.length : 0} طلاب)
-    </option>
-  `).join("");
+
+  const buildOptions = (selectedId) => {
+    return teamsCache.map((t) => {
+      const scheme = TEAM_COLOR_SCHEMES[t.color] || TEAM_COLOR_SCHEMES.blue;
+      const isSel = t.id === selectedId;
+      return `<option value="${t.id}" data-color="${t.color}" style="background:#ffffff; color:${scheme.hex}; font-weight:800;" ${isSel ? 'selected' : ''}>
+        ${t.name} (${t.members ? t.members.length : 0} طلاب) - ${scheme.name}
+      </option>`;
+    }).join("");
+  };
+
+  const firstId = teamsCache[0]?.id || "";
+  const secondId = teamsCache.length > 1 ? teamsCache[1].id : firstId;
+
+  selA.innerHTML = buildOptions(firstId);
+  selB.innerHTML = buildOptions(secondId);
+
   if (teamsCache.length > 1) {
-    selB.value = teamsCache[1].id;
+    selB.value = secondId;
   }
   updateTeamSelectPreviews();
 }
@@ -11595,26 +11868,95 @@ function updateTeamSelectPreviews() {
   const selB = document.getElementById("selectTeamB");
   const prevA = document.getElementById("previewTeamA");
   const prevB = document.getElementById("previewTeamB");
+
+  const boxA = selA ? selA.closest(".team-select-box") : null;
+  const boxB = selB ? selB.closest(".team-select-box") : null;
+
   const tA = teamsCache.find(t => t.id === selA?.value);
   const tB = teamsCache.find(t => t.id === selB?.value);
+
+  const allColors = ["blue", "red", "emerald", "gold", "purple", "amber"];
+  if (boxA) {
+    allColors.forEach(c => boxA.classList.remove(`team-color-${c}`));
+    if (tA && tA.color) {
+      boxA.classList.add(`team-color-${tA.color}`);
+      const schemeA = TEAM_COLOR_SCHEMES[tA.color] || TEAM_COLOR_SCHEMES.blue;
+      selA.style.borderColor = schemeA.hex;
+      selA.style.color = schemeA.hex;
+    }
+  }
+  if (boxB) {
+    allColors.forEach(c => boxB.classList.remove(`team-color-${c}`));
+    if (tB && tB.color) {
+      boxB.classList.add(`team-color-${tB.color}`);
+      const schemeB = TEAM_COLOR_SCHEMES[tB.color] || TEAM_COLOR_SCHEMES.blue;
+      selB.style.borderColor = schemeB.hex;
+      selB.style.color = schemeB.hex;
+    }
+  }
+
   if (prevA && tA) {
-    prevA.innerHTML = `الأعضاء: ${tA.members?.map(m => m.name).join("، ") || "لا يوجد أعضاء"}`;
+    const schemeA = TEAM_COLOR_SCHEMES[tA.color] || TEAM_COLOR_SCHEMES.blue;
+    const membersCount = tA.members ? tA.members.length : 0;
+    const names = tA.members?.map(m => m.name).join("، ") || "لا يوجد أعضاء";
+    prevA.innerHTML = `
+      <div class="team-select-preview-badge" style="border: 1.5px solid ${schemeA.border}; background: rgba(255,255,255,0.9);">
+        <i class="fa-solid ${schemeA.icon || 'fa-shield-halved'}" style="color: ${schemeA.hex}; font-size: 14px; margin-top: 2px;"></i>
+        <div>
+          <span style="color: ${schemeA.hex}; font-weight: 900;">${escapeHtml(tA.name)}</span> (${membersCount} طلاب)
+          <div style="font-size: 11px; color: #64748b; margin-top: 2px;">الأعضاء: ${escapeHtml(names)}</div>
+        </div>
+      </div>
+    `;
   }
   if (prevB && tB) {
-    prevB.innerHTML = `الأعضاء: ${tB.members?.map(m => m.name).join("، ") || "لا يوجد أعضاء"}`;
+    const schemeB = TEAM_COLOR_SCHEMES[tB.color] || TEAM_COLOR_SCHEMES.blue;
+    const membersCount = tB.members ? tB.members.length : 0;
+    const names = tB.members?.map(m => m.name).join("، ") || "لا يوجد أعضاء";
+    prevB.innerHTML = `
+      <div class="team-select-preview-badge" style="border: 1.5px solid ${schemeB.border}; background: rgba(255,255,255,0.9);">
+        <i class="fa-solid ${schemeB.icon || 'fa-shield-halved'}" style="color: ${schemeB.hex}; font-size: 14px; margin-top: 2px;"></i>
+        <div>
+          <span style="color: ${schemeB.hex}; font-weight: 900;">${escapeHtml(tB.name)}</span> (${membersCount} طلاب)
+          <div style="font-size: 11px; color: #64748b; margin-top: 2px;">الأعضاء: ${escapeHtml(names)}</div>
+        </div>
+      </div>
+    `;
   }
 }
 
 document.getElementById("selectTeamA")?.addEventListener("change", updateTeamSelectPreviews);
 document.getElementById("selectTeamB")?.addEventListener("change", updateTeamSelectPreviews);
 
-// إدارة نافذة إنشاء فريق جديد
+// إدارة نافذة إنشاء وتعديل الفريق
 let selectedTeamStudents = [];
-function openCreateTeamModal() {
+function openCreateTeamModal(teamToEdit = null) {
   selectedTeamStudents = [];
   const modal = document.getElementById("createTeamModal");
+  const titleEl = document.getElementById("createTeamModalTitle");
+  const editIdInput = document.getElementById("editTeamId");
   const nameInput = document.getElementById("newTeamNameInput");
-  if (nameInput) nameInput.value = "";
+  const colorSelect = document.getElementById("newTeamColorSelect");
+  const submitBtn = document.getElementById("btnSubmitSaveTeam");
+
+  if (teamToEdit) {
+    if (titleEl) titleEl.innerHTML = `<i class="fa-solid fa-users-gear"></i> تعديل بيانات وتشكيلة الفريق`;
+    if (editIdInput) editIdInput.value = teamToEdit.id;
+    if (nameInput) nameInput.value = teamToEdit.name;
+    if (colorSelect) colorSelect.value = teamToEdit.color || "blue";
+    if (submitBtn) submitBtn.innerHTML = `<i class="fa-solid fa-floppy-disk"></i> حفظ التعديلات سحابياً للجميع`;
+    selectedTeamStudents = teamToEdit.members ? [...teamToEdit.members] : [];
+  } else {
+    if (titleEl) titleEl.innerHTML = `<i class="fa-solid fa-users-gear"></i> إنشاء وتجهيز فريق جديد`;
+    if (editIdInput) editIdInput.value = "";
+    if (nameInput) nameInput.value = "";
+    if (colorSelect) colorSelect.value = "blue";
+    if (submitBtn) submitBtn.innerHTML = `<i class="fa-solid fa-floppy-disk"></i> حفظ الفريق واعتماده سحابياً`;
+    selectedTeamStudents = [];
+  }
+
+  const searchInput = document.getElementById("searchTeamStudentsInput");
+  if (searchInput) searchInput.value = "";
   renderTeamStudentsChecklist();
   modal?.classList.remove("hidden");
 }
@@ -11664,7 +12006,8 @@ function renderTeamStudentsChecklist(searchQuery = "") {
   if (badge) badge.textContent = `${selectedTeamStudents.length} طلاب محددين`;
 }
 
-document.getElementById("btnOpenCreateTeamModal")?.addEventListener("click", () => openCreateTeamModal());
+document.getElementById("btnOpenCreateTeamModal")?.addEventListener("click", () => openCreateTeamModal(null));
+document.getElementById("btnOpenCreateTeamModalTab")?.addEventListener("click", () => openCreateTeamModal(null));
 document.getElementById("searchTeamStudentsInput")?.addEventListener("input", (e) => {
   renderTeamStudentsChecklist(e.target.value);
 });
@@ -11702,36 +12045,181 @@ document.getElementById("btnInlineAddStudentToTeam")?.addEventListener("click", 
   renderTeamStudentsChecklist();
 });
 
+// حفظ أو تعديل الفريق (سحابياً للجميع ومحلياً)
 document.getElementById("createTeamForm")?.addEventListener("submit", async (e) => {
   e.preventDefault();
   const name = document.getElementById("newTeamNameInput")?.value.trim();
   const color = document.getElementById("newTeamColorSelect")?.value || "blue";
+  const targetTeamId = document.getElementById("editTeamId")?.value;
+
   if (!name) return;
   if (selectedTeamStudents.length === 0) {
     showToast("يرجى اختيار طالبين على الأقل لتكوين الفريق", "fa-triangle-exclamation");
     return;
   }
-  const newTeam = {
-    id: "team_" + Date.now(),
-    name: name,
-    color: color,
-    icon: TEAM_COLOR_SCHEMES[color]?.icon || "fa-shield-halved",
-    members: [...selectedTeamStudents],
-    createdAt: new Date().toISOString()
-  };
-  teamsCache.push(newTeam);
-  localStorage.setItem("nour_teams", JSON.stringify(teamsCache));
-  await syncTeamToCloud(newTeam);
-  document.getElementById("createTeamModal")?.classList.add("hidden");
-  renderTeamsSelectOptions();
-  const selA = document.getElementById("selectTeamA");
-  const selB = document.getElementById("selectTeamB");
-  if (selB && selA?.value !== newTeam.id) {
-    selB.value = newTeam.id;
+
+  showGlobalLoader("جاري حفظ الفريق...", "يتم الآن حفظ بيانات الفريق واعتماده سحابياً لجميع المتصلين...");
+
+  try {
+    if (targetTeamId) {
+      // تعديل فريق قائم
+      const team = teamsCache.find(t => t.id === targetTeamId);
+      if (team) {
+        team.name = name;
+        team.color = color;
+        team.icon = TEAM_COLOR_SCHEMES[color]?.icon || "fa-shield-halved";
+        team.members = [...selectedTeamStudents];
+        team.lastUpdated = new Date().toISOString();
+        await syncTeamToCloud(team);
+      }
+      showToast(`تم حفظ وتحديث بيانات فريق «${name}» (${selectedTeamStudents.length} طلاب)!`, "fa-circle-check");
+    } else {
+      // إنشاء فريق جديد
+      const newTeam = {
+        id: "team_" + Date.now(),
+        name: name,
+        color: color,
+        icon: TEAM_COLOR_SCHEMES[color]?.icon || "fa-shield-halved",
+        members: [...selectedTeamStudents],
+        createdAt: new Date().toISOString()
+      };
+      teamsCache.push(newTeam);
+      await syncTeamToCloud(newTeam);
+      showToast(`تم حفظ وتجهيز فريق «${name}» (${selectedTeamStudents.length} طلاب)!`, "fa-circle-check");
+    }
+
+    localStorage.setItem("nour_teams", JSON.stringify(teamsCache));
+    document.getElementById("createTeamModal")?.classList.add("hidden");
+    renderTeamsSelectOptions();
+    renderTeamsManagementTab();
+  } catch (err) {
+    console.error("Team save error:", err);
+    showToast("تعذر حفظ الفريق: " + (err.message || ""), "fa-triangle-exclamation");
+  } finally {
+    hideGlobalLoader();
   }
-  updateTeamSelectPreviews();
-  showToast(`تم حفظ وتجهيز فريق «${name}» (${selectedTeamStudents.length} طلاب)!`, "fa-circle-check");
 });
+
+// دالة حذف الفريق نهائياً من المنصة والسحابة
+async function deleteTeam(teamId) {
+  const team = teamsCache.find(t => t.id === teamId);
+  const teamName = team ? team.name : "الفريق";
+  const confirmed = await showInAppConfirm({
+    title: `حذف ${teamName}`,
+    message: `هل أنت متأكد من رغبتك في حذف فريق «${teamName}» نهائياً؟ سيتم حذفه من قاعدة البيانات وينعكس فوراً عند جميع المشرفين والطلاب.`,
+    confirmText: "نعم، حذف الفريق",
+    cancelText: "إلغاء وتراجع",
+    type: "danger",
+    icon: "fa-trash-can"
+  });
+  if (!confirmed) return;
+
+  showGlobalLoader("جاري حذف الفريق...", "يتم الآن حذف الفريق من قاعدة البيانات السحابية...");
+  try {
+    teamsCache = teamsCache.filter(t => t.id !== teamId);
+    localStorage.setItem("nour_teams", JSON.stringify(teamsCache));
+    if (db && teamId) {
+      await deleteDoc(doc(db, "teams", teamId)).catch(e => console.warn("Delete team doc error:", e));
+    }
+    renderTeamsManagementTab();
+    renderTeamsSelectOptions();
+    showToast(`تم حذف فريق «${teamName}» بنجاح!`, "fa-circle-check");
+  } catch (err) {
+    console.error("Delete team error:", err);
+    showToast("حدث خطأ أثناء حذف الفريق", "fa-triangle-exclamation");
+  } finally {
+    hideGlobalLoader();
+  }
+}
+
+// دالة عرض كروت الفرق الملونة في تبويب الفرق الخاص بالمشرف
+function renderTeamsManagementTab() {
+  const grid = document.getElementById("supervisorTeamsGrid");
+  if (!grid) return;
+
+  ensureDefaultTeams();
+
+  if (!teamsCache || teamsCache.length === 0) {
+    grid.innerHTML = `
+      <div style="grid-column: 1 / -1; text-align: center; padding: 40px 20px; background: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 16px;">
+        <i class="fa-solid fa-users-slash" style="font-size: 38px; color: #94a3b8; margin-bottom: 12px; display: block;"></i>
+        <h4 style="font-size: 16px; font-weight: 900; color: #475569; margin-bottom: 6px;">لا توجد أي فرق منشأة حالياً</h4>
+        <p style="font-size: 13px; color: #64748b; margin-bottom: 16px;">قم بإنشاء وتجهيز أول فريق تنافسي واختيار طلابه ولونه لتنظيم مواجهات حماسية</p>
+        <button type="button" class="btn-duo-green" id="btnEmptyStateCreateTeam">
+          <i class="fa-solid fa-plus"></i> إنشاء فريق جديد الآن
+        </button>
+      </div>
+    `;
+    document.getElementById("btnEmptyStateCreateTeam")?.addEventListener("click", () => openCreateTeamModal(null));
+    return;
+  }
+
+  grid.innerHTML = teamsCache.map(team => {
+    const scheme = TEAM_COLOR_SCHEMES[team.color] || TEAM_COLOR_SCHEMES.blue;
+    const members = team.members || [];
+    const membersCount = members.length;
+
+    return `
+      <div class="supervisor-team-card" data-team-id="${escapeHtml(team.id)}">
+        <div class="team-card-banner" style="background: ${scheme.bg};">
+          <div class="team-card-banner-info">
+            <div class="team-card-icon-bubble">
+              <i class="fa-solid ${scheme.icon || 'fa-shield-halved'}"></i>
+            </div>
+            <div>
+              <h4 class="team-card-title-text">${escapeHtml(team.name)}</h4>
+              <span style="font-size: 11px; opacity: 0.9; font-weight: 700;">هوية: ${scheme.name}</span>
+            </div>
+          </div>
+          <span class="team-card-members-badge">
+            <i class="fa-solid fa-users"></i> ${membersCount} طلاب
+          </span>
+        </div>
+
+        <div class="team-card-body">
+          <div class="team-card-members-title">
+            <i class="fa-solid fa-user-group"></i> أعضاء وطلاب الفريق:
+          </div>
+          <div class="team-card-members-list">
+            ${members.length > 0 ? members.map(m => `
+              <div class="team-member-item">
+                <div style="display: flex; align-items: center; gap: 6px; overflow: hidden;">
+                  <i class="fa-solid fa-circle-user" style="color: ${scheme.hex}; font-size: 13px;"></i>
+                  <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(m.name)}</span>
+                </div>
+                <span class="team-member-item-school">${escapeHtml(m.school || '--')}</span>
+              </div>
+            `).join("") : `<div style="text-align: center; color: #94a3b8; font-size: 12px; padding: 8px;">لا يوجد طلاب مضافون لهذا الفريق حالياً</div>`}
+          </div>
+        </div>
+
+        <div class="team-card-footer">
+          <button type="button" class="btn-duo-outline btn-sm btn-edit-team-card" data-team-id="${escapeHtml(team.id)}" style="font-size: 12px; padding: 6px 12px;">
+            <i class="fa-solid fa-pen-to-square"></i> تعديل الفريق
+          </button>
+          <button type="button" class="btn-duo-red btn-sm btn-delete-team-card" data-team-id="${escapeHtml(team.id)}" style="font-size: 12px; padding: 6px 12px;">
+            <i class="fa-solid fa-trash"></i> حذف
+          </button>
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  grid.querySelectorAll(".btn-edit-team-card").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const tid = btn.getAttribute("data-team-id");
+      const team = teamsCache.find(t => t.id === tid);
+      if (team) openCreateTeamModal(team);
+    });
+  });
+
+  grid.querySelectorAll(".btn-delete-team-card").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const tid = btn.getAttribute("data-team-id");
+      if (tid) deleteTeam(tid);
+    });
+  });
+}
 
 // --------------------------------------------------------
 // شاشة انتظار اللوبي في مسابقة الفرق (Team Lobby Info & Admission)

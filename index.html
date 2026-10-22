@@ -323,6 +323,9 @@
           <button class="nav-tab" data-tab="tabHonorBoard">
             <i class="fa-solid fa-trophy"></i> لوحة الشرف
           </button>
+          <button class="nav-tab" data-tab="tabTeams">
+            <i class="fa-solid fa-users-rectangle"></i> إدارة الفرق
+          </button>
           <button class="nav-tab" data-tab="tabTacticalCards" id="navTabTacticalCards">
             <i class="fa-solid fa-wand-magic-sparkles"></i> قسم البطاقات
             <span class="badge" style="background: #8b5cf6; color: #fff; font-size: 11px; padding: 2px 7px; border-radius: 12px; margin-right: 5px;">40</span>
@@ -565,6 +568,30 @@
             </div>
             <div id="honorBoardTabList" class="honor-board-tab-list">
               <!-- تُملأ تلقائياً -->
+            </div>
+          </div>
+        </div>
+
+        <!-- التبويب: إدارة الفرق التنافسية -->
+        <div id="tabTeams" class="tab-content-panel">
+          <div class="data-table-card">
+            <div class="table-header-flex">
+              <div class="table-title-group">
+                <h3 class="table-title">
+                  <i class="fa-solid fa-users-rectangle"></i> إدارة وتجهيز الفرق التنافسية
+                </h3>
+                <span class="table-subtitle">إنشاء وتعديل وتصنيف الفرق الملونة مع إدارة أعضائها وحذفها لتنعكس فوراً على جميع المشاركين</span>
+              </div>
+              <div class="table-actions">
+                <button type="button" id="btnOpenCreateTeamModalTab" class="btn-duo-green">
+                  <i class="fa-solid fa-users-gear"></i> إنشاء فريق جديد
+                </button>
+              </div>
+            </div>
+
+            <!-- شبكة كروت الفرق الملونة -->
+            <div id="supervisorTeamsGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin-top: 20px;">
+              <!-- تُملأ ديناميكياً -->
             </div>
           </div>
         </div>
@@ -946,28 +973,7 @@
                 <!-- يتم تعبئة الخيارات ديناميكياً -->
               </div>
 
-              <!-- شريط ملصقات التشجيع والتفاعل بثيم منصة نور البيان -->
-              <div id="stageThemedStickersBar" class="stage-themed-stickers-bar">
-                <span style="font-size:12px; font-weight:800; color:#475569; display:inline-flex; align-items:center; gap:5px;"><i class="fa-solid fa-sparkles" style="color:#eab308;"></i> ملصقات المنصة:</span>
-                <button type="button" class="themed-sticker-btn" data-sticker="quran" title="مصحف نور البيان المبارك">
-                  <i class="fa-solid fa-book-quran" style="color:#16a34a; font-size:16px;"></i> <span>نور القرآن</span>
-                </button>
-                <button type="button" class="themed-sticker-btn" data-sticker="star" title="نجم البيان المتألق">
-                  <i class="fa-solid fa-star" style="color:#eab308; font-size:16px;"></i> <span>نجم البيان</span>
-                </button>
-                <button type="button" class="themed-sticker-btn" data-sticker="crown" title="تاج الوقار القرآني">
-                  <i class="fa-solid fa-crown" style="color:#ca8a04; font-size:16px;"></i> <span>تاج الوقار</span>
-                </button>
-                <button type="button" class="themed-sticker-btn" data-sticker="crescent" title="هلال الإتقان المبارك">
-                  <i class="fa-solid fa-moon" style="color:#3b82f6; font-size:16px;"></i> <span>هلال الإتقان</span>
-                </button>
-                <button type="button" class="themed-sticker-btn" data-sticker="honor" title="وسام الشرف القرآني">
-                  <i class="fa-solid fa-award" style="color:#d97706; font-size:16px;"></i> <span>وسام الشرف</span>
-                </button>
-                <button type="button" class="themed-sticker-btn" data-sticker="dua" title="بركة وتوفيق">
-                  <i class="fa-solid fa-hands-praying" style="color:#059669; font-size:16px;"></i> <span>دعاء بالتوفيق</span>
-                </button>
-              </div>
+
             </div>
 
             <!-- شريط تقييم المعلمين الشفهي المباشر ونسبة الإنجاز والتقريب للربع -->
@@ -1138,9 +1144,27 @@
       <form id="accountModalForm" class="modal-body-form">
         <input type="hidden" id="editAccountId">
         
-        <div class="input-group">
+        <div class="input-group" id="accountModeSelectorGroup" style="margin-bottom: 14px;">
+          <label class="input-label" style="font-weight: 800; color: #1e293b; margin-bottom: 6px;">طريقة إضافة الحسابات</label>
+          <div style="display: flex; gap: 10px;">
+            <label style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px; background: #f0fdf4; border: 2px solid #22c55e; border-radius: 12px; cursor: pointer; font-weight: 800; color: #166534;">
+              <input type="radio" name="accountAddMode" value="single" checked style="accent-color: #22c55e;"> فردي
+            </label>
+            <label style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px; background: #eff6ff; border: 2px solid #3b82f6; border-radius: 12px; cursor: pointer; font-weight: 800; color: #1e40af;">
+              <input type="radio" name="accountAddMode" value="batch" style="accent-color: #3b82f6;"> جماعي (دفعة أسماء)
+            </label>
+          </div>
+        </div>
+
+        <div class="input-group" id="singleAccountNameGroup">
           <label class="input-label">الاسم الرباعي <span class="required-star">*</span></label>
-          <input type="text" id="modalAccountName" class="form-control" required placeholder="الاسم الرباعي كاملاً">
+          <input type="text" id="modalAccountName" class="form-control" placeholder="الاسم الرباعي كاملاً">
+        </div>
+
+        <div class="input-group hidden" id="batchAccountNamesGroup">
+          <label class="input-label">الأسماء الرباعية (اسم واحد في كل سطر) <span class="required-star">*</span></label>
+          <textarea id="modalBatchNamesInput" class="form-control" rows="5" placeholder="اكتب أو الصق الأسماء هنا... كل اسم في سطر مستقل"></textarea>
+          <span style="font-size: 11.5px; color: #64748b; margin-top: 4px; display: block;">سيتم إنشاء حسابات مستقلة لجميع الأسماء المدخلة بنفس الدور والمدرسة والصف المحدد</span>
         </div>
 
         <div class="input-group">
@@ -1205,12 +1229,20 @@
             <span class="sg-count-badge green-badge" id="schoolsCountBadge">0 مدارس</span>
           </div>
 
-          <!-- نموذج إضافة مدرسة جديدة -->
-          <form id="formAddNewSchool" class="sg-add-form">
-            <input type="text" id="newSchoolInput" class="form-control" placeholder="اسم المدرسة أو المركز القرآني..." required>
-            <button type="submit" id="btnSubmitNewSchool" class="btn-duo-green" style="padding: 10px 18px; white-space: nowrap;">
-              <i class="fa-solid fa-plus"></i> إضافة
-            </button>
+          <!-- نموذج إضافة مدرسة جديدة (فردي أو دفعات) -->
+          <form id="formAddNewSchool" style="margin-bottom: 12px;">
+            <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+              <input type="text" id="newSchoolInput" class="form-control" placeholder="اسم المدرسة الواحدة...">
+              <button type="submit" id="btnSubmitNewSchool" class="btn-duo-green" style="padding: 10px 16px; white-space: nowrap;">
+                <i class="fa-solid fa-plus"></i> إضافة
+              </button>
+            </div>
+            <div>
+              <textarea id="newSchoolsBatchInput" class="form-control" rows="2" placeholder="أو أضف عدة مدارس دفعة واحدة (كل مدرسة في سطر)..." style="font-size: 12.5px;"></textarea>
+              <button type="button" id="btnSubmitBatchSchools" class="btn-duo-blue btn-sm" style="margin-top: 5px; width: 100%;">
+                <i class="fa-solid fa-cloud-arrow-up"></i> إضافة المدارس المكتوبة دفعة واحدة
+              </button>
+            </div>
           </form>
 
           <!-- قائمة المدارس المعتمدة -->
@@ -1281,6 +1313,39 @@
         <button type="button" id="btnConfirmDialogNo" class="btn-duo-outline">
           <span id="confirmDialogNoText">إلغاء وتراجع</span>
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- مودال مراجعة وتعديل الاسم غير الرباعي في الإضافة الجماعية -->
+  <div id="editInvalidNameModal" class="modal-overlay hidden" style="z-index: 10006;">
+    <div class="duo-modal-box" style="max-width: 480px;">
+      <div class="modal-header">
+        <div class="modal-title-with-icon">
+          <div class="modal-icon-bubble amber">
+            <i class="fa-solid fa-user-pen"></i>
+          </div>
+          <div>
+            <h3>تعديل اسم غير رباعي</h3>
+            <span class="modal-subtitle">الاسم التالي غير مكتمل، يرجى كتابة الاسم الرباعي لإكمال الإضافة</span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-body-form" style="padding-top: 10px;">
+        <div class="notice-box-duo warning" id="invalidNameReasonNotice" style="margin-bottom: 12px; font-size: 13px; background: #fffbeb; border: 1.5px solid #fde68a; border-radius: 10px; padding: 10px; color: #92400e; font-weight: 700;">
+          <!-- سبب الخطأ -->
+        </div>
+        <div class="input-group">
+          <label class="input-label">تعديل الاسم الرباعي <span class="required-star">*</span></label>
+          <input type="text" id="correctionQuadrupleNameInput" class="form-control" placeholder="الاسم الرباعي كاملاً...">
+        </div>
+        <div class="modal-actions-flex" style="margin-top: 16px; display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap;">
+          <button type="button" id="btnCancelBatchProcess" class="btn-duo-outline" style="font-size: 13px; padding: 8px 14px;">إيقاف العملية</button>
+          <button type="button" id="btnSkipInvalidName" class="btn-duo-amber" style="font-size: 13px; padding: 8px 14px;">تخطي هذا الاسم</button>
+          <button type="button" id="btnConfirmCorrectedName" class="btn-duo-green" style="font-size: 13px; padding: 8px 16px;">
+            <i class="fa-solid fa-check"></i> اعتماد والمتابعة
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -2091,7 +2156,7 @@
             <i class="fa-solid fa-users-gear"></i>
           </div>
           <div>
-            <h3>إنشاء وتجهيز فريق جديد</h3>
+            <h3 id="createTeamModalTitle">إنشاء وتجهيز فريق جديد</h3>
             <span class="modal-subtitle">تسمية الفريق واختيار لونه وتحديد طلابه مع إمكانية إضافة طلاب جدد</span>
           </div>
         </div>
@@ -2099,6 +2164,7 @@
       </div>
 
       <form id="createTeamForm" class="modal-body-form">
+        <input type="hidden" id="editTeamId" value="">
         <div class="input-group">
           <label class="input-label">اسم الفريق <span class="required-star">*</span></label>
           <input type="text" id="newTeamNameInput" class="form-control" placeholder="مثال: فرسان القرآن، أشبال الهدى..." required>

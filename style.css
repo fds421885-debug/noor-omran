@@ -8740,16 +8740,17 @@ button:disabled .fa-spin,
   margin-top: 2px;
 }
 
-/* بطاقة تحديد الفرق في نافذة إنشاء الغرفة */
+/* بطاقة تحديد الفرق في نافذة إنشاء الغرفة بثيم المنصة الكامل */
 .teams-selection-wrapper {
-  background: #f8fafc;
-  border: 2px dashed #cbd5e1;
-  border-radius: 16px;
+  background: linear-gradient(145deg, #f0fdf4 0%, #eff6ff 100%);
+  border: 2px solid #bbf7d0;
+  border-radius: 18px;
   padding: 16px;
   margin-bottom: 16px;
   display: flex;
   flex-direction: column;
   gap: 12px;
+  box-shadow: 0 4px 0 #dcfce7, 0 10px 15px -3px rgba(0, 0, 0, 0.05);
 }
 
 .teams-grid-select {
@@ -8758,41 +8759,258 @@ button:disabled .fa-spin,
   gap: 12px;
 }
 
+@media (max-width: 640px) {
+  .teams-grid-select {
+    grid-template-columns: 1fr;
+  }
+}
+
 .team-select-box {
   background: #ffffff;
-  border: 2px solid var(--border-duo);
-  border-radius: 12px;
-  padding: 10px;
+  border: 2px solid #e2e8f0;
+  border-bottom: 4px solid #cbd5e1;
+  border-radius: 14px;
+  padding: 12px;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+}
+
+.team-select-box:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.06);
+}
+
+.team-select-box.team-color-blue {
+  border-color: #3b82f6;
+  border-bottom-color: #1d4ed8;
+  background: linear-gradient(180deg, #eff6ff 0%, #ffffff 100%);
+}
+
+.team-select-box.team-color-red {
+  border-color: #ef4444;
+  border-bottom-color: #b91c1c;
+  background: linear-gradient(180deg, #fef2f2 0%, #ffffff 100%);
+}
+
+.team-select-box.team-color-emerald {
+  border-color: #10b981;
+  border-bottom-color: #047857;
+  background: linear-gradient(180deg, #ecfdf5 0%, #ffffff 100%);
+}
+
+.team-select-box.team-color-gold {
+  border-color: #f59e0b;
+  border-bottom-color: #b45309;
+  background: linear-gradient(180deg, #fffbeb 0%, #ffffff 100%);
+}
+
+.team-select-box.team-color-purple {
+  border-color: #8b5cf6;
+  border-bottom-color: #6d28d9;
+  background: linear-gradient(180deg, #f5f3ff 0%, #ffffff 100%);
+}
+
+.team-select-box.team-color-amber {
+  border-color: #f97316;
+  border-bottom-color: #c2410c;
+  background: linear-gradient(180deg, #fff7ed 0%, #ffffff 100%);
 }
 
 .team-select-box label {
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 900;
+  color: #1e293b;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.team-select-box .form-select {
+  border: 2px solid #cbd5e1;
+  border-radius: 10px;
   font-weight: 800;
-  color: #334155;
-  display: block;
-  margin-bottom: 6px;
+  font-size: 13.5px;
+  background-color: #ffffff;
+  padding: 8px 12px;
+  transition: all 0.2s ease;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.04);
+}
+
+.team-select-box .form-select:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.team-select-box .form-select option {
+  padding: 8px 12px;
+  font-weight: 700;
+}
+
+.team-select-preview-badge {
+  margin-top: 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: #f1f5f9;
+  font-size: 12px;
+  font-weight: 700;
+  color: #475569;
+  line-height: 1.5;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
 }
 
 .btn-open-create-team {
-  padding: 10px 16px;
+  padding: 8px 16px;
   font-size: 13px;
   font-weight: 800;
-  background: #f1f5f9;
-  border: 1.5px dashed #94a3b8;
-  color: #334155;
-  border-radius: 10px;
+  background: #22c55e;
+  border: 2px solid #16a34a;
+  border-bottom: 4px solid #15803d;
+  color: #ffffff;
+  border-radius: 12px;
   cursor: pointer;
-  transition: all 0.2s ease;
-  display: flex;
+  transition: all 0.15s ease;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
+  text-shadow: 0 1px 1px rgba(0,0,0,0.15);
 }
 
 .btn-open-create-team:hover {
-  background: #e2e8f0;
-  border-color: #2563eb;
-  color: #1d4ed8;
+  background: #16a34a;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(34, 197, 94, 0.25);
+}
+
+.btn-open-create-team:active {
+  transform: translateY(2px);
+  border-bottom-width: 2px;
+}
+
+/* ========================================================
+   كروت إدارة الفرق في تبويب الفرق الخاص بالمشرف
+   ======================================================== */
+.supervisor-team-card {
+  background: #ffffff;
+  border: 2px solid #e2e8f0;
+  border-bottom: 5px solid #cbd5e1;
+  border-radius: 18px;
+  overflow: hidden;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  flex-direction: column;
+}
+
+.supervisor-team-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px -6px rgba(0, 0, 0, 0.1);
+}
+
+.team-card-banner {
+  padding: 16px;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  position: relative;
+}
+
+.team-card-banner-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.team-card-icon-bubble {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.22);
+  backdrop-filter: blur(4px);
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  color: #ffffff;
+  flex-shrink: 0;
+}
+
+.team-card-title-text {
+  font-size: 17px;
+  font-weight: 900;
+  margin: 0;
+  line-height: 1.3;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.25);
+}
+
+.team-card-members-badge {
+  background: rgba(255, 255, 255, 0.28);
+  border: 1.5px solid rgba(255, 255, 255, 0.5);
+  border-radius: 20px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.team-card-body {
+  padding: 14px 16px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.team-card-members-title {
+  font-size: 12px;
+  font-weight: 800;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.team-card-members-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.team-member-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.team-member-item-school {
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.team-card-footer {
+  padding: 12px 16px;
+  border-top: 1.5px solid #f1f5f9;
+  background: #fafafa;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
 }
 
 /* ========================================================
