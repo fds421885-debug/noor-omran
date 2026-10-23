@@ -788,7 +788,7 @@ body {
 }
 
 .input-wrapper .form-control {
-  padding: 16px 20px 16px 120px;
+  padding: 16px 20px 16px 175px;
 }
 
 .form-control:focus {
@@ -801,19 +801,25 @@ body {
 .input-badge {
   position: absolute;
   left: 14px;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 800;
-  padding: 5px 12px;
+  padding: 6px 14px;
   border-radius: var(--radius-pill);
-  background: #e5e5e5;
-  color: var(--text-muted);
+  background: #e2e8f0;
+  color: #64748b;
   pointer-events: none;
-  transition: all 0.2s ease;
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }
 
 .input-badge.valid {
   background: var(--duo-green);
   color: #ffffff;
+  box-shadow: 0 3px 10px rgba(88, 204, 2, 0.35);
+  transform: scale(1.02);
 }
 
 .input-hint {
@@ -9735,4 +9741,217 @@ button:disabled .fa-spin,
   justify-content: space-between;
   box-shadow: 0 10px 30px rgba(109, 40, 217, 0.35);
 }
+
+/* ======================================================== */
+/* البطاقة السينمائية ثلاثية الأبعاد التفاعلية لمسابقات الفرق */
+/* تظهر بسلاسة من الأسفل للأعلى لمدة 3 ثوانٍ وتنسحب بمرونة */
+/* ======================================================== */
+.team-cinematic-popup-card {
+  position: fixed;
+  bottom: 45px;
+  left: 50%;
+  transform: translate(-50%, 0);
+  z-index: 99999;
+  pointer-events: none;
+  width: min(94vw, 560px);
+  will-change: transform, opacity;
+}
+
+.team-cinematic-popup-card.enter {
+  animation: slideUpCinematic 0.45s cubic-bezier(0.175, 0.885, 0.32, 1.25) forwards;
+}
+
+.team-cinematic-popup-card.exit {
+  animation: slideDownCinematic 0.4s cubic-bezier(0.6, -0.28, 0.735, 0.045) forwards;
+}
+
+@keyframes slideUpCinematic {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 140px) scale(0.85);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+
+@keyframes slideDownCinematic {
+  0% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, 140px) scale(0.85);
+  }
+}
+
+.cinematic-popup-wrapper {
+  position: relative;
+  background: linear-gradient(135deg, #090d16 0%, #1e1b4b 55%, #312e81 100%);
+  border: 3px solid #818cf8;
+  border-radius: 26px;
+  padding: 22px 26px 16px 26px;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.65), 0 0 35px rgba(99, 102, 241, 0.45);
+  backdrop-filter: blur(20px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.cinematic-popup-wrapper.type-wrong {
+  background: linear-gradient(135deg, #2b0404 0%, #580c0c 55%, #7f1d1d 100%);
+  border-color: #f87171;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.7), 0 0 40px rgba(239, 68, 68, 0.5);
+}
+
+.cinematic-popup-glow {
+  position: absolute;
+  top: -50px;
+  right: -50px;
+  width: 140px;
+  height: 140px;
+  background: radial-gradient(circle, rgba(250, 204, 21, 0.35) 0%, transparent 70%);
+  pointer-events: none;
+  filter: blur(20px);
+}
+
+.cinematic-popup-wrapper.type-wrong .cinematic-popup-glow {
+  background: radial-gradient(circle, rgba(239, 68, 68, 0.45) 0%, transparent 70%);
+}
+
+.cinematic-popup-body {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.cinematic-popup-icon-container {
+  flex-shrink: 0;
+}
+
+.cinematic-popup-icon-ring {
+  width: 58px;
+  height: 58px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #facc15 0%, #eab308 100%);
+  border: 2px solid #fef08a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  color: #1e1b4b;
+  box-shadow: 0 8px 25px rgba(250, 204, 21, 0.4);
+  animation: pulseIconHalo 1.5s infinite ease-in-out;
+}
+
+.cinematic-popup-wrapper.type-wrong .cinematic-popup-icon-ring {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  border-color: #fca5a5;
+  color: #ffffff;
+  box-shadow: 0 8px 25px rgba(239, 68, 68, 0.5);
+  animation: wrongVibrate 0.6s ease-in-out;
+}
+
+@keyframes pulseIconHalo {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+
+@keyframes wrongVibrate {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-5px); }
+  40%, 80% { transform: translateX(5px); }
+}
+
+.cinematic-popup-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.cinematic-popup-badge-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.cinematic-popup-type-tag {
+  font-size: 13px;
+  font-weight: 900;
+  color: #facc15;
+  letter-spacing: 0.3px;
+}
+
+.cinematic-popup-wrapper.type-wrong .cinematic-popup-type-tag {
+  color: #fca5a5;
+}
+
+.cinematic-popup-team-pill {
+  font-size: 12.5px;
+  font-weight: 800;
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  padding: 3px 10px;
+  border-radius: 20px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cinematic-popup-headline {
+  font-size: 14px;
+  font-weight: 800;
+  color: #cbd5e1;
+  margin-top: 2px;
+}
+
+.cinematic-popup-student-name {
+  font-size: 24px;
+  font-weight: 900;
+  color: #ffffff;
+  line-height: 1.3;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.6);
+  word-break: break-word;
+}
+
+.cinematic-popup-subtext {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #94a3b8;
+}
+
+.cinematic-popup-wrapper.type-wrong .cinematic-popup-subtext {
+  color: #fecaca;
+}
+
+/* شريط التنازل الزمني لـ 3 ثوانٍ */
+.cinematic-popup-progress-track {
+  width: 100%;
+  height: 5px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.cinematic-popup-progress-fill {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #facc15, #f59e0b);
+  border-radius: 999px;
+  transition: width 3s linear;
+}
+
+.cinematic-popup-wrapper.type-wrong .cinematic-popup-progress-fill {
+  background: linear-gradient(90deg, #ef4444, #f87171);
+}
+
 

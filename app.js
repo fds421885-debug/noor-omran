@@ -328,10 +328,11 @@ function normalizeArabic(text) {
   return text
     .trim()
     .toLowerCase()
-    .replace(/[\u064B-\u065F\u0670]/g, "") // إزالة التشكيل
+    .replace(/[\u064B-\u065F\u0670\u0640]/g, "") // إزالة التشكيل والتطويل الكشيدة
     .replace(/[إأآٱ]/g, "ا")
     .replace(/ى/g, "ي")
     .replace(/ة/g, "ه")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "") // إزالة المحارف الصفرية الخفية
     .replace(/\s+/g, " ");
 }
 
@@ -348,26 +349,71 @@ function isSupervisor(name) {
          norm === normalizeArabic("منتصر محمد راغب يونس");
 }
 
+// احتساب عدد أجزاء الاسم العربي بدقة فائقة مع دعم الأسماء المركبة (عبد الله، سيف الدين، أبو بكر، آل، بن...)
+function countArabicNameParts(name) {
+  if (!name || typeof name !== "string") return 0;
+  let clean = name.trim();
+  if (!clean) return 0;
+
+  // إزالة التشكيل والتطويل والمحارف الخفية وتوحيد الألف
+  clean = clean
+    .replace(/[\u064B-\u065F\u0670\u0640]/g, "")
+    .replace(/[إأآٱ]/g, "ا")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .replace(/\s+/g, " ");
+
+  // 1. عبد + (أي اسم معرف بأل أو الله) مثل: عبد الله، عبد الرحمن، عبد العزيز...
+  clean = clean.replace(/\bعبد\s+(ال[\u0621-\u064A]+|الله)\b/gu, "عبد_$1");
+  // 2. أبو / أبا / أبي / ابن / بن / آل / أم + الاسم
+  clean = clean.replace(/\b(ابو|ابا|ابي|ابن|بن|ال|ام)\s+([\u0621-\u064A]+)\b/gu, "$1_$2");
+  // 3. المركب الإضافي مع (الدين / الإسلام / الله) مثل: نور الدين، سيف الدين، علاء الدين، فتح الله، سيف الإسلام
+  clean = clean.replace(/\b([\u0621-\u064A]+)\s+(الدين|الاسلام|الله)\b/gu, "$1_$2");
+
+  const tokens = clean.split(/\s+/).filter(w => w.length > 0);
+  return tokens.length;
+}
+
 function validateQuadrupleName(fullName) {
-  const trimmed = fullName.trim();
+  const trimmed = (fullName || "").trim();
   if (!trimmed) {
-    return { isValid: false, count: 0, message: "يرجى كتابة الاسم الرباعي كاملاً." };
+    return { isValid: false, count: 0, isQuadruple: false, message: "يرجى كتابة الاسم الرباعي كاملاً." };
   }
-  const words = trimmed.split(/\s+/).filter(w => w.length > 0);
-  const count = words.length;
-  if (count < 4) {
-    const wordLabel = count === 1 ? "اسم واحد فقط" : count === 2 ? "اسمين فقط" : "3 أسماء فقط";
+  const compoundCount = countArabicNameParts(trimmed);
+  const rawWordsCount = trimmed.split(/\s+/).filter(w => w.length > 0).length;
+  // اعتماد الأفضل لإنصاف المتسابق سواء كتب اسماً مركباً أو عادياً
+  const count = Math.max(compoundCount, rawWordsCount >= 4 ? 4 : compoundCount);
+  const isQuad = count >= 4;
+  if (count < 3) {
+    const wordLabel = count === 1 ? "اسم واحد فقط" : "اسمين فقط";
     return {
       isValid: false,
       count,
-      message: `الاسم الرباعي إلزامي للدخول! لقد كتبت (${wordLabel}). يجب كتابة 4 أسماء على الأقل.`
+      isQuadruple: false,
+      message: `يرجى كتابة الاسم كاملاً (لقد كتبت ${wordLabel}). يجب كتابة 3 أسماء على الأقل، ويفضل الاسم الرباعي.`
     };
   }
-  return { isValid: true, count, message: "" };
+  return { 
+    isValid: true, 
+    count, 
+    isQuadruple: isQuad, 
+    message: isQuad ? "✔ اسم رباعي مكتمل" : "3 / 4 (اسم ثلاثي)" 
+  };
 }
 
 function getDocumentId(normalizedName) {
-  return "user_" + encodeURIComponent(normalizedName).replace(/%/g, "_");
+  if (!normalizedName) return "user_guest";
+  const encoded = encodeURIComponent(normalizedName).replace(/%/g, "_");
+  // للأمان التام وتوافق فايربيس الصارم (أقل من 90 حرفاً لضمان عدم رفض وثائق الأسماء الرباعية الطويلة)
+  if (encoded.length <= 80) {
+    return "user_" + encoded;
+  }
+  let hash = 0;
+  for (let i = 0; i < normalizedName.length; i++) {
+    hash = ((hash << 5) - hash) + normalizedName.charCodeAt(i);
+    hash |= 0;
+  }
+  const hashStr = Math.abs(hash).toString(36);
+  return "user_" + encoded.slice(0, 40) + "_" + hashStr;
 }
 
 // خوارزمية Fisher-Yates لخلط وتشتيت العناصر عشوائياً (مبهدلة للتفكير والذكاء)
@@ -643,6 +689,9 @@ document.querySelectorAll(".nav-tab").forEach(tabBtn => {
 
     if (targetTabId === "tabTeams") {
       renderTeamsManagementTab();
+    }
+    if (targetTabId === "tabTacticalCards") {
+      renderSupervisorCardsCatalog();
     }
 
     // تحديث البيانات السحابية في الخلفية بهدوء دون تجميد الواجهة
@@ -2579,39 +2628,45 @@ if (fullNameInput) {
       return;
     }
 
-    // 3. مستخدم جديد: احتساب عدد الكلمات
-    const words = val.split(/\s+/).filter(w => w.length > 0);
-    const count = words.length;
+    // 3. مستخدم جديد: احتساب عدد أجزاء الاسم بدقة تامة ودعم الأسماء المركبة
+    const validation = validateQuadrupleName(val);
+    const count = validation.count;
     const progressPercent = Math.min(100, Math.round((count / 4) * 100));
     if (nameProgressBar) nameProgressBar.style.width = `${progressPercent}%`;
 
     validationAlert?.classList.add("hidden");
 
-    if (count < 3) {
+    if (count >= 4) {
       if (nameCountBadge) {
-        nameCountBadge.textContent = `${count} / 4 أسماء`;
-        nameCountBadge.classList.remove("valid");
+        nameCountBadge.textContent = `✔ اسم رباعي مكتمل`;
+        nameCountBadge.classList.add("valid");
       }
-      const remaining = 4 - count;
-      const remText = remaining === 1 ? "اسم واحد" : remaining === 2 ? "اسمين" : "3 أسماء";
       if (loginInstructionText) {
-        loginInstructionText.innerHTML = `كتبت (${count}) أسماء.. يرجى إكمال الاسم (متبقي ${remText}).`;
+        loginInstructionText.innerHTML = `✔ الاسم الرباعي مكتمل وجاهز تماماً للدخول! اضغط <strong>«متابعة والدخول»</strong> للانطلاق فوراً.`;
       }
     } else if (count === 3) {
       if (nameCountBadge) {
-        nameCountBadge.textContent = `3 / 4 أسماء`;
+        nameCountBadge.textContent = `3 / 4 (اسم ثلاثي)`;
         nameCountBadge.classList.add("valid");
       }
       if (loginInstructionText) {
-        loginInstructionText.innerHTML = `الاسم جاهز، ويفضل كتابة الاسم الرباعي كاملاً لضمان التميز. اضغط <strong>«متابعة والدخول»</strong>.`;
+        loginInstructionText.innerHTML = `الاسم ثلاثي ومقبول، ويفضل إكمال الاسم الرباعي كاملاً. اضغط <strong>«متابعة والدخول»</strong>.`;
+      }
+    } else if (count === 2) {
+      if (nameCountBadge) {
+        nameCountBadge.textContent = `2 / 4 (اسم ثنائي)`;
+        nameCountBadge.classList.remove("valid");
+      }
+      if (loginInstructionText) {
+        loginInstructionText.innerHTML = `كتبت اسماً ثنائياً (2/4).. يرجى إكمال الاسم الثلاثي أو الرباعي للمتابعة والدخول.`;
       }
     } else {
       if (nameCountBadge) {
-        nameCountBadge.textContent = `${count} أسماء`;
-        nameCountBadge.classList.add("valid");
+        nameCountBadge.textContent = `1 / 4 (اسم مفرد)`;
+        nameCountBadge.classList.remove("valid");
       }
       if (loginInstructionText) {
-        loginInstructionText.innerHTML = `الاسم مكتمل وجاهز تماماً! اضغط <strong>«متابعة والدخول»</strong> للمتابعة.`;
+        loginInstructionText.innerHTML = `يرجى كتابة الاسم الرباعي كاملاً للمتابعة والدخول للمسابقة.`;
       }
     }
   });
@@ -2619,10 +2674,11 @@ if (fullNameInput) {
 
 // أزرار الانتقال المباشر
 window.handleStartApp = function() {
+  hideGlobalLoader();
   resetLoginSteps();
   showView("login");
   const lastUsername = localStorage.getItem("nour_last_username");
-  if (lastUsername && fullNameInput) {
+  if (lastUsername && fullNameInput && !fullNameInput.value.trim()) {
     fullNameInput.value = lastUsername;
     fullNameInput.dispatchEvent(new Event("input"));
   }
@@ -2747,13 +2803,18 @@ loginForm?.addEventListener("submit", async (e) => {
     return;
   }
 
-  // 2. فحص الحساب المسجل محلياً في الذاكرة والكاش
-  let foundUser = participantsCache.find(p => 
-    p.normalizedName === norm || 
-    normalizeArabic(p.name || "") === norm ||
-    (p.name && p.name.trim().toLowerCase() === rawName.toLowerCase()) ||
-    p.id === docId
-  );
+  // 2. فحص الحساب المسجل محلياً في الذاكرة والكاش بكل المرونة (مطابقة تامة ومطابقة خالية من الفراغات لأسماء مثل عبد الله وعبدالله)
+  const normNoSpaces = norm.replace(/\s+/g, "");
+  let foundUser = participantsCache.find(p => {
+    if (!p) return false;
+    const pNorm = p.normalizedName || normalizeArabic(p.name || "");
+    const pNormNoSpaces = pNorm.replace(/\s+/g, "");
+    return pNorm === norm || 
+           pNormNoSpaces === normNoSpaces ||
+           (p.name && p.name.trim().toLowerCase() === rawName.toLowerCase()) ||
+           p.id === docId ||
+           (p.name && normalizeArabic(p.name).replace(/\s+/g, "") === normNoSpaces);
+  });
 
   if (foundUser) {
     foundUser.lastLoginAt = new Date().toISOString();
@@ -2771,25 +2832,47 @@ loginForm?.addEventListener("submit", async (e) => {
     return;
   }
 
-  // 3. إن لم يوجد محلياً، نبحث سريعاً في السحابة
+  // 3. إن لم يوجد محلياً، نبحث سريعاً بفحص مباشر في السحابة
   btnSubmitLogin.disabled = true;
   btnSubmitLogin.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> جاري التحقق...`;
   showGlobalLoader("جاري التحقق من الحساب...", "يرجى الانتظار للحظات...");
 
   try {
-    const cloudUsers = await withTimeout(fetchParticipantsFromCloud(true), 2500, null);
-    if (Array.isArray(cloudUsers)) {
-      foundUser = cloudUsers.find(p => 
-        p.normalizedName === norm || 
-        normalizeArabic(p.name || "") === norm ||
-        (p.name && p.name.trim().toLowerCase() === rawName.toLowerCase()) ||
-        p.id === docId
-      );
+    // فحص مباشر سريع للمعرف في فايربيس
+    if (db) {
+      try {
+        const directSnap = await withTimeout(getDoc(doc(db, "participants", docId)), 1500, null);
+        if (directSnap && directSnap.exists()) {
+          foundUser = { id: directSnap.id, ...directSnap.data() };
+        }
+      } catch (e) {}
+    }
+
+    if (!foundUser) {
+      const cloudUsers = await withTimeout(fetchParticipantsFromCloud(true), 2500, null);
+      if (Array.isArray(cloudUsers)) {
+        foundUser = cloudUsers.find(p => {
+          if (!p) return false;
+          const pNorm = p.normalizedName || normalizeArabic(p.name || "");
+          const pNormNoSpaces = pNorm.replace(/\s+/g, "");
+          return pNorm === norm || 
+                 pNormNoSpaces === normNoSpaces ||
+                 (p.name && p.name.trim().toLowerCase() === rawName.toLowerCase()) ||
+                 p.id === docId ||
+                 (p.name && normalizeArabic(p.name).replace(/\s+/g, "") === normNoSpaces);
+        });
+      }
     }
 
     if (foundUser) {
       foundUser.lastLoginAt = new Date().toISOString();
       foundUser.loginCount = (foundUser.loginCount || 1) + 1;
+      const existIdx = participantsCache.findIndex(p => p.id === foundUser.id);
+      if (existIdx >= 0) {
+        participantsCache[existIdx] = foundUser;
+      } else {
+        participantsCache.push(foundUser);
+      }
       saveParticipants();
       finalizeUserSession(foundUser, true);
       hideGlobalLoader();
@@ -2797,11 +2880,11 @@ loginForm?.addEventListener("submit", async (e) => {
       return;
     }
 
-    // 4. مستخدم جديد تماماً: فحص الاسم
-    const words = rawName.split(/\s+/).filter(w => w.length > 0);
-    if (words.length < 3) {
+    // 4. مستخدم جديد: التحقق من كتابة الاسم (ثلاثي أو رباعي)
+    const valRes = validateQuadrupleName(rawName);
+    if (!valRes.isValid) {
       if (validationAlert) {
-        validationAlert.textContent = "يرجى كتابة الاسم الثلاثي أو الرباعي كاملاً (3 أسماء على الأقل) للمتابعة.";
+        validationAlert.textContent = valRes.message || "يرجى كتابة الاسم كاملاً (الاسم الرباعي أو الثلاثي) للمتابعة.";
         validationAlert.classList.remove("hidden");
       }
       fullNameInput.focus();
@@ -2809,30 +2892,67 @@ loginForm?.addEventListener("submit", async (e) => {
       return;
     }
 
-    // طالب جديد -> الانتقال لاختيار المدرسة والصف
-    hideGlobalLoader();
-    pendingNewStudent = {
-      rawName: rawName,
-      norm: norm,
-      docId: docId,
-      school: "",
-      grade: ""
+    // 5. تسجيل الطالب الجديد ودخوله الفوري المباشر دون أي إرجاع أو تعطيل!
+    const defaultSchool = (schoolsCache && schoolsCache.length > 0) ? schoolsCache[0] : DEFAULT_SCHOOLS[0];
+    const defaultGrade = (gradesCache && gradesCache.length > 0) ? gradesCache[0] : DEFAULT_GRADES[0];
+    const nowIso = new Date().toISOString();
+    const newStudentUser = {
+      id: docId,
+      name: rawName,
+      normalizedName: norm,
+      role: "student",
+      school: defaultSchool,
+      grade: defaultGrade,
+      firstLoginAt: nowIso,
+      lastLoginAt: nowIso,
+      loginCount: 1
     };
 
-    showOnboardingSchoolStep();
+    // حفظ فوري محلياً في الذاكرة والكاش
+    participantsCache.push(newStudentUser);
+    saveParticipants();
+
+    // حفظ سحابياً في فايربيس في الخلفية بأمان
+    if (db) {
+      try {
+        const userDocRef = doc(db, "participants", docId);
+        setDoc(userDocRef, {
+          ...newStudentUser,
+          firstLoginAt: serverTimestamp(),
+          lastLoginAt: serverTimestamp()
+        }).catch(err => console.warn("Background Firebase save notice:", err));
+      } catch (e) {}
+    }
+
+    resetLoginSteps();
+    finalizeUserSession(newStudentUser, false);
+    hideGlobalLoader();
+    showToast(`أهلاً بك يا ${newStudentUser.name} في مسابقة نور البيان! تم تسجيل دخولك بنجاح`, "fa-graduation-cap");
+    return;
   } catch (err) {
     console.error("Login submit error:", err);
     hideGlobalLoader();
-    const words = rawName.split(/\s+/).filter(w => w.length > 0);
-    if (words.length >= 3) {
-      pendingNewStudent = {
-        rawName: rawName,
-        norm: norm,
-        docId: docId,
-        school: "",
-        grade: ""
+    const valRes = validateQuadrupleName(rawName);
+    if (valRes.isValid) {
+      const defaultSchool = (schoolsCache && schoolsCache.length > 0) ? schoolsCache[0] : DEFAULT_SCHOOLS[0];
+      const defaultGrade = (gradesCache && gradesCache.length > 0) ? gradesCache[0] : DEFAULT_GRADES[0];
+      const nowIso = new Date().toISOString();
+      const fallbackUser = {
+        id: docId,
+        name: rawName,
+        normalizedName: norm,
+        role: "student",
+        school: defaultSchool,
+        grade: defaultGrade,
+        firstLoginAt: nowIso,
+        lastLoginAt: nowIso,
+        loginCount: 1
       };
-      showOnboardingSchoolStep();
+      participantsCache.push(fallbackUser);
+      saveParticipants();
+      resetLoginSteps();
+      finalizeUserSession(fallbackUser, false);
+      showToast(`أهلاً بك يا ${rawName}! تم تسجيل الدخول بنجاح`, "fa-circle-check");
     } else {
       showToast("يرجى كتابة الاسم كاملاً للمتابعة", "fa-triangle-exclamation");
     }
@@ -5889,6 +6009,18 @@ btnExitArena?.addEventListener("click", async () => {
       localStorage.setItem("nour_saved_view", currentUser ? (currentUser.role === 'student' ? "student" : "supervisor") : "hero");
       showView(currentUser ? (currentUser.role === 'student' ? "student" : "supervisor") : "hero");
     }
+  }
+});
+
+// مستمع زر العودة لاختيار وتعديل الفرق في حال اختيار فريق بالخطأ
+document.getElementById("btnReturnToTeamSelect")?.addEventListener("click", () => {
+  if (typeof handleReturnToTeamSelection === "function") {
+    handleReturnToTeamSelection();
+  }
+});
+document.getElementById("btnEntranceReturnToTeamSelect")?.addEventListener("click", () => {
+  if (typeof handleReturnToTeamSelection === "function") {
+    handleReturnToTeamSelection();
   }
 });
 
@@ -11897,12 +12029,13 @@ function ensureDefaultTeams() {
 }
 
 async function syncTeamToCloud(team) {
+  if (!team || !team.id) return;
   try {
     const clean = sanitizeForFirestore(team);
-    await setDoc(doc(db, "teams", team.id), {
+    await withTimeout(setDoc(doc(db, "teams", team.id), {
       ...clean,
       lastUpdated: serverTimestamp()
-    }, { merge: true });
+    }, { merge: true }), 5000, null);
   } catch (e) {
     console.warn("syncTeamToCloud notice:", e);
   }
@@ -12030,53 +12163,79 @@ function openCreateTeamModal(teamToEdit = null) {
 
   const searchInput = document.getElementById("searchTeamStudentsInput");
   if (searchInput) searchInput.value = "";
+  const inlineInput = document.getElementById("inlineStudentNameInput");
+  if (inlineInput) inlineInput.value = "";
+
   renderTeamStudentsChecklist();
   modal?.classList.remove("hidden");
+  if (nameInput) setTimeout(() => nameInput.focus(), 100);
 }
 
 function renderTeamStudentsChecklist(searchQuery = "") {
   const container = document.getElementById("teamStudentsChecklistContainer");
   const badge = document.getElementById("selectedTeamMembersCountBadge");
   if (!container) return;
-  const q = normalizeArabic(searchQuery.trim());
+  const q = normalizeArabic((searchQuery || "").trim());
   const students = participantsCache.filter(p => p.role === "student");
-  const filtered = q ? students.filter(s => normalizeArabic(s.name).includes(q) || normalizeArabic(s.school || "").includes(q)) : students;
+  const filtered = q ? students.filter(s => normalizeArabic(s.name || "").includes(q) || normalizeArabic(s.school || "").includes(q)) : students;
 
   if (filtered.length === 0) {
-    container.innerHTML = `<div style="text-align:center;color:#94a3b8;font-size:12px;padding:12px;">لا يوجد طلاب مطابقين للبحث. يمكنك إضافة طالب جديد من الزر أدناه.</div>`;
+    container.innerHTML = `
+      <div style="text-align:center;color:#94a3b8;font-size:12px;padding:16px;">
+        <i class="fa-solid fa-users-slash" style="font-size:22px;display:block;margin-bottom:6px;color:#cbd5e1;"></i>
+        لا يوجد طلاب مطابقين للبحث. يمكنك كتابة اسم الطالب وإضافته فوراً من الحقل بالأسفل.
+      </div>
+    `;
   } else {
     container.innerHTML = filtered.map(s => {
-      const isChecked = selectedTeamStudents.some(x => x.id === s.id || x.name === s.name);
+      const isChecked = selectedTeamStudents.some(x => (x.id && s.id && String(x.id) === String(s.id)) || (x.name && s.name && x.name.trim() === s.name.trim()));
+      const activeStyle = isChecked
+        ? "background:#eff6ff;border:1.5px solid #2563eb;color:#1e3a8a;box-shadow:0 1px 3px rgba(37,99,235,0.12);"
+        : "background:#ffffff;border:1px solid #e2e8f0;color:#1e293b;";
+      const checkIcon = isChecked
+        ? `<i class="fa-solid fa-circle-check" style="color:#2563eb;font-size:17px;"></i>`
+        : `<i class="fa-regular fa-circle" style="color:#94a3b8;font-size:17px;"></i>`;
+
       return `
-        <label class="duo-checkbox-container" style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:#ffffff;border:1px solid #e2e8f0;border-radius:8px;font-size:13px;font-weight:700;color:#1e293b;cursor:pointer;">
-          <div style="display:flex;align-items:center;gap:8px;">
-            <input type="checkbox" data-student-id="${s.id}" ${isChecked ? 'checked' : ''}>
-            <span class="duo-checkbox-checkmark" style="position:static;display:inline-block;vertical-align:middle;"></span>
-            <span>${escapeHtml(s.name)}</span>
+        <div class="team-student-check-row" data-student-id="${escapeHtml(String(s.id))}" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;user-select:none;transition:all 0.15s ease;${activeStyle}">
+          <div style="display:flex;align-items:center;gap:10px;pointer-events:none;">
+            ${checkIcon}
+            <span style="font-weight:800;">${escapeHtml(s.name)}</span>
           </div>
-          <span style="font-size:11px;color:#64748b;font-weight:600;">${escapeHtml(s.school || '--')}</span>
-        </label>
+          <span style="font-size:11px;color:${isChecked ? '#1d4ed8' : '#64748b'};font-weight:700;pointer-events:none;background:${isChecked ? '#dbeafe' : '#f1f5f9'};padding:2px 8px;border-radius:6px;">
+            ${escapeHtml(s.school || 'مدرسة نور البيان')}
+          </span>
+        </div>
       `;
     }).join("");
   }
 
-  container.querySelectorAll('input[type="checkbox"]').forEach(chk => {
-    chk.onchange = () => {
-      const sId = chk.getAttribute("data-student-id");
-      const found = participantsCache.find(p => p.id === sId);
+  // تفعيل الاختيار الفوري والمباشر بنقرة واحدة فقط على كامل سطر الطالب
+  container.querySelectorAll(".team-student-check-row").forEach(row => {
+    row.addEventListener("click", () => {
+      const sId = row.getAttribute("data-student-id");
+      const found = participantsCache.find(p => String(p.id) === String(sId));
       if (!found) return;
-      if (chk.checked) {
-        if (!selectedTeamStudents.some(x => x.id === found.id)) {
-          selectedTeamStudents.push({ id: found.id, name: found.name, school: found.school, grade: found.grade });
-        }
+
+      const idx = selectedTeamStudents.findIndex(x => (x.id && found.id && String(x.id) === String(found.id)) || (x.name && found.name && x.name.trim() === found.name.trim()));
+      if (idx >= 0) {
+        selectedTeamStudents.splice(idx, 1);
       } else {
-        selectedTeamStudents = selectedTeamStudents.filter(x => x.id !== found.id);
+        selectedTeamStudents.push({
+          id: found.id,
+          name: found.name,
+          school: found.school || "مدرسة نور البيان",
+          grade: found.grade || "الصف الأول"
+        });
       }
-      if (badge) badge.textContent = `${selectedTeamStudents.length} طلاب محددين`;
-    };
+      renderTeamStudentsChecklist(document.getElementById("searchTeamStudentsInput")?.value || "");
+    });
   });
 
-  if (badge) badge.textContent = `${selectedTeamStudents.length} طلاب محددين`;
+  if (badge) {
+    badge.textContent = `${selectedTeamStudents.length} طلاب محددين`;
+    badge.style.color = selectedTeamStudents.length >= 2 ? "#16a34a" : "#2563eb";
+  }
 }
 
 document.getElementById("btnOpenCreateTeamModal")?.addEventListener("click", () => openCreateTeamModal(null));
@@ -12085,16 +12244,17 @@ document.getElementById("searchTeamStudentsInput")?.addEventListener("input", (e
   renderTeamStudentsChecklist(e.target.value);
 });
 
-// إضافة طالب غير مسجل فورياً للفريق
-document.getElementById("btnInlineAddStudentToTeam")?.addEventListener("click", async () => {
+// إضافة طالب غير مسجل فورياً للفريق بنقرة واحدة مع مزامنة خلفية فورية دون تجميد
+function addInlineStudentToTeam() {
   const nameInput = document.getElementById("inlineStudentNameInput");
   const rawName = nameInput?.value.trim();
-  if (!rawName || rawName.length < 3) {
-    showToast("يرجى إدخال اسم الطالب ثلاثي أو رباعي على الأقل", "fa-triangle-exclamation");
+  if (!rawName || rawName.length < 2) {
+    showToast("يرجى إدخال اسم الطالب (مثال: أحمد محمد علي)", "fa-triangle-exclamation");
+    nameInput?.focus();
     return;
   }
   const norm = normalizeArabic(rawName);
-  let student = participantsCache.find(p => p.normalizedName === norm);
+  let student = participantsCache.find(p => p.normalizedName === norm || (p.name && p.name.trim() === rawName));
   if (!student) {
     student = {
       id: "part_" + Date.now() + "_" + Math.floor(Math.random() * 1000),
@@ -12106,49 +12266,94 @@ document.getElementById("btnInlineAddStudentToTeam")?.addEventListener("click", 
       totalScore: 0,
       createdAt: new Date().toISOString()
     };
-    participantsCache.push(student);
+    participantsCache.unshift(student);
     localStorage.setItem("nour_participants", JSON.stringify(participantsCache));
-    await syncParticipantToCloud(student);
-    showToast(`تم تسجيل الطالب «${rawName}» سحابياً بنجاح!`, "fa-user-check");
+    syncParticipantToCloud(student).catch(err => console.warn("Background participant sync notice:", err));
   }
-  if (!selectedTeamStudents.some(x => x.name === student.name)) {
-    selectedTeamStudents.push({ id: student.id, name: student.name, school: student.school, grade: student.grade });
+
+  const alreadySelected = selectedTeamStudents.some(x => (x.id && student.id && String(x.id) === String(student.id)) || (x.name && student.name && x.name.trim() === student.name.trim()));
+  if (!alreadySelected) {
+    selectedTeamStudents.push({
+      id: student.id,
+      name: student.name,
+      school: student.school || "مدرسة نور البيان",
+      grade: student.grade || "الصف الأول"
+    });
   }
-  if (nameInput) nameInput.value = "";
-  renderTeamStudentsChecklist();
+
+  if (nameInput) {
+    nameInput.value = "";
+    nameInput.focus();
+  }
+  renderTeamStudentsChecklist(document.getElementById("searchTeamStudentsInput")?.value || "");
+  showToast(`تمت إضافة وتحديد الطالب «${rawName}» في الفريق بنجاح!`, "fa-circle-check");
+}
+
+document.getElementById("btnInlineAddStudentToTeam")?.addEventListener("click", (e) => {
+  e.preventDefault();
+  addInlineStudentToTeam();
 });
 
-// حفظ أو تعديل الفريق (سحابياً للجميع ومحلياً)
-document.getElementById("createTeamForm")?.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const name = document.getElementById("newTeamNameInput")?.value.trim();
+document.getElementById("inlineStudentNameInput")?.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    addInlineStudentToTeam();
+  }
+});
+
+// حفظ أو تعديل الفريق (سحابياً للجميع ومحلياً فورياً)
+async function handleSaveTeam(e) {
+  if (e && e.preventDefault) e.preventDefault();
+
+  const nameInput = document.getElementById("newTeamNameInput");
+  const name = nameInput?.value.trim();
   const color = document.getElementById("newTeamColorSelect")?.value || "blue";
   const targetTeamId = document.getElementById("editTeamId")?.value;
 
-  if (!name) return;
-  if (selectedTeamStudents.length === 0) {
-    showToast("يرجى اختيار طالبين على الأقل لتكوين الفريق", "fa-triangle-exclamation");
+  if (!name) {
+    showToast("يرجى كتابة اسم الفريق أولاً (مثال: فرسان القرآن)", "fa-triangle-exclamation");
+    nameInput?.focus();
     return;
   }
 
-  showGlobalLoader("جاري حفظ الفريق...", "يتم الآن حفظ بيانات الفريق واعتماده سحابياً لجميع المتصلين...");
+  if (selectedTeamStudents.length === 0) {
+    showToast("يرجى اختيار طالبين على الأقل لتكوين وتجهيز الفريق", "fa-triangle-exclamation");
+    return;
+  }
+
+  const submitBtn = document.getElementById("btnSubmitSaveTeam");
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> جاري حفظ الفريق...`;
+  }
 
   try {
+    let savedTeamObj = null;
+
     if (targetTeamId) {
       // تعديل فريق قائم
-      const team = teamsCache.find(t => t.id === targetTeamId);
-      if (team) {
-        team.name = name;
-        team.color = color;
-        team.icon = TEAM_COLOR_SCHEMES[color]?.icon || "fa-shield-halved";
-        team.members = [...selectedTeamStudents];
-        team.lastUpdated = new Date().toISOString();
-        await syncTeamToCloud(team);
+      const teamIdx = teamsCache.findIndex(t => String(t.id) === String(targetTeamId));
+      if (teamIdx >= 0) {
+        teamsCache[teamIdx].name = name;
+        teamsCache[teamIdx].color = color;
+        teamsCache[teamIdx].icon = TEAM_COLOR_SCHEMES[color]?.icon || "fa-shield-halved";
+        teamsCache[teamIdx].members = [...selectedTeamStudents];
+        teamsCache[teamIdx].lastUpdated = new Date().toISOString();
+        savedTeamObj = teamsCache[teamIdx];
+      } else {
+        savedTeamObj = {
+          id: targetTeamId,
+          name: name,
+          color: color,
+          icon: TEAM_COLOR_SCHEMES[color]?.icon || "fa-shield-halved",
+          members: [...selectedTeamStudents],
+          lastUpdated: new Date().toISOString()
+        };
+        teamsCache.push(savedTeamObj);
       }
-      showToast(`تم حفظ وتحديث بيانات فريق «${name}» (${selectedTeamStudents.length} طلاب)!`, "fa-circle-check");
     } else {
       // إنشاء فريق جديد
-      const newTeam = {
+      savedTeamObj = {
         id: "team_" + Date.now(),
         name: name,
         color: color,
@@ -12156,22 +12361,37 @@ document.getElementById("createTeamForm")?.addEventListener("submit", async (e) 
         members: [...selectedTeamStudents],
         createdAt: new Date().toISOString()
       };
-      teamsCache.push(newTeam);
-      await syncTeamToCloud(newTeam);
-      showToast(`تم حفظ وتجهيز فريق «${name}» (${selectedTeamStudents.length} طلاب)!`, "fa-circle-check");
+      teamsCache.push(savedTeamObj);
     }
 
+    // حفظ محلي فوري
     localStorage.setItem("nour_teams", JSON.stringify(teamsCache));
+
+    // إغلاق المودال فوراً وتحديث العرض
     document.getElementById("createTeamModal")?.classList.add("hidden");
     renderTeamsSelectOptions();
     renderTeamsManagementTab();
+
+    // رسالة نجاح فورية ومؤكدة
+    showToast(`تم حفظ وتجهيز فريق «${name}» (${selectedTeamStudents.length} طلاب) بنجاح!`, "fa-circle-check");
+
+    // مزامنة سحابية هادئة في الخلفية
+    if (savedTeamObj) {
+      syncTeamToCloud(savedTeamObj).catch(err => console.warn("Background team sync notice:", err));
+    }
   } catch (err) {
     console.error("Team save error:", err);
-    showToast("تعذر حفظ الفريق: " + (err.message || ""), "fa-triangle-exclamation");
+    showToast("تعذر حفظ الفريق: " + (err.message || "خطأ غير متوقع"), "fa-triangle-exclamation");
   } finally {
-    hideGlobalLoader();
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = `<i class="fa-solid fa-floppy-disk"></i> حفظ الفريق واعتماده سحابياً`;
+    }
   }
-});
+}
+
+document.getElementById("createTeamForm")?.addEventListener("submit", handleSaveTeam);
+document.getElementById("btnSubmitSaveTeam")?.addEventListener("click", handleSaveTeam);
 
 // دالة حذف الفريق نهائياً من المنصة والسحابة
 async function deleteTeam(teamId) {
@@ -12583,6 +12803,127 @@ const TEAM_ROUNDS_CONFIG = {
   }
 };
 
+// --------------------------------------------------------
+// وظيفة البطاقة السينمائية التفاعلية فائقة السلاسة (انتقال الدور / إجابة خاطئة)
+// --------------------------------------------------------
+let cinematicAlertTimeout = null;
+let lastSeenCinematicAlertTimestamp = 0;
+
+function triggerCinematicTeamAlert(cfg) {
+  if (!cfg) return;
+  const card = document.getElementById("teamCinematicPopupCard");
+  const wrapper = document.getElementById("cinematicPopupWrapper");
+  const icon = document.getElementById("cinematicPopupIcon");
+  const tag = document.getElementById("cinematicPopupTag");
+  const teamPill = document.getElementById("cinematicPopupTeamPill");
+  const teamName = document.getElementById("cinematicPopupTeamName");
+  const headline = document.getElementById("cinematicPopupHeadline");
+  const studentName = document.getElementById("cinematicPopupStudentName");
+  const subtext = document.getElementById("cinematicPopupSubtext");
+  const timerFill = document.getElementById("cinematicPopupProgressFill");
+
+  if (!card || !wrapper) return;
+
+  if (cinematicAlertTimeout) {
+    clearTimeout(cinematicAlertTimeout);
+    cinematicAlertTimeout = null;
+  }
+
+  const isWrong = cfg.type === "wrong_answer";
+
+  if (isWrong) {
+    wrapper.className = "cinematic-popup-wrapper type-wrong";
+    if (icon) icon.className = "fa-solid fa-circle-xmark";
+    if (tag) tag.textContent = cfg.tag || "❌ إجابة غير دقيقة!";
+    if (headline) headline.textContent = cfg.headline || "أجاب خطأ البطل:";
+    if (studentName) studentName.textContent = cfg.studentName || "--";
+    if (teamName) teamName.textContent = cfg.teamName || "الفريق";
+    if (subtext) subtext.textContent = cfg.subtext || "تنبيه: فرصة رد الفعل أو خصم نقاط السؤال!";
+    try { soundFX.wrong(); } catch (e) {}
+  } else {
+    // turn_transfer
+    wrapper.className = "cinematic-popup-wrapper";
+    if (icon) icon.className = cfg.icon || "fa-solid fa-bolt-lightning";
+    if (tag) tag.textContent = cfg.tag || "⚡ فرصة رد الفعل وانتقال الدور!";
+    if (headline) headline.textContent = cfg.headline || "السؤال يتحول الآن إلى البطل:";
+    if (studentName) studentName.textContent = cfg.studentName || "--";
+    if (teamName) teamName.textContent = cfg.teamName || "الفريق";
+    if (subtext) subtext.textContent = cfg.subtext || "استعد للإجابة وخطف النقاط لصالح فريقك!";
+    try { soundFX.whoosh(); } catch (e) {}
+  }
+
+  if (cfg.teamColor && teamPill) {
+    const scheme = TEAM_COLOR_SCHEMES[cfg.teamColor] || TEAM_COLOR_SCHEMES.blue;
+    teamPill.style.background = scheme.badgeBg || "rgba(255,255,255,0.18)";
+    teamPill.style.borderColor = scheme.border || "rgba(255,255,255,0.35)";
+  }
+
+  // إعادة ضبط شريط التقدم للتحرك بسلاسة تامة لمدة 3 ثوانٍ
+  if (timerFill) {
+    timerFill.style.transition = "none";
+    timerFill.style.width = "100%";
+    void timerFill.offsetWidth;
+    timerFill.style.transition = "width 3s linear";
+    timerFill.style.width = "0%";
+  }
+
+  card.classList.remove("hidden", "exit");
+  card.classList.add("enter");
+
+  cinematicAlertTimeout = setTimeout(() => {
+    card.classList.remove("enter");
+    card.classList.add("exit");
+    setTimeout(() => {
+      card.classList.add("hidden");
+      card.classList.remove("exit");
+    }, 420);
+  }, 3000);
+}
+
+// العودة لاختيار الفرق عند الخطأ في الاختيار
+async function handleReturnToTeamSelection() {
+  const isSup = currentUser && (currentUser.role === "supervisor" || isSupervisor(currentUser.name) || currentUser.name === currentLiveRoom?.leaderName);
+  if (!isSup) {
+    showToast("عذراً، هذه الصلاحية للمشرف العام فقط لاختيار وتعديل الفرق", "fa-lock");
+    return;
+  }
+
+  const confirmed = await showInAppConfirm({
+    title: "العودة لاختيار الفرق",
+    message: "هل تريد إنهاء هذه الغرفة والعودة لشاشة اختيار وتعديل الفرق المشاركة؟",
+    confirmText: "نعم، العودة لاختيار الفرق",
+    cancelText: "البقاء في المسابقة",
+    type: "warning",
+    icon: "fa-arrow-right"
+  });
+
+  if (!confirmed) return;
+
+  if (currentLiveRoom) {
+    const closing = { ...currentLiveRoom };
+    currentLiveRoom = null;
+    await syncRoomToCloud(closing, true);
+  }
+
+  // إخفاء نوافذ ومسرح الفرق
+  document.getElementById("teamEntranceOverlay")?.classList.add("hidden");
+  document.getElementById("teamRoundBannerOverlay")?.classList.add("hidden");
+  document.getElementById("teamFlippingModalWrapper")?.classList.add("hidden");
+  document.getElementById("teamGrandFinaleOverlay")?.classList.add("hidden");
+  document.getElementById("teamCinematicPopupCard")?.classList.add("hidden");
+
+  showView("supervisor");
+  showToast("تم إلغاء الغرفة، يمكنك الآن اختيار الفرق الصحيحة", "fa-rotate-left");
+
+  setTimeout(() => {
+    openCreateRoomModal();
+    document.getElementById("modeCardTeams")?.click();
+  }, 200);
+}
+
+// --------------------------------------------------------
+// لافتة الفقرة مع زر تحكم المشرف (التالي لبدء الفقرة يدوياً)
+// --------------------------------------------------------
 function showTeamRoundBanner(roundNum, onComplete) {
   const overlay = document.getElementById("teamRoundBannerOverlay");
   const cfg = TEAM_ROUNDS_CONFIG[roundNum] || TEAM_ROUNDS_CONFIG[1];
@@ -12593,17 +12934,50 @@ function showTeamRoundBanner(roundNum, onComplete) {
   const tag = document.getElementById("teamRoundBannerTag");
   const title = document.getElementById("teamRoundBannerTitle");
   const rule = document.getElementById("teamRoundBannerRule");
+  const btnStartNow = document.getElementById("btnStartTeamRoundNow");
+  const btnStartText = document.getElementById("btnStartTeamRoundText");
+  const waitingNotice = document.getElementById("roundBannerWaitingNotice");
+
   if (tag) tag.textContent = cfg.tag;
   if (title) title.innerHTML = `<i class="fa-solid ${cfg.icon}" style="color:#facc15;margin-left:10px;"></i> ${cfg.name}`;
   if (rule) rule.textContent = cfg.rule;
+  if (btnStartText) btnStartText.textContent = `التالي: بدء ${cfg.name}`;
+
+  const isSup = currentUser && (currentUser.role === "supervisor" || isSupervisor(currentUser.name) || currentUser.name === currentLiveRoom?.leaderName);
+
+  if (isSup) {
+    btnStartNow?.classList.remove("hidden");
+    waitingNotice?.classList.add("hidden");
+  } else {
+    btnStartNow?.classList.add("hidden");
+    waitingNotice?.classList.remove("hidden");
+  }
 
   overlay.classList.remove("hidden");
   try { soundFX.celebrate(); } catch (e) {}
 
-  setTimeout(() => {
-    overlay.classList.add("hidden");
-    if (typeof onComplete === "function") onComplete();
-  }, 2600);
+  if (btnStartNow) {
+    btnStartNow.onclick = async () => {
+      btnStartNow.onclick = null;
+      btnStartNow.disabled = true;
+      btnStartNow.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> جاري الانطلاق...`;
+
+      if (currentLiveRoom) {
+        currentLiveRoom.teamRoundStarted = true;
+        currentLiveRoom.teamRoundStartedAt = Date.now();
+        currentLiveRoom.teamRoundState = "round_active";
+        await saveRooms(currentLiveRoom);
+      }
+
+      overlay.classList.add("hidden");
+      btnStartNow.disabled = false;
+      if (btnStartText) btnStartText.textContent = `التالي: بدء ${cfg.name}`;
+
+      if (typeof onComplete === "function") {
+        onComplete();
+      }
+    };
+  }
 }
 
 // البطاقة الدوارة لاختيار الفريق والطالب (تتقلب وتتدحرج من اليمين للمنتصف سريعاً، تظهر اسم الفريق، ثم روليت سريع لاختيار الطالب، ثم تتشقلب لليسار)
@@ -12851,6 +13225,16 @@ function launchTeamRound(roundNum) {
   currentActiveTeamRound = roundNum;
   showArenaPhase("stage");
   const isLead = currentUser && (currentUser.role === "supervisor" || isSupervisor(currentUser.name) || currentUser.name === currentLiveRoom?.leaderName);
+  
+  if (isLead && currentLiveRoom) {
+    currentLiveRoom.currentTeamRound = roundNum;
+    currentLiveRoom.currentQuestionIdx = 0;
+    currentLiveRoom.teamActiveSolver = null;
+    currentLiveRoom.teamRoundStarted = false;
+    currentLiveRoom.teamRoundState = "round_waiting_supervisor";
+    saveRooms(currentLiveRoom);
+  }
+
   showTeamRoundBanner(roundNum, () => {
     if (isLead) {
       executeNextTeamQuestion(0);
@@ -12876,6 +13260,8 @@ function executeNextTeamQuestion(qIndex) {
         currentLiveRoom.currentTeamRound = nextRound;
         currentLiveRoom.currentQuestionIdx = 0;
         currentLiveRoom.teamActiveSolver = null;
+        currentLiveRoom.teamRoundStarted = false;
+        currentLiveRoom.teamRoundState = "round_waiting_supervisor";
         saveRooms(currentLiveRoom);
       }
       launchTeamRound(nextRound);
@@ -13116,8 +13502,6 @@ async function handleTeamQuestionResult(isCorrect, choiceIdx, earnedPoints) {
 
   // حالة رد الفعل في الفقرة الأولى عند الخطأ
   if (!isCorrect && currentRound === 1 && !currentActiveTeamSolver.isRebound) {
-    const reboundOverlay = document.getElementById("reboundBannerOverlay");
-    const reboundText = document.getElementById("reboundBannerText");
     const oppStudent = pickFairRandomStudentForTeam(oppTeam, currentLiveRoom);
 
     answerPayload.isRebound = true;
@@ -13145,26 +13529,55 @@ async function handleTeamQuestionResult(isCorrect, choiceIdx, earnedPoints) {
       startedAt: answerTimestamp
     };
 
-    if (reboundText) {
-      reboundText.textContent = `فرصة رد الفعل! السؤال ينتقل إلى ${oppTeam.name} — البطل ${oppStudent.name}!`;
-    }
-    reboundOverlay?.classList.remove("hidden");
-    try { soundFX.pop(); } catch (e) {}
+    // بطاقة سينمائية ثلاثية الأبعاد تنبثق بسلاسة للأعلى لـ 3 ثوانٍ وتنسحب بمرونة
+    const transferAlert = {
+      type: "turn_transfer",
+      tag: "⚡ فرصة رد الفعل وانتقال الدور!",
+      headline: "السؤال يتحول الآن إلى البطل:",
+      studentName: oppStudent.name,
+      teamName: oppTeam.name,
+      teamColor: oppTeam.color,
+      subtext: "لديك فرصة للإجابة وخطف نقاط السؤال لصالح فريقك!",
+      timestamp: answerTimestamp
+    };
 
+    window.lastSeenCinematicAlertTimestamp = answerTimestamp;
+    triggerCinematicTeamAlert(transferAlert);
+
+    currentLiveRoom.lastCinematicAlert = transferAlert;
     currentLiveRoom.lastTeamAnswerEvent = answerPayload;
     await saveRooms(currentLiveRoom);
     updateTeamScoreFlyers();
 
+    // انتظار 3.1 ثانية حتى تكتمل حركة البطاقة السلسة بوضوح
     setTimeout(() => {
-      reboundOverlay?.classList.add("hidden");
-      const questions = currentLiveRoom.roundQuestions || [];
+      const questions = currentLiveRoom?.roundQuestions || [];
       const targetQuestion = questions[currentGlobalQIdx % questions.length];
       renderTeamQuestion(targetQuestion, currentGlobalQIdx, currentActiveTeamSolver.qIndex);
-    }, 2200);
+    }, 3100);
     return;
   }
 
   // في سائر الحالات (صواب، أو خطأ في فقرة 2 و 3 و 4، أو خطأ بعد الرد)
+  if (!isCorrect) {
+    const wrongAlert = {
+      type: "wrong_answer",
+      tag: currentRound === 2 ? "⚠️ فقرة احذر: إجابة خاطئة وخصم درجات!" : "❌ إجابة غير دقيقة!",
+      headline: "أجاب خطأ البطل:",
+      studentName: solverName,
+      teamName: activeTeam.name,
+      teamColor: activeTeam.color,
+      subtext: currentRound === 2 
+        ? `تم خصم ${earnedPoints} درجات كاملة من رصيد ${activeTeam.name}!` 
+        : (currentRound === 1 && currentActiveTeamSolver.isRebound ? "انتهت فرصة رد الفعل، لم تحتسب درجات لهذا السؤال!" : "لم يحالفهم الحظ، استعدوا للسؤال القادم!"),
+      timestamp: answerTimestamp
+    };
+
+    window.lastSeenCinematicAlertTimestamp = answerTimestamp;
+    triggerCinematicTeamAlert(wrongAlert);
+    currentLiveRoom.lastCinematicAlert = wrongAlert;
+  }
+
   currentLiveRoom.lastTeamAnswerEvent = answerPayload;
   await saveRooms(currentLiveRoom);
   updateTeamScoreFlyers(isCorrect ? activeTeam.id : null, earnedPoints);
@@ -13177,18 +13590,19 @@ async function handleTeamQuestionResult(isCorrect, choiceIdx, earnedPoints) {
     showToast("❌ لم يتم احتساب نقاط لهذا السؤال — استعدوا للسؤال القادم!", "fa-circle-xmark", 2200);
   }
 
-  // إذا كان المجيب هو المشرف / قائد الغرفة، يقود الانتقال للسؤال التالي بعد 1.8 ثانية
+  // إذا كان المجيب هو المشرف / قائد الغرفة، يقود الانتقال للسؤال التالي (3.2 ثانية عند الخطأ لإتاحة اكتمال البطاقة، و 1.8 ثانية عند الصواب)
   if (isLead) {
+    const nextDelay = !isCorrect ? 3200 : 1800;
     setTimeout(() => {
       executeNextTeamQuestion(currentActiveTeamSolver.qIndex + 1);
-    }, 1800);
+    }, nextDelay);
   } else {
-    // إجراء أمان احتياطي: إذا لم يكن المشرف متواجداً في الغرفة، يتم التقدم بعد 3 ثوانٍ
+    // إجراء أمان احتياطي: إذا لم يكن المشرف متواجداً في الغرفة، يتم التقدم بعد 3.5 ثوانٍ
     setTimeout(() => {
       if (currentLiveRoom && currentLiveRoom.currentQuestionIdx === currentActiveTeamSolver.qIndex) {
         executeNextTeamQuestion(currentActiveTeamSolver.qIndex + 1);
       }
-    }, 3200);
+    }, 3500);
   }
 }
 
@@ -13269,6 +13683,24 @@ function syncTeamStageRealtime(room) {
   ensureTeamQuestionsPopulated(room);
   showArenaPhase("stage");
 
+  const isSup = currentUser && (currentUser.role === "supervisor" || isSupervisor(currentUser.name) || currentUser.name === room.leaderName);
+
+  // إظهار زر العودة لاختيار الفرق للمشرف في شريط المسرح
+  const btnReturn = document.getElementById("btnReturnToTeamSelect");
+  if (btnReturn) {
+    if (isSup && room.isTeamMatch) {
+      btnReturn.classList.remove("hidden");
+    } else {
+      btnReturn.classList.add("hidden");
+    }
+  }
+
+  // مزامنة البطاقة السينمائية اللحظية (انتقال الدور / إجابة خاطئة) فور ورودها من السحابة لجميع الأجهزة
+  if (room.lastCinematicAlert && room.lastCinematicAlert.timestamp && room.lastCinematicAlert.timestamp !== window.lastSeenCinematicAlertTimestamp) {
+    window.lastSeenCinematicAlertTimestamp = room.lastCinematicAlert.timestamp;
+    triggerCinematicTeamAlert(room.lastCinematicAlert);
+  }
+
   // إخفاء أي شاشة تعريفية للفرق فوراً
   const overlay = document.getElementById("teamEntranceOverlay");
   if (overlay && !overlay.classList.contains("hidden")) {
@@ -13285,11 +13717,22 @@ function syncTeamStageRealtime(room) {
     if (elScoreB) elScoreB.textContent = String(room.teamScores[teamB.id] || 0);
   }
 
-  // إذا تغيرت الفقرة (Round)
+  // مزامنة حالة بدء الفقرة يدوياً بالضغط على زر التالي من المشرف
+  if (room.teamRoundStarted && room.teamRoundStartedAt && room.teamRoundStartedAt !== window.lastHandledRoundStartTs) {
+    window.lastHandledRoundStartTs = room.teamRoundStartedAt;
+    const roundBannerOverlay = document.getElementById("teamRoundBannerOverlay");
+    if (roundBannerOverlay && !roundBannerOverlay.classList.contains("hidden")) {
+      roundBannerOverlay.classList.add("hidden");
+    }
+  }
+
+  // إذا تغيرت الفقرة (Round) ولم تبدأ بعد
   if (room.currentTeamRound && room.currentTeamRound !== currentActiveTeamRound) {
     currentActiveTeamRound = room.currentTeamRound;
-    if (!room.teamActiveSolver || !room.teamActiveSolver.startedAt) {
-      launchTeamRound(room.currentTeamRound);
+    if (!room.teamRoundStarted) {
+      showTeamRoundBanner(room.currentTeamRound, () => {
+        if (isSup) executeNextTeamQuestion(0);
+      });
     }
   }
 
@@ -13534,21 +13977,23 @@ async function initApp() {
       }
     }
 
-    // 6. استرجاع وتعبئة آخر اسم مستخدم تلقائياً في خانة تسجيل الدخول مع تحديث العداد
+    // 6. استرجاع وتعبئة آخر اسم مستخدم تلقائياً فقط إذا كان الحقل فارغاً لمنع مسح كتابة المستخدم
     const lastUsername = localStorage.getItem("nour_last_username");
-    if (lastUsername && fullNameInput) {
+    if (lastUsername && fullNameInput && !fullNameInput.value.trim()) {
       fullNameInput.value = lastUsername;
       fullNameInput.dispatchEvent(new Event("input"));
     }
 
-    // إذا لم يكن هناك جلسة نشطة ولم يكن مسجلاً مسبقاً
-    if (!restoredSession && !currentUser) {
+    // إذا لم يكن هناك جلسة نشطة ولم يكن مسجلاً مسبقاً، وفقط إذا لم يكن المستخدم قد انتقل لصفحة الدخول
+    const isLoginActive = views.login && views.login.classList.contains("active");
+    if (!restoredSession && !currentUser && !isLoginActive) {
       showView("hero");
     }
   } catch (err) {
     console.warn("Init cloud load notice:", err);
-    // صمام أمان: إذا كان هناك جلسة محفوظة لا نطرده للواجهة الرئيسية إطلاقاً!
-    if (!currentUser && !restoredSession) {
+    // صمام أمان: لا نطرده للرئيسية إطلاقاً إذا كان المستخدم في صفحة الدخول أو لديه جلسة محفوظة
+    const isLoginActive = views.login && views.login.classList.contains("active");
+    if (!currentUser && !restoredSession && !isLoginActive) {
       showView("hero");
     }
   } finally {

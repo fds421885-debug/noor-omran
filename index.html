@@ -687,6 +687,9 @@
               <span>المتواجدون: <strong id="arenaConnectedCount">1</strong></span>
             </div>
             <span class="role-pill-live" id="arenaUserRolePill">مشرف الغرفة</span>
+            <button id="btnReturnToTeamSelect" class="btn-duo-outline btn-sm hidden" style="border-color: var(--duo-blue); color: var(--duo-blue); font-weight:800;" title="العودة لاختيار الفرق وتغييرها">
+              <i class="fa-solid fa-arrow-right"></i> العودة لاختيار الفرق
+            </button>
             <button id="btnOpenRoomSettingsModal" class="btn-duo-yellow btn-sm" title="إعدادات الغرفة وصلاحيات الحل">
               <i class="fa-solid fa-sliders"></i> إعدادات المسابقة
             </button>
@@ -2163,7 +2166,7 @@
         <button class="btn-modal-close" data-close-modal="createTeamModal" title="إغلاق">&times;</button>
       </div>
 
-      <form id="createTeamForm" class="modal-body-form">
+      <form id="createTeamForm" class="modal-body-form" novalidate>
         <input type="hidden" id="editTeamId" value="">
         <div class="input-group">
           <label class="input-label">اسم الفريق <span class="required-star">*</span></label>
@@ -2225,6 +2228,13 @@
 
   <!-- العرض التقديمي السينمائي للفرق (Cinematic Team Entrance Overlay) -->
   <div id="teamEntranceOverlay" class="team-entrance-overlay hidden">
+    <!-- زر العودة لاختيار الفرق بالأعلى في حال اختيار فريق بالخطأ -->
+    <div class="team-entrance-top-bar" style="position: absolute; top: 18px; right: 24px; z-index: 50;">
+      <button type="button" id="btnEntranceReturnToTeamSelect" class="btn-duo-outline btn-sm" style="background: rgba(15, 23, 42, 0.75); color: #ffffff; border: 2px solid rgba(255, 255, 255, 0.35); backdrop-filter: blur(8px); font-size: 14px; font-weight: 800; padding: 8px 18px; border-radius: 12px; cursor: pointer; transition: all 0.2s ease;">
+        <i class="fa-solid fa-arrow-right"></i> العودة لاختيار الفرق
+      </button>
+    </div>
+
     <div class="team-entrance-header">
       <div class="team-entrance-badge">
         <i class="fa-solid fa-crown"></i>
@@ -2290,7 +2300,7 @@
     </div>
   </div>
 
-  <!-- لافتة إعلان الفقرة الحالية (Round Intro Banner Modal) -->
+  <!-- لافتة إعلان الفقرة الحالية مع زر التالي للمشرف لبدء الفقرة يدوياً (Round Intro Banner Modal) -->
   <div id="teamRoundBannerOverlay" class="team-round-banner-overlay hidden">
     <div class="team-round-banner-box">
       <span class="round-banner-tag" id="teamRoundBannerTag">الفقرة الأولى</span>
@@ -2298,6 +2308,49 @@
       <p class="round-banner-rule" id="teamRoundBannerRule">
         إذا أجاب فريقك خطأ، تُمنح الفرصة فوراً للفريق الخصم للإجابة وخطف النقاط!
       </p>
+
+      <!-- زر تحكم المشرف: التالي لبدء الفقرة / إشعار انتظار للطلاب -->
+      <div id="roundBannerActionBox" class="round-banner-action-box" style="margin-top: 24px; display: flex; flex-direction: column; align-items: center; gap: 12px;">
+        <button type="button" id="btnStartTeamRoundNow" class="btn-duo-green" style="font-size: 18px; font-weight: 900; padding: 13px 36px; box-shadow: 0 8px 25px rgba(34, 197, 94, 0.5); cursor: pointer; border-radius: 14px;">
+          <i class="fa-solid fa-play" style="margin-left: 8px;"></i> <span id="btnStartTeamRoundText">التالي: بدء الفقرة الآن</span>
+        </button>
+        <div id="roundBannerWaitingNotice" class="hidden" style="color: #f8fafc; font-size: 15px; font-weight: 800; display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,0.35); padding: 9px 20px; border-radius: 30px; border: 1px solid rgba(255,255,255,0.2);">
+          <i class="fa-solid fa-hourglass-half fa-spin" style="color: #facc15;"></i> في انتظار إشارة المشرف لبدء الفقرة...
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- البطاقة السينمائية التفاعلية ثلاثية الأبعاد (انتقال الدور / إجابة خاطئة) لمدة 3 ثوانٍ بأنيميشن سلس -->
+  <div id="teamCinematicPopupCard" class="team-cinematic-popup-card hidden">
+    <div class="cinematic-popup-wrapper" id="cinematicPopupWrapper">
+      <div class="cinematic-popup-glow" id="cinematicPopupGlow"></div>
+      
+      <div class="cinematic-popup-body" id="cinematicPopupBody">
+        <div class="cinematic-popup-icon-container" id="cinematicPopupIconContainer">
+          <div class="cinematic-popup-icon-ring" id="cinematicPopupIconRing">
+            <i id="cinematicPopupIcon" class="fa-solid fa-bolt-lightning"></i>
+          </div>
+        </div>
+
+        <div class="cinematic-popup-info">
+          <div class="cinematic-popup-badge-row">
+            <span class="cinematic-popup-type-tag" id="cinematicPopupTag">⚡ فرصة رد الفعل!</span>
+            <span class="cinematic-popup-team-pill" id="cinematicPopupTeamPill">
+              <i class="fa-solid fa-shield"></i> <span id="cinematicPopupTeamName">فرسان القرآن</span>
+            </span>
+          </div>
+
+          <div class="cinematic-popup-headline" id="cinematicPopupHeadline">السؤال يتحول الآن إلى البطل:</div>
+          <div class="cinematic-popup-student-name" id="cinematicPopupStudentName">أحمد محمد عبدالله إبراهيم</div>
+          <div class="cinematic-popup-subtext" id="cinematicPopupSubtext">استعد للإجابة وخطف النقاط لفريقك!</div>
+        </div>
+      </div>
+
+      <!-- شريط مؤقت الـ 3 ثواني الانسيابي في أسفل البطاقة -->
+      <div class="cinematic-popup-progress-track">
+        <div class="cinematic-popup-progress-fill" id="cinematicPopupProgressFill"></div>
+      </div>
     </div>
   </div>
 
