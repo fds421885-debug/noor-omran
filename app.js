@@ -376,27 +376,26 @@ function countArabicNameParts(name) {
 function validateQuadrupleName(fullName) {
   const trimmed = (fullName || "").trim();
   if (!trimmed) {
-    return { isValid: false, count: 0, isQuadruple: false, message: "يرجى كتابة الاسم الرباعي كاملاً." };
+    return { isValid: false, count: 0, isQuadruple: false, message: "يرجى كتابة الاسم كاملاً (3 أسماء على الأقل)." };
   }
   const compoundCount = countArabicNameParts(trimmed);
   const rawWordsCount = trimmed.split(/\s+/).filter(w => w.length > 0).length;
-  // اعتماد الأفضل لإنصاف المتسابق سواء كتب اسماً مركباً أو عادياً
-  const count = Math.max(compoundCount, rawWordsCount >= 4 ? 4 : compoundCount);
-  const isQuad = count >= 4;
-  if (count < 3) {
-    const wordLabel = count === 1 ? "اسم واحد فقط" : "اسمين فقط";
+  const count = Math.max(compoundCount, rawWordsCount >= 3 ? rawWordsCount : compoundCount);
+  const isValid = count >= 3;
+  if (!isValid) {
+    const wordLabel = count === 1 ? "اسم واحد" : "اسمين";
     return {
       isValid: false,
       count,
       isQuadruple: false,
-      message: `يرجى كتابة الاسم كاملاً (لقد كتبت ${wordLabel}). يجب كتابة 3 أسماء على الأقل، ويفضل الاسم الرباعي.`
+      message: `يرجى كتابة الاسم كاملاً (لقد كتبت ${wordLabel}). يشترط إدخال 3 أسماء على الأقل للمتابعة.`
     };
   }
   return { 
     isValid: true, 
     count, 
-    isQuadruple: isQuad, 
-    message: isQuad ? "✔ اسم رباعي مكتمل" : "3 / 4 (اسم ثلاثي)" 
+    isQuadruple: count >= 4, 
+    message: count >= 4 ? "✔ اسم رباعي مكتمل" : "✔ اسم ثلاثي مقبول" 
   };
 }
 
@@ -13670,6 +13669,11 @@ document.getElementById("btnRestartTeamContest")?.addEventListener("click", asyn
     await saveRooms(currentLiveRoom);
   }
   runTeamEntranceCinematicShowcase();
+});
+
+document.getElementById("btnChooseOtherTeams")?.addEventListener("click", async () => {
+  document.getElementById("teamGrandFinaleOverlay")?.classList.add("hidden");
+  await handleReturnToTeamSelection();
 });
 
 document.getElementById("btnCloseTeamContest")?.addEventListener("click", () => {
