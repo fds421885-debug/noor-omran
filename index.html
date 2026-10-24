@@ -166,7 +166,7 @@
             </div>
           </div>
 
-          <form id="loginForm" class="login-form" novalidate>
+          <form id="loginForm" class="login-form" onsubmit="if(window.handleManualLoginSubmit){window.handleManualLoginSubmit(event);}return false;" novalidate>
             <!-- حقل الاسم الرباعي -->
             <div class="input-group">
               <label for="fullNameInput" class="input-label">
@@ -198,7 +198,7 @@
             <div id="validationAlert" class="alert-box error hidden"></div>
 
             <div class="form-actions">
-              <button type="submit" id="btnSubmitLogin" class="btn-duo-green btn-block">
+              <button type="button" id="btnSubmitLogin" class="btn-duo-green btn-block" onclick="if(window.handleManualLoginSubmit){window.handleManualLoginSubmit(event);}return false;">
                 <span class="btn-text">متابعة والدخول</span>
                 <span class="btn-icon"><i class="fa-solid fa-arrow-left"></i></span>
               </button>
