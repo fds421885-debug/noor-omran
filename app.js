@@ -30,6 +30,8 @@ function triggerFloatingThemedSticker(title, iconHtml) {
 
 import { 
   db, 
+  auth,
+  ensureFirebaseAuth,
   doc, 
   getDoc, 
   setDoc, 
@@ -1064,10 +1066,12 @@ async function syncParticipantToCloud(user) {
     const cleanUser = sanitizeForFirestore(user);
     await setDoc(userRef, {
       ...cleanUser,
+      authUid: auth?.currentUser?.uid || null,
       lastUpdated: serverTimestamp()
     }, { merge: true });
+    console.log("[FIRESTORE SYNC] Successfully synced participant:", user.id);
   } catch (e) {
-    console.warn("Firestore participant sync notice:", e);
+    console.error("[FIRESTORE SYNC] Firestore participant sync error:", e?.message || e, "for user:", user.id);
   }
 }
 
@@ -2670,11 +2674,11 @@ if (fullNameInput) {
     if (!val) {
       if (nameProgressBar) nameProgressBar.style.width = "0%";
       if (nameCountBadge) {
-        nameCountBadge.textContent = "0 / 4 أسماء";
+        nameCountBadge.textContent = "اكتب اسمك";
         nameCountBadge.classList.remove("valid");
       }
       if (loginInstructionText) {
-        loginInstructionText.innerHTML = `يرجى كتابة الاسم الرباعي كاملاً (4 أسماء على الأقل) للمتابعة والدخول للمسابقة.`;
+        loginInstructionText.innerHTML = `أهلاً بك! اكتب اسمك للمتابعة والدخول فورياً للمسابقة.`;
       }
       validationAlert?.classList.add("hidden");
       return;
@@ -2742,51 +2746,43 @@ if (fullNameInput) {
         nameCountBadge.classList.add("valid");
       }
       if (loginInstructionText) {
-        loginInstructionText.innerHTML = `أهلاً بك يا <strong>${escapeHtml(existing.name)}</strong>! حسابك جاهز، اضغط <strong>«متابعة والدخول»</strong>.`;
+        loginInstructionText.innerHTML = `أهلاً بعودتك يا <strong>${escapeHtml(existing.name)}</strong>! حسابك جاهز، اضغط <strong>«متابعة والدخول»</strong>.`;
       }
       validationAlert?.classList.add("hidden");
       return;
     }
 
-    // 3. مستخدم جديد: احتساب عدد أجزاء الاسم بدقة تامة ودعم الأسماء المركبة
+    // 5. متسابق جديد: احتساب عدد أجزاء الاسم بشكل مشجع وإيجابي
     const validation = validateQuadrupleName(val);
     const count = validation.count;
-    const progressPercent = Math.min(100, Math.round((count / 4) * 100));
+    const progressPercent = Math.min(100, Math.max(30, Math.round((count / 4) * 100)));
     if (nameProgressBar) nameProgressBar.style.width = `${progressPercent}%`;
 
     validationAlert?.classList.add("hidden");
 
+    if (nameCountBadge) {
+      nameCountBadge.classList.add("valid");
+    }
+
     if (count >= 4) {
-      if (nameCountBadge) {
-        nameCountBadge.textContent = `✔ اسم رباعي مكتمل`;
-        nameCountBadge.classList.add("valid");
-      }
+      if (nameCountBadge) nameCountBadge.textContent = `✔ اسم رباعي مكتمل`;
       if (loginInstructionText) {
-        loginInstructionText.innerHTML = `✔ الاسم الرباعي مكتمل وجاهز تماماً للدخول! اضغط <strong>«متابعة والدخول»</strong> للانطلاق فوراً.`;
+        loginInstructionText.innerHTML = `✔ الاسم الرباعي مكتمل وجاهز تماماً! اضغط <strong>«متابعة والدخول»</strong> للانطلاق في المسابقة.`;
       }
     } else if (count === 3) {
-      if (nameCountBadge) {
-        nameCountBadge.textContent = `3 / 4 (متبقي اسم)`;
-        nameCountBadge.classList.remove("valid");
-      }
+      if (nameCountBadge) nameCountBadge.textContent = `✔ اسم ثلاثي (جاهز)`;
       if (loginInstructionText) {
-        loginInstructionText.innerHTML = `كتبت 3 أسماء.. يرجى إضافة الاسم الرابع لاكتمال الاسم الرباعي والمتابعة والدخول.`;
+        loginInstructionText.innerHTML = `أهلاً بك! الاسم جاهز، اضغط <strong>«متابعة والدخول»</strong> أو أضف الاسم الرابع إن رغبت.`;
       }
     } else if (count === 2) {
-      if (nameCountBadge) {
-        nameCountBadge.textContent = `2 / 4 (اسم ثنائي)`;
-        nameCountBadge.classList.remove("valid");
-      }
+      if (nameCountBadge) nameCountBadge.textContent = `✔ اسم ثنائي (جاهز)`;
       if (loginInstructionText) {
-        loginInstructionText.innerHTML = `كتبت اسماً ثنائياً (2/4).. يرجى كتابة الاسم الرباعي كاملاً للمتابعة والدخول.`;
+        loginInstructionText.innerHTML = `أهلاً بك! الاسم جاهز، اضغط <strong>«متابعة والدخول»</strong> أو أكمل الاسم إن رغبت.`;
       }
     } else {
-      if (nameCountBadge) {
-        nameCountBadge.textContent = `1 / 4 (اسم مفرد)`;
-        nameCountBadge.classList.remove("valid");
-      }
+      if (nameCountBadge) nameCountBadge.textContent = `✔ جاهز للدخول`;
       if (loginInstructionText) {
-        loginInstructionText.innerHTML = `يرجى كتابة الاسم الرباعي كاملاً (4 أسماء على الأقل) للمتابعة والدخول للمسابقة.`;
+        loginInstructionText.innerHTML = `أهلاً بك! اضغط <strong>«متابعة والدخول»</strong> للانطلاق في المسابقة مباشرة.`;
       }
     }
   });
@@ -2869,6 +2865,8 @@ function resetLoginSteps() {
   loginStepGrade?.classList.remove("active");
 }
 
+let isSubmittingLogin = false;
+
 // --------------------------------------------------------
 // معالجة تسجيل الدخول الذكية واللحظية الشاملة لكافة الأدوار
 // --------------------------------------------------------
@@ -2882,239 +2880,288 @@ async function handleLoginSubmit(event) {
     try { window.event.returnValue = false; } catch (e) {}
   }
 
-  const rawName = fullNameInput ? fullNameInput.value.trim() : "";
-  console.log("[LOGIN FLOW] handleLoginSubmit invoked with rawName:", rawName);
-
-  if (!rawName || rawName.length < 2) {
-    console.warn("[LOGIN FLOW] Name is empty or too short");
-    if (validationAlert) {
-      validationAlert.textContent = "يرجى كتابة الاسم للمتابعة والدخول للمسابقة.";
-      validationAlert.classList.remove("hidden");
-    }
-    fullNameInput?.focus();
+  // قفل منع النقرات المتكررة أو الإرسال المتزامن
+  if (isSubmittingLogin) {
     return false;
   }
-
-  validationAlert?.classList.add("hidden");
-  sessionStorage.removeItem("nour_supervisor_impersonation");
-  localStorage.removeItem("nour_previous_supervisor");
-  document.getElementById("impersonationNoticeBar")?.remove();
-
-  const norm = normalizeArabic(rawName);
-  const normNoSpaces = norm.replace(/\s+/g, "");
-  const docId = getDocumentId(norm);
-
-  // 1. الدخول الفوري السريع للمشرف العام
-  if (isSupervisor(rawName)) {
-    let supUser = participantsCache.find(p => p.role === "supervisor" || isSupervisor(p.name));
-    if (!supUser) {
-      supUser = {
-        id: docId,
-        name: MASTER_SUPERVISOR_NAME,
-        normalizedName: normalizeArabic(MASTER_SUPERVISOR_NAME),
-        role: "supervisor",
-        school: "مدرسة نور البيان المركزية",
-        grade: "جميع الفئات",
-        firstLoginAt: new Date().toISOString(),
-        lastLoginAt: new Date().toISOString(),
-        loginCount: 1
-      };
-      participantsCache.unshift(supUser);
-      saveParticipants();
-      syncParticipantToCloud(supUser).catch(() => {});
-    } else {
-      supUser.lastLoginAt = new Date().toISOString();
-      supUser.loginCount = (supUser.loginCount || 1) + 1;
-      saveParticipants();
-      syncParticipantToCloud(supUser).catch(() => {});
-    }
-
-    try { renderSupervisorDashboard(); } catch (e) { console.warn(e); }
-    try { renderAccountsTable(); } catch (e) { console.warn(e); }
-    finalizeUserSession(supUser, true);
-    showToast("مرحباً بك يا مشرف البرنامج! تم الدخول بنجاح", "fa-crown");
-    loadCloudData().catch(() => {});
-    return;
-  }
-
-  // 2. الدخول الفوري للمعلم
-  if (isTeacher(rawName)) {
-    let teacherUser = participantsCache.find(p => p.role === "teacher" || isTeacher(p.name));
-    if (!teacherUser) {
-      teacherUser = {
-        id: "user_teacher_default",
-        name: "المعلم المعتمد",
-        normalizedName: normalizeArabic("المعلم المعتمد"),
-        role: "teacher",
-        school: "مدرسة نور البيان النموذجية",
-        grade: "جميع الفئات",
-        firstLoginAt: new Date().toISOString(),
-        lastLoginAt: new Date().toISOString(),
-        loginCount: 1
-      };
-      participantsCache.push(teacherUser);
-      saveParticipants();
-      syncParticipantToCloud(teacherUser).catch(() => {});
-    } else {
-      teacherUser.lastLoginAt = new Date().toISOString();
-      teacherUser.loginCount = (teacherUser.loginCount || 1) + 1;
-      saveParticipants();
-    }
-    finalizeUserSession(teacherUser, true);
-    showToast("مرحباً بعودتك أيها المعلم الفاضل! تم الدخول بنجاح", "fa-chalkboard-user");
-    loadCloudData().catch(() => {});
-    return;
-  }
-
-  // 3. الدخول الفوري للعارض (شاشة المسابقات الحية)
-  if (isPresenter(rawName)) {
-    let presUser = participantsCache.find(p => p.role === "presenter" || isPresenter(p.name));
-    if (!presUser) {
-      presUser = {
-        id: "user_presenter_default",
-        name: "عارض المسرح الحي",
-        normalizedName: normalizeArabic("عارض المسرح الحي"),
-        role: "presenter",
-        school: "مدرسة نور البيان المركزية",
-        grade: "جميع الفئات",
-        firstLoginAt: new Date().toISOString(),
-        lastLoginAt: new Date().toISOString(),
-        loginCount: 1
-      };
-      participantsCache.push(presUser);
-      saveParticipants();
-      syncParticipantToCloud(presUser).catch(() => {});
-    } else {
-      presUser.lastLoginAt = new Date().toISOString();
-      presUser.loginCount = (presUser.loginCount || 1) + 1;
-      saveParticipants();
-    }
-    finalizeUserSession(presUser, true);
-    showToast("مرحباً بك أيها العارض! تم الدخول بنجاح", "fa-display");
-    loadCloudData().catch(() => {});
-    return;
-  }
-
-  // 4. فحص الحساب المسجل محلياً في الذاكرة والكاش
-  let foundUser = participantsCache.find(p => {
-    if (!p) return false;
-    const pNorm = p.normalizedName || normalizeArabic(p.name || "");
-    const pNormNoSpaces = pNorm.replace(/\s+/g, "");
-    return pNorm === norm || 
-           pNormNoSpaces === normNoSpaces ||
-           (p.name && p.name.trim().toLowerCase() === rawName.toLowerCase()) ||
-           p.id === docId ||
-           (p.name && normalizeArabic(p.name).replace(/\s+/g, "") === normNoSpaces);
-  });
-
-  if (foundUser) {
-    foundUser.lastLoginAt = new Date().toISOString();
-    foundUser.loginCount = (foundUser.loginCount || 1) + 1;
-    saveParticipants();
-    finalizeUserSession(foundUser, true);
-    showToast("مرحباً بعودتك يا " + foundUser.name + "! تم تسجيل الدخول بنجاح", "fa-circle-check");
-    try {
-      updateDoc(doc(db, "participants", foundUser.id || docId), {
-        lastLoginAt: serverTimestamp(),
-        loginCount: foundUser.loginCount
-      }).catch(() => {});
-    } catch (e) {}
-    loadCloudData().catch(() => {});
-    return;
-  }
-
-  // 5. تسجيل ودخول فوري للطالب الجديد
-  if (btnSubmitLogin) {
-    btnSubmitLogin.disabled = true;
-    btnSubmitLogin.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> جاري الدخول...`;
-  }
+  isSubmittingLogin = true;
 
   try {
-    if (db) {
-      try {
-        const directSnap = await withTimeout(getDoc(doc(db, "participants", docId)), 800, null);
-        if (directSnap && directSnap.exists()) {
-          foundUser = { id: directSnap.id, ...directSnap.data() };
-        }
-      } catch (e) {}
+    const rawName = fullNameInput ? fullNameInput.value.trim() : "";
+    console.log("[LOGIN FLOW] handleLoginSubmit invoked with rawName:", rawName);
+
+    if (!rawName || rawName.length < 2) {
+      console.warn("[LOGIN FLOW] Name is empty or too short");
+      if (validationAlert) {
+        validationAlert.textContent = "يرجى كتابة الاسم للمتابعة والدخول للمسابقة.";
+        validationAlert.classList.remove("hidden");
+      }
+      fullNameInput?.focus();
+      return false;
     }
+
+    validationAlert?.classList.add("hidden");
+    sessionStorage.removeItem("nour_supervisor_impersonation");
+    localStorage.removeItem("nour_previous_supervisor");
+    document.getElementById("impersonationNoticeBar")?.remove();
+
+    const norm = normalizeArabic(rawName);
+    const normNoSpaces = norm.replace(/\s+/g, "");
+    const docId = getDocumentId(norm);
+
+    // تهيئة جلسة فايربيس للمستخدم إذا أمكن (Firebase Auth)
+    try {
+      await ensureFirebaseAuth(rawName);
+    } catch (authErr) {
+      console.info("[LOGIN FLOW] Auth setup notice:", authErr?.message || authErr);
+    }
+
+    // 1. الدخول الفوري السريع للمشرف العام
+    if (isSupervisor(rawName)) {
+      let supUser = participantsCache.find(p => p.role === "supervisor" || isSupervisor(p.name));
+      if (!supUser) {
+        supUser = {
+          id: docId,
+          name: MASTER_SUPERVISOR_NAME,
+          normalizedName: normalizeArabic(MASTER_SUPERVISOR_NAME),
+          role: "supervisor",
+          school: "مدرسة نور البيان المركزية",
+          grade: "جميع الفئات",
+          firstLoginAt: new Date().toISOString(),
+          lastLoginAt: new Date().toISOString(),
+          loginCount: 1,
+          authUid: auth?.currentUser?.uid || null
+        };
+        participantsCache.unshift(supUser);
+        saveParticipants();
+        syncParticipantToCloud(supUser).catch(err => console.error("[LOGIN FLOW] Supervisor cloud sync error:", err));
+      } else {
+        supUser.lastLoginAt = new Date().toISOString();
+        supUser.loginCount = (supUser.loginCount || 1) + 1;
+        supUser.authUid = auth?.currentUser?.uid || supUser.authUid || null;
+        saveParticipants();
+        syncParticipantToCloud(supUser).catch(err => console.error("[LOGIN FLOW] Supervisor cloud sync error:", err));
+      }
+
+      try { renderSupervisorDashboard(); } catch (e) { console.warn(e); }
+      try { renderAccountsTable(); } catch (e) { console.warn(e); }
+      finalizeUserSession(supUser, true);
+      showToast("مرحباً بك يا مشرف البرنامج! تم الدخول بنجاح", "fa-crown");
+      loadCloudData().catch(() => {});
+      return;
+    }
+
+    // 2. الدخول الفوري للمعلم
+    if (isTeacher(rawName)) {
+      let teacherUser = participantsCache.find(p => p.role === "teacher" || isTeacher(p.name));
+      if (!teacherUser) {
+        teacherUser = {
+          id: "user_teacher_default",
+          name: "المعلم المعتمد",
+          normalizedName: normalizeArabic("المعلم المعتمد"),
+          role: "teacher",
+          school: "مدرسة نور البيان النموذجية",
+          grade: "جميع الفئات",
+          firstLoginAt: new Date().toISOString(),
+          lastLoginAt: new Date().toISOString(),
+          loginCount: 1,
+          authUid: auth?.currentUser?.uid || null
+        };
+        participantsCache.push(teacherUser);
+        saveParticipants();
+        syncParticipantToCloud(teacherUser).catch(err => console.error("[LOGIN FLOW] Teacher cloud sync error:", err));
+      } else {
+        teacherUser.lastLoginAt = new Date().toISOString();
+        teacherUser.loginCount = (teacherUser.loginCount || 1) + 1;
+        teacherUser.authUid = auth?.currentUser?.uid || teacherUser.authUid || null;
+        saveParticipants();
+        syncParticipantToCloud(teacherUser).catch(err => console.error("[LOGIN FLOW] Teacher cloud sync error:", err));
+      }
+      finalizeUserSession(teacherUser, true);
+      showToast("مرحباً بعودتك أيها المعلم الفاضل! تم الدخول بنجاح", "fa-chalkboard-user");
+      loadCloudData().catch(() => {});
+      return;
+    }
+
+    // 3. الدخول الفوري للعارض (شاشة المسابقات الحية)
+    if (isPresenter(rawName)) {
+      let presUser = participantsCache.find(p => p.role === "presenter" || isPresenter(p.name));
+      if (!presUser) {
+        presUser = {
+          id: "user_presenter_default",
+          name: "عارض المسرح الحي",
+          normalizedName: normalizeArabic("عارض المسرح الحي"),
+          role: "presenter",
+          school: "مدرسة نور البيان المركزية",
+          grade: "جميع الفئات",
+          firstLoginAt: new Date().toISOString(),
+          lastLoginAt: new Date().toISOString(),
+          loginCount: 1,
+          authUid: auth?.currentUser?.uid || null
+        };
+        participantsCache.push(presUser);
+        saveParticipants();
+        syncParticipantToCloud(presUser).catch(err => console.error("[LOGIN FLOW] Presenter cloud sync error:", err));
+      } else {
+        presUser.lastLoginAt = new Date().toISOString();
+        presUser.loginCount = (presUser.loginCount || 1) + 1;
+        presUser.authUid = auth?.currentUser?.uid || presUser.authUid || null;
+        saveParticipants();
+        syncParticipantToCloud(presUser).catch(err => console.error("[LOGIN FLOW] Presenter cloud sync error:", err));
+      }
+      finalizeUserSession(presUser, true);
+      showToast("مرحباً بك أيها العارض! تم الدخول بنجاح", "fa-display");
+      loadCloudData().catch(() => {});
+      return;
+    }
+
+    // 4. فحص الحساب المسجل محلياً في الذاكرة والكاش
+    let foundUser = participantsCache.find(p => {
+      if (!p) return false;
+      const pNorm = p.normalizedName || normalizeArabic(p.name || "");
+      const pNormNoSpaces = pNorm.replace(/\s+/g, "");
+      return pNorm === norm || 
+             pNormNoSpaces === normNoSpaces ||
+             (p.name && p.name.trim().toLowerCase() === rawName.toLowerCase()) ||
+             p.id === docId ||
+             (p.name && normalizeArabic(p.name).replace(/\s+/g, "") === normNoSpaces);
+    });
 
     if (foundUser) {
       foundUser.lastLoginAt = new Date().toISOString();
       foundUser.loginCount = (foundUser.loginCount || 1) + 1;
-      const existIdx = participantsCache.findIndex(p => p.id === foundUser.id);
-      if (existIdx >= 0) {
-        participantsCache[existIdx] = foundUser;
-      } else {
-        participantsCache.push(foundUser);
-      }
+      foundUser.authUid = auth?.currentUser?.uid || foundUser.authUid || null;
       saveParticipants();
       finalizeUserSession(foundUser, true);
       showToast("مرحباً بعودتك يا " + foundUser.name + "! تم تسجيل الدخول بنجاح", "fa-circle-check");
+      try {
+        const userRef = doc(db, "participants", foundUser.id || docId);
+        await updateDoc(userRef, {
+          lastLoginAt: serverTimestamp(),
+          loginCount: foundUser.loginCount,
+          authUid: auth?.currentUser?.uid || null
+        });
+        console.log("[LOGIN FLOW] Successfully updated returning user in Firestore:", foundUser.id || docId);
+      } catch (e) {
+        console.error("[LOGIN FLOW] Firestore update returning user error:", e?.message || e);
+      }
+      loadCloudData().catch(() => {});
       return;
     }
 
-    const defaultSchool = (schoolsCache && schoolsCache.length > 0) ? schoolsCache[0] : DEFAULT_SCHOOLS[0];
-    const defaultGrade = (gradesCache && gradesCache.length > 0) ? gradesCache[0] : DEFAULT_GRADES[0];
-    const nowIso = new Date().toISOString();
-    const newStudentUser = {
-      id: docId,
-      name: rawName,
-      normalizedName: norm,
-      role: "student",
-      school: defaultSchool,
-      grade: defaultGrade,
-      firstLoginAt: nowIso,
-      lastLoginAt: nowIso,
-      loginCount: 1
-    };
-
-    participantsCache.push(newStudentUser);
-    saveParticipants();
-
-    if (db) {
-      try {
-        const userDocRef = doc(db, "participants", docId);
-        setDoc(userDocRef, {
-          ...newStudentUser,
-          firstLoginAt: serverTimestamp(),
-          lastLoginAt: serverTimestamp()
-        }).catch(() => {});
-      } catch (e) {}
+    // 5. تسجيل ودخول فوري للطالب الجديد
+    if (btnSubmitLogin) {
+      btnSubmitLogin.disabled = true;
+      btnSubmitLogin.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> جاري الدخول...`;
     }
 
-    resetLoginSteps();
-    finalizeUserSession(newStudentUser, false);
+    try {
+      if (db) {
+        try {
+          const directSnap = await withTimeout(getDoc(doc(db, "participants", docId)), 3000, null);
+          if (directSnap && directSnap.exists && directSnap.exists()) {
+            foundUser = { id: directSnap.id, ...directSnap.data() };
+          }
+        } catch (e) {
+          console.warn("[LOGIN FLOW] Firestore participant lookup notice:", e?.message || e);
+        }
+      }
 
-    const valParts = validateQuadrupleName(rawName);
-    if (valParts.isValid) {
-      showToast(`أهلاً بك يا ${newStudentUser.name} في مسابقة نور البيان! تم تسجيل اسمك الرباعي بنجاح`, "fa-graduation-cap");
-    } else {
-      showToast(`أهلاً بك يا ${newStudentUser.name}! تم تسجيل دخولك بنجاح`, "fa-graduation-cap");
+      if (foundUser) {
+        foundUser.lastLoginAt = new Date().toISOString();
+        foundUser.loginCount = (foundUser.loginCount || 1) + 1;
+        foundUser.authUid = auth?.currentUser?.uid || foundUser.authUid || null;
+        const existIdx = participantsCache.findIndex(p => p.id === foundUser.id);
+        if (existIdx >= 0) {
+          participantsCache[existIdx] = foundUser;
+        } else {
+          participantsCache.push(foundUser);
+        }
+        saveParticipants();
+        finalizeUserSession(foundUser, true);
+        showToast("مرحباً بعودتك يا " + foundUser.name + "! تم تسجيل الدخول بنجاح", "fa-circle-check");
+        try {
+          await updateDoc(doc(db, "participants", foundUser.id), {
+            lastLoginAt: serverTimestamp(),
+            loginCount: foundUser.loginCount,
+            authUid: auth?.currentUser?.uid || null
+          });
+          console.log("[LOGIN FLOW] Successfully updated returning user in Firestore:", foundUser.id);
+        } catch (upErr) {
+          console.error("[LOGIN FLOW] Firestore update returning user error:", upErr?.message || upErr);
+        }
+        return;
+      }
+
+      const defaultSchool = (schoolsCache && schoolsCache.length > 0) ? schoolsCache[0] : DEFAULT_SCHOOLS[0];
+      const defaultGrade = (gradesCache && gradesCache.length > 0) ? gradesCache[0] : DEFAULT_GRADES[0];
+      const nowIso = new Date().toISOString();
+      const newStudentUser = {
+        id: docId,
+        name: rawName,
+        normalizedName: norm,
+        role: "student",
+        school: defaultSchool,
+        grade: defaultGrade,
+        firstLoginAt: nowIso,
+        lastLoginAt: nowIso,
+        loginCount: 1,
+        authUid: auth?.currentUser?.uid || null
+      };
+
+      participantsCache.push(newStudentUser);
+      saveParticipants();
+
+      if (db) {
+        try {
+          const userDocRef = doc(db, "participants", docId);
+          await setDoc(userDocRef, {
+            ...newStudentUser,
+            firstLoginAt: serverTimestamp(),
+            lastLoginAt: serverTimestamp()
+          });
+          console.log("[LOGIN FLOW] Successfully created student document in Firestore:", docId);
+        } catch (fsErr) {
+          console.error("[LOGIN FLOW] Firestore create student document error:", fsErr?.message || fsErr);
+          showToast(`تم تسجيل الحساب محلياً (${rawName}) وجاري المزامنة السحابية`, "fa-cloud-arrow-up", 4000);
+        }
+      }
+
+      resetLoginSteps();
+      finalizeUserSession(newStudentUser, false);
+
+      const valParts = validateQuadrupleName(rawName);
+      if (valParts.isValid) {
+        showToast(`أهلاً بك يا ${newStudentUser.name} في مسابقة نور البيان! تم تسجيل اسمك الرباعي بنجاح`, "fa-graduation-cap");
+      } else {
+        showToast(`أهلاً بك يا ${newStudentUser.name}! تم تسجيل دخولك بنجاح`, "fa-graduation-cap");
+      }
+
+    } catch (err) {
+      console.error("[LOGIN FLOW] Login submit error:", err?.message || err);
+      const defaultSchool = (schoolsCache && schoolsCache.length > 0) ? schoolsCache[0] : DEFAULT_SCHOOLS[0];
+      const defaultGrade = (gradesCache && gradesCache.length > 0) ? gradesCache[0] : DEFAULT_GRADES[0];
+      const nowIso = new Date().toISOString();
+      const fallbackUser = {
+        id: docId,
+        name: rawName,
+        normalizedName: norm,
+        role: "student",
+        school: defaultSchool,
+        grade: defaultGrade,
+        firstLoginAt: nowIso,
+        lastLoginAt: nowIso,
+        loginCount: 1,
+        authUid: auth?.currentUser?.uid || null
+      };
+      participantsCache.push(fallbackUser);
+      saveParticipants();
+      resetLoginSteps();
+      finalizeUserSession(fallbackUser, false);
+      showToast(`أهلاً بك يا ${rawName}! تم تسجيل الدخول بنجاح`, "fa-circle-check");
     }
-
-  } catch (err) {
-    console.error("Login submit error:", err);
-    const defaultSchool = (schoolsCache && schoolsCache.length > 0) ? schoolsCache[0] : DEFAULT_SCHOOLS[0];
-    const defaultGrade = (gradesCache && gradesCache.length > 0) ? gradesCache[0] : DEFAULT_GRADES[0];
-    const nowIso = new Date().toISOString();
-    const fallbackUser = {
-      id: docId,
-      name: rawName,
-      normalizedName: norm,
-      role: "student",
-      school: defaultSchool,
-      grade: defaultGrade,
-      firstLoginAt: nowIso,
-      lastLoginAt: nowIso,
-      loginCount: 1
-    };
-    participantsCache.push(fallbackUser);
-    saveParticipants();
-    resetLoginSteps();
-    finalizeUserSession(fallbackUser, false);
-    showToast(`أهلاً بك يا ${rawName}! تم تسجيل الدخول بنجاح`, "fa-circle-check");
   } finally {
+    isSubmittingLogin = false;
     if (btnSubmitLogin) {
       btnSubmitLogin.disabled = false;
       btnSubmitLogin.innerHTML = `<span class="btn-text">متابعة والدخول</span><span class="btn-icon"><i class="fa-solid fa-arrow-left"></i></span>`;
@@ -3125,7 +3172,9 @@ async function handleLoginSubmit(event) {
 // ربط معالج تسجيل الدخول بالنموذج والزر والمفتاح Enter ومتاح في window
 window.handleManualLoginSubmit = handleLoginSubmit;
 loginForm?.addEventListener("submit", handleLoginSubmit);
-btnSubmitLogin?.addEventListener("click", handleLoginSubmit);
+btnSubmitLogin?.addEventListener("click", (e) => {
+  handleLoginSubmit(e);
+});
 fullNameInput?.addEventListener("keydown", (e) => {
   if (e.key === "Enter") {
     e.preventDefault();
@@ -10555,6 +10604,11 @@ function handleSynchronizedCardUsed(cardId, usedBy, contestantName) {
   const card = getCardById(cardId);
   if (!card) return;
 
+  // إذا كان المستخدم الحالي هو المبادر نفسه، فقد تم استهلاك البطاقة وتطبيق تأثيرها محلياً بالفعل
+  if (currentUser && usedBy && currentUser.name && usedBy.trim() === currentUser.name.trim()) {
+    return;
+  }
+
   if (currentLiveRoom && Array.isArray(currentLiveRoom.contestantWallet)) {
     const idx = currentLiveRoom.contestantWallet.findIndex(id => String(id) === String(cardId));
     if (idx > -1) currentLiveRoom.contestantWallet.splice(idx, 1);
@@ -14155,7 +14209,7 @@ async function initApp() {
 
     // استعادة احتياطية من المفاتيح الفردية في حال عدم توفر أو تلف كائن JSON
     if (!parsedUser) {
-      const fallbackName = localStorage.getItem("nour_user_name") || localStorage.getItem("nour_last_username");
+      const fallbackName = localStorage.getItem("nour_user_name");
       const fallbackRole = localStorage.getItem("nour_user_role");
       const fallbackId = localStorage.getItem("nour_user_id");
       if (fallbackName && fallbackName.trim()) {
@@ -14277,11 +14331,13 @@ async function initApp() {
       }
     }
 
-    // استرجاع وتعبئة آخر اسم مستخدم تلقائياً فقط إذا كان الحقل فارغاً لمنع مسح كتابة المستخدم
-    const lastUsername = localStorage.getItem("nour_last_username");
-    if (lastUsername && fullNameInput && !fullNameInput.value.trim()) {
-      fullNameInput.value = lastUsername;
-      fullNameInput.dispatchEvent(new Event("input"));
+    // استرجاع وتعبئة آخر اسم مستخدم فقط إذا كان المستخدم في شاشة الدخول والحقل فارغ تماماً ولم يلمسه
+    if (!currentUser && views.login && views.login.classList.contains("active")) {
+      const lastUsername = localStorage.getItem("nour_last_username");
+      if (lastUsername && fullNameInput && !fullNameInput.value.trim() && document.activeElement !== fullNameInput) {
+        fullNameInput.value = lastUsername;
+        fullNameInput.dispatchEvent(new Event("input"));
+      }
     }
 
     // حماية تامة ضد الشاشات المعلقة: تأكد من أن هناك شاشة واحدة على الأقل نشطة وغير مخفية

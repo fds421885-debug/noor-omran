@@ -19,6 +19,12 @@ import {
   arrayUnion,
   arrayRemove 
 } from "firebase/firestore";
+import { 
+  getAuth, 
+  signInAnonymously, 
+  onAuthStateChanged,
+  updateProfile 
+} from "firebase/auth";
 import { firebaseAppletConfig } from "./firebase-applet-config.js";
 
 // استخراج متغيرات البيئة بأمان تام دون التسبب في خطأ ببيئات المتصفح العادية أو الاستضافات الثابتة
@@ -43,6 +49,46 @@ const app = initializeApp(firebaseConfig);
 
 // تهيئة قاعدة بيانات Cloud Firestore مع تمرير معرف قاعدة البيانات المخصصة (CRITICAL)
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+
+// تهيئة وتأمين خدمة المصادقة Firebase Auth
+export const auth = getAuth(app);
+
+let authInitPromise = null;
+export async function ensureFirebaseAuth(userName = null) {
+  if (!auth) return null;
+  if (auth.currentUser) {
+    if (userName && !auth.currentUser.displayName) {
+      try {
+        await updateProfile(auth.currentUser, { displayName: userName });
+      } catch (e) {}
+    }
+    return auth.currentUser;
+  }
+
+  if (authInitPromise) {
+    return authInitPromise;
+  }
+
+  authInitPromise = (async () => {
+    try {
+      const cred = await signInAnonymously(auth);
+      if (userName && cred?.user) {
+        try {
+          await updateProfile(cred.user, { displayName: userName });
+        } catch (e) {}
+      }
+      console.log("[FIREBASE AUTH] Anonymous session active, uid:", cred?.user?.uid);
+      return cred.user;
+    } catch (err) {
+      console.info("[FIREBASE AUTH] Auth notice:", err?.code || err?.message || "unauthenticated");
+      return null;
+    } finally {
+      authInitPromise = null;
+    }
+  })();
+
+  return authInitPromise;
+}
 
 // --------------------------------------------------------
 // نظام تتبع حصة السحابة والحماية من التكرار المفرط (Quota Guard)
@@ -127,8 +173,8 @@ export async function setDoc(docRef, data, options) {
       markQuotaExhausted(err);
       return Promise.resolve();
     }
-    console.warn("Firestore setDoc notice:", err?.message || err);
-    return Promise.resolve();
+    console.error("Firestore setDoc error:", err?.message || err, "at path:", docRef?.path);
+    throw err;
   }
 }
 
@@ -143,8 +189,8 @@ export async function updateDoc(docRef, ...args) {
       markQuotaExhausted(err);
       return Promise.resolve();
     }
-    console.warn("Firestore updateDoc notice:", err?.message || err);
-    return Promise.resolve();
+    console.error("Firestore updateDoc error:", err?.message || err, "at path:", docRef?.path);
+    throw err;
   }
 }
 
@@ -285,11 +331,24 @@ export const OperationType = {
 };
 
 export function handleFirestoreError(error, operationType, path = null) {
-  return {
+  const errInfo = {
     error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth?.currentUser?.uid || null,
+      email: auth?.currentUser?.email || null,
+      emailVerified: auth?.currentUser?.emailVerified || null,
+      isAnonymous: auth?.currentUser?.isAnonymous || null,
+      tenantId: auth?.currentUser?.tenantId || null,
+      providerInfo: auth?.currentUser?.providerData?.map(provider => ({
+        providerId: provider.providerId,
+        email: provider.email,
+      })) || []
+    },
     operationType,
     path
   };
+  console.error("Firestore Error:", JSON.stringify(errInfo));
+  return errInfo;
 }
 
 export { 

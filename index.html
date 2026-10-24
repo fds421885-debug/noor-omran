@@ -22,6 +22,7 @@
   {
     "imports": {
       "firebase/app": "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js",
+      "firebase/auth": "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js",
       "firebase/firestore": "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js"
     }
   }
@@ -166,11 +167,11 @@
             </div>
           </div>
 
-          <form id="loginForm" class="login-form" onsubmit="if(window.handleManualLoginSubmit){window.handleManualLoginSubmit(event);}return false;" novalidate>
+          <form id="loginForm" class="login-form" novalidate>
             <!-- حقل الاسم الرباعي -->
             <div class="input-group">
               <label for="fullNameInput" class="input-label">
-                <i class="fa-solid fa-user-pen"></i> الاسم الرباعي الكامل <span class="required-star">* (إلزامي)</span>
+                <i class="fa-solid fa-user-pen"></i> الاسم الكامل للمشارك <span class="required-star">* (إلزامي)</span>
               </label>
 
               <!-- شريط تقدم اكتمال الاسم بأسلوب دولينجو -->
@@ -184,21 +185,21 @@
                   id="fullNameInput" 
                   name="fullName"
                   class="form-control" 
-                  placeholder="اكتب اسمك الرباعي هنا (مثال: أحمد محمد عبدالله إبراهيم)" 
+                  placeholder="اكتب اسمك هنا (مثال: أحمد محمد عبدالله إبراهيم)" 
                   autocomplete="name"
                   required
                 >
-                <span class="input-badge" id="nameCountBadge">0 / 4 أسماء</span>
+                <span class="input-badge" id="nameCountBadge">اكتب اسمك</span>
               </div>
               <p class="input-hint">
-                <i class="fa-solid fa-circle-info"></i> تنبيه: يجب كتابة 4 أسماء على الأقل للمتابعة.
+                <i class="fa-solid fa-circle-info"></i> اكتب اسمك للدخول والمشاركة مباشرة في المسابقة (يُفضل الاسم الثلاثي أو الرباعي).
               </p>
             </div>
 
             <div id="validationAlert" class="alert-box error hidden"></div>
 
             <div class="form-actions">
-              <button type="button" id="btnSubmitLogin" class="btn-duo-green btn-block" onclick="if(window.handleManualLoginSubmit){window.handleManualLoginSubmit(event);}return false;">
+              <button type="submit" id="btnSubmitLogin" class="btn-duo-green btn-block">
                 <span class="btn-text">متابعة والدخول</span>
                 <span class="btn-icon"><i class="fa-solid fa-arrow-left"></i></span>
               </button>

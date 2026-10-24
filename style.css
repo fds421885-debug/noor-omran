@@ -772,6 +772,7 @@ body {
   position: relative;
   display: flex;
   align-items: center;
+  width: 100%;
 }
 
 .form-control {
@@ -788,7 +789,11 @@ body {
 }
 
 .input-wrapper .form-control {
-  padding: 16px 20px 16px 175px;
+  padding: 15px 18px 15px 155px;
+  direction: rtl;
+  text-align: right;
+  font-size: 16px;
+  line-height: 1.5;
 }
 
 .form-control:focus {
@@ -1557,19 +1562,22 @@ body {
     font-size: 26px;
   }
 
+  .input-wrapper .form-control,
   .form-control {
-    padding-left: 20px;
+    padding-left: 18px !important;
+    padding-right: 18px !important;
   }
 
   .input-badge {
-    position: static;
-    margin-top: 6px;
-    display: inline-block;
+    position: static !important;
+    margin-top: 8px !important;
+    display: inline-flex !important;
+    align-self: flex-start !important;
   }
 
   .input-wrapper {
-    flex-direction: column;
-    align-items: flex-start;
+    flex-direction: column !important;
+    align-items: flex-start !important;
   }
 
   .path-step-card {
