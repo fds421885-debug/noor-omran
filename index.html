@@ -230,6 +230,12 @@
             <i class="fa-solid fa-hand-pointer"></i> اضغط على بطاقة مدرستك للمتابعة لاختيار الصف
           </div>
 
+          <!-- شريط البحث السريع عن المدارس للطالب الجديد -->
+          <div class="student-school-search-wrap" style="margin: 14px 0 16px 0; position: relative;">
+            <i class="fa-solid fa-magnifying-glass" style="position: absolute; right: 14px; top: 50%; transform: translateY(-50%); color: #94a3b8; font-size: 14px; pointer-events: none;"></i>
+            <input type="text" id="studentSchoolSearchInput" class="form-control" placeholder="ابحث عن اسم مدرستك أو مركزك هنا..." style="padding-right: 40px; border-radius: var(--radius-pill, 9999px); height: 44px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); font-size: 14px;">
+          </div>
+
           <!-- شبكة بطاقات المدارس التفاعلية بأسلوب دولينجو -->
           <div id="schoolsCardsGrid" class="selection-cards-grid">
             <!-- يتم تعبئة بطاقات المدارس ديناميكياً من المدارس المعتمدة فقط -->
@@ -1243,6 +1249,10 @@
 
         <div class="input-group">
           <label class="input-label">المدرسة / المركز</label>
+          <div style="position: relative; margin-bottom: 6px;">
+            <i class="fa-solid fa-magnifying-glass" style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: #94a3b8; font-size: 13px; pointer-events: none;"></i>
+            <input type="text" id="modalAccountSchoolFilter" class="form-control" placeholder="بحث سريع في المدارس..." style="padding-right: 34px; height: 38px; font-size: 13px; border-radius: 8px;">
+          </div>
           <select id="modalAccountSchool" class="form-control form-select"></select>
         </div>
 
@@ -1308,6 +1318,12 @@
               </button>
             </div>
           </form>
+
+          <!-- شريط البحث والتصفية السريع للمدارس للمشرف -->
+          <div class="sg-search-box" style="margin-bottom: 10px; position: relative;">
+            <i class="fa-solid fa-magnifying-glass" style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: #94a3b8; font-size: 13px; pointer-events: none;"></i>
+            <input type="text" id="supervisorSchoolSearchInput" class="form-control" placeholder="بحث وتصفية في قائمة المدارس..." style="padding-right: 36px; font-size: 13px; height: 38px; border-radius: var(--radius-pill, 9999px);">
+          </div>
 
           <!-- قائمة المدارس المعتمدة -->
           <div id="schoolsTagsList" class="sg-items-list">

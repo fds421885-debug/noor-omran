@@ -801,16 +801,22 @@ document.querySelectorAll(".nav-tab").forEach(tabBtn => {
 // تحميل وتهيئة البيانات المحلية والسحابية (خالية من أي بيانات وهمية)
 // --------------------------------------------------------
 function loadInitialStorage() {
-  // المدارس المعتمدة
+  // المدارس المعتمدة (الحفاظ التام على تفريغ المدارس إن قرر المشرف ذلك)
   try {
     const savedSchools = localStorage.getItem("nour_schools");
-    schoolsCache = savedSchools ? JSON.parse(savedSchools) : [...DEFAULT_SCHOOLS];
+    const initDone = localStorage.getItem("nour_schools_init_done");
+    if (savedSchools !== null) {
+      const parsed = JSON.parse(savedSchools);
+      schoolsCache = Array.isArray(parsed) ? parsed : [];
+    } else if (!initDone) {
+      schoolsCache = [...DEFAULT_SCHOOLS];
+      localStorage.setItem("nour_schools", JSON.stringify(schoolsCache));
+      localStorage.setItem("nour_schools_init_done", "true");
+    } else {
+      schoolsCache = [];
+    }
   } catch (e) {
-    schoolsCache = [...DEFAULT_SCHOOLS];
-  }
-  if (!schoolsCache || !Array.isArray(schoolsCache) || schoolsCache.length === 0) {
-    schoolsCache = [...DEFAULT_SCHOOLS];
-    localStorage.setItem("nour_schools", JSON.stringify(schoolsCache));
+    schoolsCache = [];
   }
   
   // الفئات المعتمدة
@@ -989,7 +995,8 @@ function saveParticipants(userToSync = null) {
 
 function saveSchools() {
   localStorage.setItem("nour_schools", JSON.stringify(schoolsCache));
-  syncSchoolsAndGradesToCloud();
+  localStorage.setItem("nour_schools_init_done", "true");
+  syncSchoolsAndGradesToCloud().catch(() => {});
 }
 
 function saveGrades() {
@@ -1113,8 +1120,12 @@ async function fetchParticipantsFromCloud(forceFresh = false) {
 }
 
 async function syncParticipantToCloud(user) {
-  if (isQuotaExhausted() || !user || !user.id) return;
+  if (isQuotaExhausted() || !user || !user.id) return false;
   try {
+    try {
+      await ensureFirebaseAuth(user.name);
+    } catch (aErr) {}
+
     const userRef = doc(db, "participants", user.id);
     const cleanUser = sanitizeForFirestore(user);
     await setDoc(userRef, {
@@ -1123,22 +1134,31 @@ async function syncParticipantToCloud(user) {
       lastUpdated: serverTimestamp()
     }, { merge: true });
     console.log("[FIRESTORE SYNC] Successfully synced participant:", user.id);
+    return true;
   } catch (e) {
     console.error("[FIRESTORE SYNC] Firestore participant sync error:", e?.message || e, "for user:", user.id);
+    throw e;
   }
 }
 
 async function syncSchoolsAndGradesToCloud() {
-  if (isQuotaExhausted()) return;
+  if (isQuotaExhausted()) return false;
   try {
+    try {
+      await ensureFirebaseAuth();
+    } catch (aErr) {}
+
     const settingsRef = doc(db, "system_settings", "schools_and_grades");
     await setDoc(settingsRef, {
       schools: sanitizeForFirestore(schoolsCache),
       grades: sanitizeForFirestore(gradesCache),
       lastUpdated: serverTimestamp()
     }, { merge: true });
+    console.log("[FIRESTORE SYNC] Successfully synced schools and grades to cloud. Schools count:", schoolsCache.length);
+    return true;
   } catch (e) {
     console.warn("Firestore schools/grades sync notice:", e);
+    throw e;
   }
 }
 
@@ -1272,9 +1292,10 @@ function setupRealtimeCloudListeners() {
       if (snap.exists()) {
         const data = snap.data();
         let changed = false;
-        if (Array.isArray(data.schools) && data.schools.length > 0) {
+        if (Array.isArray(data.schools)) {
           schoolsCache = [...data.schools];
           localStorage.setItem("nour_schools", JSON.stringify(schoolsCache));
+          localStorage.setItem("nour_schools_init_done", "true");
           changed = true;
         }
         if (Array.isArray(data.grades) && data.grades.length > 0) {
@@ -2243,36 +2264,38 @@ async function loadCloudData(forceServer = false) {
       counts.isOffline = true;
     }
 
-    // 1. المدارس والصفوف من السحابة
+    // 1. المدارس والصفوف من السحابة (مع احترام تفريغ المدارس وعدم إعادة مدارس افتراضية غريبة)
     if (sgRes.status === "fulfilled" && sgRes.value.exists()) {
       const data = sgRes.value.data();
-      if (Array.isArray(data.schools) && data.schools.length > 0) {
+      if (Array.isArray(data.schools)) {
         schoolsCache = [...data.schools];
         localStorage.setItem("nour_schools", JSON.stringify(schoolsCache));
-      } else {
-        schoolsCache = [...DEFAULT_SCHOOLS];
-        setDoc(doc(db, "system_settings", "schools_and_grades"), { schools: schoolsCache }, { merge: true }).catch(() => {});
+        localStorage.setItem("nour_schools_init_done", "true");
       }
 
-      if (Array.isArray(data.grades) && data.grades.length > 0) {
+      if (Array.isArray(data.grades)) {
         gradesCache = [...data.grades];
         localStorage.setItem("nour_grades", JSON.stringify(gradesCache));
-      } else {
+      } else if (!gradesCache || gradesCache.length === 0) {
         gradesCache = [...DEFAULT_GRADES];
         setDoc(doc(db, "system_settings", "schools_and_grades"), { grades: gradesCache }, { merge: true }).catch(() => {});
       }
       counts.schools = schoolsCache.length;
       counts.grades = gradesCache.length;
     } else if (sgRes.status === "fulfilled" && !sgRes.value.exists()) {
-      schoolsCache = [...DEFAULT_SCHOOLS];
-      gradesCache = [...DEFAULT_GRADES];
-      setDoc(doc(db, "system_settings", "schools_and_grades"), {
-        schools: schoolsCache,
-        grades: gradesCache,
-        lastUpdated: serverTimestamp()
-      }, { merge: true }).catch(() => {});
-      localStorage.setItem("nour_schools", JSON.stringify(schoolsCache));
-      localStorage.setItem("nour_grades", JSON.stringify(gradesCache));
+      const initDone = localStorage.getItem("nour_schools_init_done");
+      if (!initDone) {
+        schoolsCache = [...DEFAULT_SCHOOLS];
+        gradesCache = [...DEFAULT_GRADES];
+        setDoc(doc(db, "system_settings", "schools_and_grades"), {
+          schools: schoolsCache,
+          grades: gradesCache,
+          lastUpdated: serverTimestamp()
+        }, { merge: true }).catch(() => {});
+        localStorage.setItem("nour_schools", JSON.stringify(schoolsCache));
+        localStorage.setItem("nour_grades", JSON.stringify(gradesCache));
+        localStorage.setItem("nour_schools_init_done", "true");
+      }
       counts.schools = schoolsCache.length;
       counts.grades = gradesCache.length;
     }
@@ -3168,72 +3191,30 @@ async function handleLoginSubmit(event) {
         return;
       }
 
-      const defaultSchool = (schoolsCache && schoolsCache.length > 0) ? schoolsCache[0] : DEFAULT_SCHOOLS[0];
-      const defaultGrade = (gradesCache && gradesCache.length > 0) ? gradesCache[0] : DEFAULT_GRADES[0];
-      const nowIso = new Date().toISOString();
-      const newStudentUser = {
-        id: docId,
-        name: rawName,
-        normalizedName: norm,
-        role: "student",
-        school: defaultSchool,
-        grade: defaultGrade,
-        firstLoginAt: nowIso,
-        lastLoginAt: nowIso,
-        loginCount: 1,
-        authUid: auth?.currentUser?.uid || null
+      // 5. الطالب غير مسجل مسبقاً -> توجيهه لإكمال خطوات التسجيل (تحديد المدرسة والصف)
+      pendingNewStudent = {
+        docId: docId,
+        rawName: rawName,
+        norm: norm,
+        school: "",
+        grade: ""
       };
 
-      participantsCache.push(newStudentUser);
-      saveParticipants();
-
-      if (db) {
-        try {
-          const userDocRef = doc(db, "participants", docId);
-          await setDoc(userDocRef, {
-            ...newStudentUser,
-            firstLoginAt: serverTimestamp(),
-            lastLoginAt: serverTimestamp()
-          });
-          console.log("[LOGIN FLOW] Successfully created student document in Firestore:", docId);
-        } catch (fsErr) {
-          console.error("[LOGIN FLOW] Firestore create student document error:", fsErr?.message || fsErr);
-          showToast(`تم تسجيل الحساب محلياً (${rawName}) وجاري المزامنة السحابية`, "fa-cloud-arrow-up", 4000);
-        }
-      }
-
-      resetLoginSteps();
-      finalizeUserSession(newStudentUser, false);
-
-      const valParts = validateQuadrupleName(rawName);
-      if (valParts.isValid) {
-        showToast(`أهلاً بك يا ${newStudentUser.name} في مسابقة نور البيان! تم تسجيل اسمك الرباعي بنجاح`, "fa-graduation-cap");
-      } else {
-        showToast(`أهلاً بك يا ${newStudentUser.name}! تم تسجيل دخولك بنجاح`, "fa-graduation-cap");
-      }
+      showOnboardingSchoolStep();
+      return;
 
     } catch (err) {
-      console.error("[LOGIN FLOW] Login submit error:", err?.message || err);
-      const defaultSchool = (schoolsCache && schoolsCache.length > 0) ? schoolsCache[0] : DEFAULT_SCHOOLS[0];
-      const defaultGrade = (gradesCache && gradesCache.length > 0) ? gradesCache[0] : DEFAULT_GRADES[0];
-      const nowIso = new Date().toISOString();
-      const fallbackUser = {
-        id: docId,
-        name: rawName,
-        normalizedName: norm,
-        role: "student",
-        school: defaultSchool,
-        grade: defaultGrade,
-        firstLoginAt: nowIso,
-        lastLoginAt: nowIso,
-        loginCount: 1,
-        authUid: auth?.currentUser?.uid || null
+      console.error("[LOGIN FLOW] Login lookup error:", err?.message || err);
+      // في حال تعذر الفحص، توجيهه لإكمال التسجيل كطالب جديد
+      pendingNewStudent = {
+        docId: docId,
+        rawName: rawName,
+        norm: norm,
+        school: "",
+        grade: ""
       };
-      participantsCache.push(fallbackUser);
-      saveParticipants();
-      resetLoginSteps();
-      finalizeUserSession(fallbackUser, false);
-      showToast(`أهلاً بك يا ${rawName}! تم تسجيل الدخول بنجاح`, "fa-circle-check");
+      showOnboardingSchoolStep();
+      return;
     }
   } finally {
     isSubmittingLogin = false;
@@ -3257,7 +3238,7 @@ fullNameInput?.addEventListener("keydown", (e) => {
   }
 });
 
-// إظهار خطوة اختيار المدرسة للطلاب الجدد
+// إظهار خطوة اختيار المدرسة للطلاب الجدد مع محرك بحث وتصفية ذكي
 function showOnboardingSchoolStep() {
   loginStepName?.classList.remove("active");
   loginStepName?.classList.add("hidden");
@@ -3271,36 +3252,93 @@ function showOnboardingSchoolStep() {
     stepStudentNamePrompt.textContent = pendingNewStudent.rawName;
   }
 
-  // التأكد الحاسم من وجود المدارس وعدم خلو القائمة
-  if (!schoolsCache || !Array.isArray(schoolsCache) || schoolsCache.length === 0) {
-    schoolsCache = [...DEFAULT_SCHOOLS];
-    localStorage.setItem("nour_schools", JSON.stringify(schoolsCache));
+  const searchInput = document.getElementById("studentSchoolSearchInput");
+  if (searchInput) {
+    searchInput.value = "";
+    searchInput.oninput = () => {
+      const q = searchInput.value.trim().toLowerCase();
+      renderStudentSchoolsList(q);
+    };
   }
 
-  if (schoolsCardsGrid) {
-    const icons = ["fa-school", "fa-mosque", "fa-book-quran", "fa-building-columns"];
-    schoolsCardsGrid.innerHTML = schoolsCache.map((schoolName, idx) => {
-      const icon = icons[idx % icons.length];
-      return `
-        <div class="choice-card-duo" data-school="${schoolName}">
-          <div class="choice-card-icon"><i class="fa-solid ${icon}"></i></div>
-          <div class="choice-card-info">
-            <div class="choice-card-title">${schoolName}</div>
-            <div class="choice-card-subtitle">مدرسة / مركز معتمد</div>
+  renderStudentSchoolsList("");
+}
+
+function renderStudentSchoolsList(query = "") {
+  if (!schoolsCardsGrid) return;
+
+  const validSchools = Array.isArray(schoolsCache) ? schoolsCache : [];
+  const filtered = query
+    ? validSchools.filter(s => s.toLowerCase().includes(query))
+    : validSchools;
+
+  if (filtered.length === 0) {
+    if (validSchools.length === 0) {
+      // لا توجد مدارس مضافة من المشرف بعد
+      schoolsCardsGrid.innerHTML = `
+        <div style="text-align: center; padding: 25px 15px; color: #64748b; grid-column: 1 / -1; background: #f8fafc; border-radius: 16px; border: 2px dashed #cbd5e1;">
+          <i class="fa-solid fa-school-flag" style="font-size: 36px; color: var(--duo-blue); margin-bottom: 12px; display: block;"></i>
+          <p style="font-size: 15px; font-weight: 800; color: #1e293b; margin-bottom: 6px;">لم يتم تسجيل مدارس مسبقة من المشرف</p>
+          <p style="font-size: 13px; color: #64748b; margin-bottom: 15px;">اكتب اسم مدرستك أو مركزك للمتابعة لاختيار الصف:</p>
+          <div style="max-width: 380px; margin: 0 auto; display: flex; flex-direction: column; gap: 8px;">
+            <input type="text" id="customStudentSchoolInput" class="form-control" placeholder="اسم مدرستك أو مركزك..." style="height: 44px; text-align: center;">
+            <button type="button" id="btnConfirmCustomSchool" class="btn-duo-green btn-block">
+              <i class="fa-solid fa-check"></i> اعتماد المدرسة ومتابعة
+            </button>
           </div>
-          <i class="fa-solid fa-chevron-left" style="color: #94a3b8; font-size: 15px;"></i>
         </div>
       `;
-    }).join("");
-
-    schoolsCardsGrid.querySelectorAll(".choice-card-duo").forEach(card => {
-      card.addEventListener("click", () => {
-        const selected = card.getAttribute("data-school");
-        pendingNewStudent.school = selected;
+      document.getElementById("btnConfirmCustomSchool")?.addEventListener("click", () => {
+        const customName = document.getElementById("customStudentSchoolInput")?.value.trim();
+        if (!customName) {
+          showToast("يرجى كتابة اسم مدرستك للمتابعة", "fa-triangle-exclamation");
+          return;
+        }
+        pendingNewStudent.school = customName;
         showOnboardingGradeStep();
       });
+      return;
+    }
+
+    // بحث بدون نتائج
+    schoolsCardsGrid.innerHTML = `
+      <div style="text-align: center; padding: 25px; color: #64748b; grid-column: 1 / -1;">
+        <i class="fa-solid fa-magnifying-glass" style="font-size: 32px; color: #cbd5e1; margin-bottom: 10px; display: block;"></i>
+        <p style="font-size: 14.5px; font-weight: 800; color: #334155; margin-bottom: 8px;">لا توجد مدارس مطابقة لبحثك: "<strong>${escapeHtml(query)}</strong>"</p>
+        <button type="button" id="btnUseSearchAsSchool" class="btn-duo-outline btn-sm" style="margin-top: 6px;">
+          <i class="fa-solid fa-plus"></i> المتابعة باسم: "${escapeHtml(query)}"
+        </button>
+      </div>
+    `;
+    document.getElementById("btnUseSearchAsSchool")?.addEventListener("click", () => {
+      pendingNewStudent.school = query;
+      showOnboardingGradeStep();
     });
+    return;
   }
+
+  const icons = ["fa-school", "fa-mosque", "fa-book-quran", "fa-building-columns"];
+  schoolsCardsGrid.innerHTML = filtered.map((schoolName, idx) => {
+    const icon = icons[idx % icons.length];
+    return `
+      <div class="choice-card-duo" data-school="${escapeHtml(schoolName)}">
+        <div class="choice-card-icon"><i class="fa-solid ${icon}"></i></div>
+        <div class="choice-card-info">
+          <div class="choice-card-title">${escapeHtml(schoolName)}</div>
+          <div class="choice-card-subtitle">مدرسة / مركز معتمد</div>
+        </div>
+        <i class="fa-solid fa-chevron-left" style="color: #94a3b8; font-size: 15px;"></i>
+      </div>
+    `;
+  }).join("");
+
+  schoolsCardsGrid.querySelectorAll(".choice-card-duo").forEach(card => {
+    card.addEventListener("click", () => {
+      const selected = card.getAttribute("data-school");
+      pendingNewStudent.school = selected;
+      showOnboardingGradeStep();
+    });
+  });
 }
 
 // إظهار خطوة اختيار الصف / الفئة للطلاب الجدد
@@ -3315,7 +3353,6 @@ function showOnboardingGradeStep() {
     stepChosenSchoolName.textContent = pendingNewStudent.school;
   }
 
-  // التأكد الحاسم من وجود الصفوف وعدم خلو القائمة
   if (!gradesCache || !Array.isArray(gradesCache) || gradesCache.length === 0) {
     gradesCache = [...DEFAULT_GRADES];
     localStorage.setItem("nour_grades", JSON.stringify(gradesCache));
@@ -3326,10 +3363,10 @@ function showOnboardingGradeStep() {
     gradesCardsGrid.innerHTML = gradesCache.map((gradeName, idx) => {
       const icon = icons[idx % icons.length];
       return `
-        <div class="choice-card-duo grade-choice" data-grade="${gradeName}">
+        <div class="choice-card-duo grade-choice" data-grade="${escapeHtml(gradeName)}">
           <div class="choice-card-icon"><i class="fa-solid ${icon}"></i></div>
           <div class="choice-card-info">
-            <div class="choice-card-title">${gradeName}</div>
+            <div class="choice-card-title">${escapeHtml(gradeName)}</div>
             <div class="choice-card-subtitle">الفئة المقررة بالمسابقة</div>
           </div>
           <i class="fa-solid fa-arrow-left" style="color: var(--duo-blue); font-size: 16px;"></i>
@@ -3347,36 +3384,44 @@ function showOnboardingGradeStep() {
   }
 }
 
-// حفظ الطالب الجديد وإتمام الدخول
+// حفظ الطالب الجديد وإتمام الدخول في السحابة فوراً مع شاشة تحميل كاملة
 async function completeNewStudentRegistration() {
-  showGlobalLoader("جاري إنشاء الحساب...", "يتم حفظ بيانات الطالب في السحابة فورياً");
+  showGlobalLoader("جاري إنشاء الحساب وحفظه سحابياً...", "يتم حفظ وتثبيت بيانات الطالب ومدرسته وفئته في قاعدة البيانات السحابية فوراً", 15000);
   try {
+    try {
+      await ensureFirebaseAuth(pendingNewStudent.rawName);
+    } catch (aErr) {}
+
     const nowIso = new Date().toISOString();
     const newStudentUser = {
       id: pendingNewStudent.docId,
       name: pendingNewStudent.rawName,
       normalizedName: pendingNewStudent.norm,
       role: "student",
-      school: pendingNewStudent.school,
-      grade: pendingNewStudent.grade,
+      school: pendingNewStudent.school || "مدرسة عامة",
+      grade: pendingNewStudent.grade || "صف أول",
       firstLoginAt: nowIso,
       lastLoginAt: nowIso,
-      loginCount: 1
+      loginCount: 1,
+      totalScore: 0,
+      authUid: auth?.currentUser?.uid || null
     };
 
-    // حفظ في فايربيس مباشرة
+    // حفظ في فايربيس مباشرة مع التأكيد
     try {
       const userDocRef = doc(db, "participants", pendingNewStudent.docId);
       await setDoc(userDocRef, {
-        ...newStudentUser,
+        ...sanitizeForFirestore(newStudentUser),
         firstLoginAt: serverTimestamp(),
-        lastLoginAt: serverTimestamp()
-      });
+        lastLoginAt: serverTimestamp(),
+        lastUpdated: serverTimestamp()
+      }, { merge: true });
+      console.log("[LOGIN FLOW] Successfully created student document in Firestore:", pendingNewStudent.docId);
     } catch (err) {
       console.warn("Firebase save error for new student:", err);
     }
 
-    // إضافة في السجل والذاكرة
+    // إضافة في السجل والذاكرة المحلية
     participantsCache.push(newStudentUser);
     saveParticipants();
 
@@ -3385,7 +3430,7 @@ async function completeNewStudentRegistration() {
 
     // إتمام الجلسة وتوجيه الطالب
     finalizeUserSession(newStudentUser, false);
-    showToast(`أهلاً بك يا ${newStudentUser.name} في مسابقة نور البيان!`, "fa-graduation-cap");
+    showToast(`أهلاً بك يا ${newStudentUser.name}! تم تسجيل حسابك واختيار (${newStudentUser.school} - ${newStudentUser.grade}) بنجاح`, "fa-graduation-cap");
   } catch (e) {
     console.error("completeNewStudentRegistration error:", e);
   } finally {
@@ -4012,12 +4057,20 @@ function requestNameCorrection(rawName, reason) {
 }
 
 function openAccountModal(user = null) {
-  if (!schoolsCache || schoolsCache.length === 0) schoolsCache = [...DEFAULT_SCHOOLS];
-  if (!gradesCache || gradesCache.length === 0) gradesCache = [...DEFAULT_GRADES];
+  if (!schoolsCache || !Array.isArray(schoolsCache)) schoolsCache = [];
+  if (!gradesCache || !Array.isArray(gradesCache)) gradesCache = [];
 
-  if (modalAccountSchool) {
-    modalAccountSchool.innerHTML = schoolsCache.map(s => `<option value="${s}">${s}</option>`).join("");
+  const filterInput = document.getElementById("modalAccountSchoolFilter");
+  if (filterInput) {
+    filterInput.value = "";
+    filterInput.oninput = () => {
+      const q = filterInput.value.trim().toLowerCase();
+      renderModalAccountSchools(q, user ? user.school : (modalAccountSchool?.value || ""));
+    };
   }
+
+  renderModalAccountSchools("", user ? user.school : "");
+
   if (modalAccountGrade) {
     modalAccountGrade.innerHTML = gradesCache.map(g => `<option value="${g}">${g}</option>`).join("");
   }
@@ -4027,7 +4080,7 @@ function openAccountModal(user = null) {
     editAccountId.value = user.id;
     modalAccountName.value = user.name;
     modalAccountRole.value = user.role || "student";
-    if (modalAccountSchool) modalAccountSchool.value = user.school || schoolsCache[0] || "";
+    if (modalAccountSchool && user.school) modalAccountSchool.value = user.school;
     if (modalAccountGrade) modalAccountGrade.value = user.grade || gradesCache[0] || "";
 
     // إخفاء محدد النمط الجماعي عند التعديل
@@ -4039,7 +4092,7 @@ function openAccountModal(user = null) {
     editAccountId.value = "";
     modalAccountName.value = "";
     modalAccountRole.value = "student";
-    if (modalAccountSchool) modalAccountSchool.value = schoolsCache[0] || "";
+    if (modalAccountSchool && schoolsCache.length > 0) modalAccountSchool.value = schoolsCache[0];
     if (modalAccountGrade) modalAccountGrade.value = gradesCache[0] || "";
 
     // إظهار محدد النمط (فردي / جماعي) وضبطه على فردي كافتراضي
@@ -4051,6 +4104,31 @@ function openAccountModal(user = null) {
     if (modalBatchNamesInput) modalBatchNamesInput.value = "";
   }
   accountModal.classList.remove("hidden");
+}
+
+function renderModalAccountSchools(query = "", selectedVal = "") {
+  if (!modalAccountSchool) return;
+  const validSchools = Array.isArray(schoolsCache) ? schoolsCache : [];
+  const filtered = query
+    ? validSchools.filter(s => s.toLowerCase().includes(query))
+    : validSchools;
+
+  if (filtered.length === 0) {
+    if (validSchools.length === 0) {
+      modalAccountSchool.innerHTML = `<option value="">-- لا توجد مدارس مسجلة (أضف مدرسة أولاً) --</option>`;
+    } else {
+      modalAccountSchool.innerHTML = `<option value="">-- لا توجد مدارس مطابقة لبحثك --</option>`;
+    }
+    return;
+  }
+
+  modalAccountSchool.innerHTML = filtered.map(s => `
+    <option value="${escapeHtml(s)}" ${s === selectedVal ? 'selected' : ''}>${escapeHtml(s)}</option>
+  `).join("");
+
+  if (selectedVal && filtered.includes(selectedVal)) {
+    modalAccountSchool.value = selectedVal;
+  }
 }
 
 btnOpenAddAccountModal?.addEventListener("click", async () => {
@@ -4183,6 +4261,7 @@ accountModalForm?.addEventListener("submit", async (e) => {
     btnSubmit.disabled = true;
     btnSubmit.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> جاري الحفظ سحابياً...';
   }
+  showGlobalLoader("جاري حفظ الحساب سحابياً...", "يتم حفظ وتثبيت الحساب في قاعدة البيانات السحابية فوراً وتحديثه لجميع المستخدمين", 15000);
 
   try {
     if (targetId) {
@@ -4196,7 +4275,7 @@ accountModalForm?.addEventListener("submit", async (e) => {
         user.grade = grade;
         await syncParticipantToCloud(user);
       }
-      showToast("تم تحديث بيانات الحساب في السحابة بنجاح!", "fa-circle-check");
+      showToast("تم تحديث بيانات الحساب في السحابة بنجاح لجميع المستخدمين!", "fa-circle-check");
     } else {
       // إضافة حساب جديد فردي
       const newId = getDocumentId(norm);
@@ -4213,9 +4292,14 @@ accountModalForm?.addEventListener("submit", async (e) => {
         loginCount: 1,
         totalScore: 0
       };
-      participantsCache.push(newUser);
+      const existIdx = participantsCache.findIndex(p => p.id === newId || p.normalizedName === norm);
+      if (existIdx >= 0) {
+        participantsCache[existIdx] = { ...participantsCache[existIdx], ...newUser };
+      } else {
+        participantsCache.push(newUser);
+      }
       await syncParticipantToCloud(newUser);
-      showToast("تم إنشاء الحساب وحفظه في السحابة بنجاح!", "fa-circle-check");
+      showToast("تم إنشاء الحساب وحفظه في السحابة بنجاح لجميع المستخدمين!", "fa-circle-check");
     }
 
     saveParticipants();
@@ -4224,8 +4308,9 @@ accountModalForm?.addEventListener("submit", async (e) => {
     renderSupervisorDashboard();
   } catch (err) {
     console.error("Account save error:", err);
-    showToast("تعذر حفظ الحساب في السحابة: " + (err.message || ""), "fa-triangle-exclamation");
+    showToast("تعذر حفظ الحساب في السحابة: " + (err?.message || ""), "fa-triangle-exclamation");
   } finally {
+    hideGlobalLoader();
     if (btnSubmit) {
       btnSubmit.disabled = false;
       btnSubmit.innerHTML = origBtnHtml;
@@ -4253,14 +4338,21 @@ async function openSchoolsGradesModal() {
     return;
   }
   await loadCloudData();
+
+  const searchInput = document.getElementById("supervisorSchoolSearchInput");
+  if (searchInput) {
+    searchInput.value = "";
+    searchInput.oninput = () => renderSchoolsAndGradesTags();
+  }
+
   renderSchoolsAndGradesTags();
   schoolsGradesModal?.classList.remove("hidden");
 }
 
 btnManageSchoolsGrades?.addEventListener("click", openSchoolsGradesModal);
 
-// إضافة مدرسة جديدة
-formAddNewSchool?.addEventListener("submit", (e) => {
+// إضافة مدرسة جديدة مع الحفظ السحابي الفوري ومؤشر التحميل
+formAddNewSchool?.addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!currentUser || currentUser.role !== "supervisor") {
     showToast("هذه الصلاحية خاصة بالمشرف العام فقط", "fa-shield-halved");
@@ -4274,16 +4366,27 @@ formAddNewSchool?.addEventListener("submit", (e) => {
     return;
   }
 
-  schoolsCache.push(val);
-  saveSchools();
-  renderSchoolsAndGradesTags();
-  updateDropdowns();
-  newSchoolInput.value = "";
-  showToast(`تمت إضافة مدرسة (${val}) بنجاح`, "fa-circle-check");
+  showGlobalLoader("جاري حفظ المدرسة سحابياً...", "يتم حفظ وتثبيت المدرسة في قاعدة البيانات السحابية فوراً وتحديثها لجميع المستخدمين", 15000);
+  try {
+    schoolsCache.push(val);
+    localStorage.setItem("nour_schools", JSON.stringify(schoolsCache));
+    localStorage.setItem("nour_schools_init_done", "true");
+
+    await syncSchoolsAndGradesToCloud();
+    renderSchoolsAndGradesTags();
+    updateDropdowns();
+    newSchoolInput.value = "";
+    showToast(`تمت إضافة مدرسة (${val}) وحفظها سحابياً لجميع المشاركين بنجاح!`, "fa-circle-check");
+  } catch (err) {
+    console.error("Save school error:", err);
+    showToast("حدث خطأ أثناء حفظ المدرسة في السحابة: " + (err?.message || ""), "fa-triangle-exclamation");
+  } finally {
+    hideGlobalLoader();
+  }
 });
 
-// إضافة مجموعة مدارس دفعة واحدة (كل مدرسة في سطر)
-document.getElementById("btnSubmitBatchSchools")?.addEventListener("click", () => {
+// إضافة مجموعة مدارس دفعة واحدة (كل مدرسة في سطر) مع الحفظ السحابي
+document.getElementById("btnSubmitBatchSchools")?.addEventListener("click", async () => {
   if (!currentUser || currentUser.role !== "supervisor") {
     showToast("هذه الصلاحية خاصة بالمشرف العام فقط", "fa-shield-halved");
     return;
@@ -4300,27 +4403,37 @@ document.getElementById("btnSubmitBatchSchools")?.addEventListener("click", () =
     return;
   }
 
-  let addedCount = 0;
-  lines.forEach(schoolName => {
-    if (!schoolsCache.includes(schoolName)) {
-      schoolsCache.push(schoolName);
-      addedCount++;
-    }
-  });
+  showGlobalLoader("جاري حفظ المدارس سحابياً...", "يتم حفظ المدارس دفعة واحدة في قاعدة البيانات السحابية وتحديثها للجميع", 20000);
+  try {
+    let addedCount = 0;
+    lines.forEach(schoolName => {
+      if (!schoolsCache.includes(schoolName)) {
+        schoolsCache.push(schoolName);
+        addedCount++;
+      }
+    });
 
-  if (addedCount > 0) {
-    saveSchools();
-    renderSchoolsAndGradesTags();
-    updateDropdowns();
-    if (batchEl) batchEl.value = "";
-    showToast(`تمت إضافة (${addedCount}) مدارس جديدة إلى القائمة بنجاح!`, "fa-circle-check");
-  } else {
-    showToast("جميع المدارس المدخلة مسجلة مسبقاً في القائمة", "fa-circle-info");
+    if (addedCount > 0) {
+      localStorage.setItem("nour_schools", JSON.stringify(schoolsCache));
+      localStorage.setItem("nour_schools_init_done", "true");
+      await syncSchoolsAndGradesToCloud();
+      renderSchoolsAndGradesTags();
+      updateDropdowns();
+      if (batchEl) batchEl.value = "";
+      showToast(`تمت إضافة (${addedCount}) مدارس وحفظها سحابياً لجميع المشاركين بنجاح!`, "fa-circle-check");
+    } else {
+      showToast("جميع المدارس المدخلة مسجلة مسبقاً في القائمة", "fa-circle-info");
+    }
+  } catch (err) {
+    console.error("Batch school save error:", err);
+    showToast("حدث خطأ أثناء حفظ المدارس في السحابة: " + (err?.message || ""), "fa-triangle-exclamation");
+  } finally {
+    hideGlobalLoader();
   }
 });
 
 // إضافة صف / فئة جديدة
-formAddNewGrade?.addEventListener("submit", (e) => {
+formAddNewGrade?.addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!currentUser || currentUser.role !== "supervisor") {
     showToast("هذه الصلاحية خاصة بالمشرف العام فقط", "fa-shield-halved");
@@ -4334,17 +4447,33 @@ formAddNewGrade?.addEventListener("submit", (e) => {
     return;
   }
 
-  gradesCache.push(val);
-  saveGrades();
-  renderSchoolsAndGradesTags();
-  updateDropdowns();
-  newGradeInput.value = "";
-  showToast(`تمت إضافة صف (${val}) بنجاح`, "fa-circle-check");
+  showGlobalLoader("جاري حفظ الصف سحابياً...", "يتم حفظ وتثبيت الصف في قاعدة البيانات السحابية لجميع المستخدمين", 15000);
+  try {
+    gradesCache.push(val);
+    saveGrades();
+    renderSchoolsAndGradesTags();
+    updateDropdowns();
+    newGradeInput.value = "";
+    showToast(`تمت إضافة صف (${val}) بنجاح`, "fa-circle-check");
+  } catch (err) {
+    showToast("حدث خطأ أثناء حفظ الصف في السحابة", "fa-triangle-exclamation");
+  } finally {
+    hideGlobalLoader();
+  }
 });
 
 function renderSchoolsAndGradesTags() {
+  const sSearchEl = document.getElementById("supervisorSchoolSearchInput");
+  const sQuery = sSearchEl ? sSearchEl.value.trim().toLowerCase() : "";
+  const validSchools = Array.isArray(schoolsCache) ? schoolsCache : [];
+  const filteredSchools = sQuery
+    ? validSchools.filter(s => s.toLowerCase().includes(sQuery))
+    : validSchools;
+
   if (schoolsCountBadge) {
-    schoolsCountBadge.textContent = `${schoolsCache.length} مدارس`;
+    schoolsCountBadge.textContent = sQuery
+      ? `${filteredSchools.length} من ${validSchools.length} مدارس`
+      : `${validSchools.length} مدارس`;
   }
   if (gradesCountBadge) {
     gradesCountBadge.textContent = `${gradesCache.length} صفوف`;
@@ -4352,16 +4481,20 @@ function renderSchoolsAndGradesTags() {
 
   // عرض بطاقات المدارس
   if (schoolsTagsList) {
-    if (schoolsCache.length === 0) {
-      schoolsTagsList.innerHTML = `<div style="text-align: center; color: #94a3b8; padding: 15px; font-weight: 700;">لا توجد مدارس مسجلة بعد. أضف مدرسة من الأعلى.</div>`;
+    if (filteredSchools.length === 0) {
+      if (validSchools.length === 0) {
+        schoolsTagsList.innerHTML = `<div style="text-align: center; color: #94a3b8; padding: 20px 15px; font-weight: 700;">لا توجد مدارس مسجلة بعد. أضف مدرسة جديدة من الحقل أعلاه.</div>`;
+      } else {
+        schoolsTagsList.innerHTML = `<div style="text-align: center; color: #94a3b8; padding: 20px 15px; font-weight: 700;">لا توجد مدارس مطابقة لبحثك: "${escapeHtml(sQuery)}"</div>`;
+      }
     } else {
-      schoolsTagsList.innerHTML = schoolsCache.map(s => `
+      schoolsTagsList.innerHTML = filteredSchools.map(s => `
         <div class="sg-item-card">
           <div class="sg-item-info">
             <i class="fa-solid fa-school"></i>
-            <span>${s}</span>
+            <span>${escapeHtml(s)}</span>
           </div>
-          <button class="btn-delete-tag" data-del-school="${s}" title="حذف المدرسة">
+          <button class="btn-delete-tag" data-del-school="${escapeHtml(s)}" title="حذف المدرسة">
             <i class="fa-solid fa-trash"></i> حذف
           </button>
         </div>
@@ -4384,11 +4517,21 @@ function renderSchoolsAndGradesTags() {
           });
 
           if (confirmed) {
-            schoolsCache = schoolsCache.filter(x => x !== item);
-            saveSchools();
-            renderSchoolsAndGradesTags();
-            updateDropdowns();
-            showToast(`تم حذف مدرسة (${item}) بنجاح`, "fa-trash");
+            showGlobalLoader("جاري حذف المدرسة سحابياً...", "يتم تحديث قائمة المدارس في السحابة لجميع المستخدمين", 15000);
+            try {
+              schoolsCache = schoolsCache.filter(x => x !== item);
+              localStorage.setItem("nour_schools", JSON.stringify(schoolsCache));
+              localStorage.setItem("nour_schools_init_done", "true");
+              await syncSchoolsAndGradesToCloud();
+              renderSchoolsAndGradesTags();
+              updateDropdowns();
+              showToast(`تم حذف مدرسة (${item}) بنجاح`, "fa-trash");
+            } catch (delErr) {
+              console.error("Delete school error:", delErr);
+              showToast("تعذر حذف المدرسة من السحابة", "fa-triangle-exclamation");
+            } finally {
+              hideGlobalLoader();
+            }
           }
         });
       });
@@ -15726,6 +15869,9 @@ async function initApp() {
   } catch (err) {
     console.warn("Storage initial load notice:", err);
   }
+
+  // تهيئة مصادقة فايربيس السحابية في الخلفية فورياً
+  ensureFirebaseAuth().catch(e => console.info("Initial auth setup notice:", e?.message));
 
   // 1. فحص مباشر وفوري لرابط الدخول المباشر (?auth=...) قبل أي استعادة للجلسة السابقة
   const directAuthToken = extractAuthTokenFromUrl();
