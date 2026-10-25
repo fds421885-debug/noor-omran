@@ -52,6 +52,23 @@
         "users": { "type": "array", "description": "Array of connected users" }
       },
       "required": ["id", "name"]
+    },
+    "TournamentArchive": {
+      "title": "TournamentArchive",
+      "description": "Archived finished team knockout tournament with standings and podium results",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Archive identifier" },
+        "roomTitle": { "type": "string", "description": "Tournament title" },
+        "supervisorName": { "type": "string", "description": "Supervisor who concluded the tournament" },
+        "archivedAt": { "type": "string", "description": "ISO timestamp of conclusion" },
+        "winnerTeam": { "type": "object", "description": "Champion team data" },
+        "runnerUpTeam": { "type": "object", "description": "Second place team data" },
+        "standings": { "type": "array", "description": "Ranked teams from 1st to last" },
+        "teamsCount": { "type": "number", "description": "Total participating teams" },
+        "roundsCount": { "type": "number", "description": "Total tournament rounds" }
+      },
+      "required": ["id", "roomTitle", "winnerTeam"]
     }
   },
   "firestore": {
@@ -70,6 +87,10 @@
     "/live_rooms/{roomId}": {
       "schema": { "$ref": "#/entities/LiveRoom" },
       "description": "Live real-time competition rooms"
+    },
+    "/tournament_archives/{archiveId}": {
+      "schema": { "$ref": "#/entities/TournamentArchive" },
+      "description": "Saved past tournament results and standings"
     }
   }
 }

@@ -9255,38 +9255,43 @@ button:disabled .fa-spin,
   border-radius: 50%;
   background: radial-gradient(circle, #facc15 0%, #ca8a04 100%);
   border: 5px solid #fef08a;
-  box-shadow: 0 0 50px rgba(250, 204, 21, 0.9);
+  border-bottom: 7px solid #a16207;
+  box-shadow: 0 10px 40px rgba(250, 204, 21, 0.7);
   color: #0f172a;
   font-size: 64px;
   font-weight: 900;
   display: flex;
   align-items: center;
   justify-content: center;
+  white-space: nowrap;
+  overflow: hidden;
+  user-select: none;
   animation: countdownPop 1s ease-in-out infinite;
 }
 
 @keyframes countdownPop {
-  0% { transform: scale(0.8); opacity: 0.8; }
-  50% { transform: scale(1.15); opacity: 1; }
-  100% { transform: scale(0.8); opacity: 0.8; }
+  0% { transform: scale(0.85); opacity: 0.9; }
+  50% { transform: scale(1.1); opacity: 1; }
+  100% { transform: scale(0.85); opacity: 0.9; }
 }
 
 .team-countdown-label {
-  font-size: 24px;
+  font-size: 22px;
   font-weight: 900;
   color: #ffffff;
   text-shadow: 0 4px 14px rgba(0, 0, 0, 0.8);
 }
 
 /* ========================================================
-   لافتة إعلان الفقرة (Round Intro Banner Modal)
+   لافتة إعلان الفقرة (Round Intro Banner Modal) - ثيم دولينجو النقي
+   خلفية مصمتة نقية تحجب أي أسئلة خلفها تماماً
    ======================================================== */
 .team-round-banner-overlay {
   position: fixed;
   inset: 0;
   z-index: 88888;
-  background: rgba(15, 23, 42, 0.85);
-  backdrop-filter: blur(8px);
+  background: rgba(15, 23, 42, 0.96);
+  backdrop-filter: blur(16px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -9295,20 +9300,21 @@ button:disabled .fa-spin,
 }
 
 .team-round-banner-box {
-  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-  border: 3px solid #facc15;
+  background: #ffffff;
+  border: 3px solid #e2e8f0;
+  border-bottom: 8px solid #cbd5e1;
   border-radius: 28px;
-  padding: 36px 48px;
+  padding: 36px 42px;
   text-align: center;
-  color: #ffffff;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6), 0 0 40px rgba(250, 204, 21, 0.35);
-  animation: roundBannerRise 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  color: #0f172a;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.45);
+  animation: roundBannerRise 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   max-width: 580px;
   width: 100%;
 }
 
 @keyframes roundBannerRise {
-  0% { transform: translateY(60px) scale(0.9); opacity: 0; }
+  0% { transform: translateY(50px) scale(0.9); opacity: 0; }
   100% { transform: translateY(0) scale(1); opacity: 1; }
 }
 
@@ -9316,25 +9322,27 @@ button:disabled .fa-spin,
   display: inline-block;
   padding: 6px 18px;
   border-radius: 9999px;
-  background: rgba(250, 204, 21, 0.2);
-  color: #facc15;
+  background: #fef08a;
+  color: #854d0e;
+  border: 1.5px solid #facc15;
   font-size: 14px;
   font-weight: 900;
   margin-bottom: 12px;
 }
 
 .round-banner-title {
-  font-size: 34px;
+  font-size: 32px;
   font-weight: 900;
-  color: #ffffff;
+  color: #0f172a;
   margin: 0 0 12px;
 }
 
 .round-banner-rule {
   font-size: 16px;
-  color: #cbd5e1;
+  color: #475569;
   line-height: 1.6;
   margin: 0;
+  font-weight: 700;
 }
 
 /* ========================================================
@@ -9961,5 +9969,659 @@ button:disabled .fa-spin,
 .cinematic-popup-wrapper.type-wrong .cinematic-popup-progress-fill {
   background: linear-gradient(90deg, #ef4444, #f87171);
 }
+
+/* ========================================================
+   نافذة اختيار وتحديد فريقي المواجهة داخل المسرح (Duolingo Style)
+   ======================================================== */
+.arena-team-selection-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 85000;
+  background: radial-gradient(circle at center, rgba(15, 23, 42, 0.94) 0%, rgba(2, 6, 23, 0.98) 100%);
+  backdrop-filter: blur(12px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: fadeIn 0.3s ease;
+}
+
+.arena-team-picker-card {
+  background: #ffffff;
+  border-radius: 28px;
+  border: 3px solid #e2e8f0;
+  border-bottom: 8px solid #cbd5e1;
+  max-width: 860px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 30px;
+  text-align: center;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.45);
+  animation: popModalScale 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+.team-picker-header {
+  margin-bottom: 22px;
+}
+
+.team-picker-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 18px;
+  border-radius: 9999px;
+  background: #fef08a;
+  color: #854d0e;
+  border: 1.5px solid #facc15;
+  font-size: 13px;
+  font-weight: 900;
+  margin-bottom: 10px;
+}
+
+.team-picker-title {
+  font-size: 28px;
+  font-weight: 900;
+  color: #0f172a;
+  margin: 0 0 8px;
+}
+
+.team-picker-subtitle {
+  font-size: 15px;
+  font-weight: 700;
+  color: #64748b;
+  margin: 0;
+}
+
+/* شريط خطوات التحديد 1 و 2 */
+.team-picker-steps-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.picker-step-box {
+  flex: 1;
+  max-width: 320px;
+  background: #f8fafc;
+  border: 2px solid #e2e8f0;
+  border-bottom: 5px solid #cbd5e1;
+  border-radius: 18px;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: right;
+  transition: all 0.2s ease;
+}
+
+.picker-step-box.active {
+  background: #eff6ff;
+  border-color: #3b82f6;
+  border-bottom-color: #1d4ed8;
+  box-shadow: 0 4px 15px rgba(59, 130, 246, 0.2);
+}
+
+.picker-step-box.confirmed {
+  background: #f0fdf4;
+  border-color: #22c55e;
+  border-bottom-color: #16a34a;
+}
+
+.picker-step-box .step-num {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: #e2e8f0;
+  color: #64748b;
+  font-size: 18px;
+  font-weight: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.picker-step-box.active .step-num {
+  background: #3b82f6;
+  color: #ffffff;
+}
+
+.picker-step-box.confirmed .step-num {
+  background: #22c55e;
+  color: #ffffff;
+}
+
+.picker-step-box .step-details {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.picker-step-box .step-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.picker-step-box .step-val {
+  font-size: 14.5px;
+  font-weight: 900;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.picker-vs-symbol {
+  font-size: 20px;
+  font-weight: 900;
+  color: #ef4444;
+  background: #fee2e2;
+  border: 2px solid #fca5a5;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* شبكة بطاقات الفرق */
+.arena-teams-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 14px;
+  margin-bottom: 24px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 6px;
+}
+
+.duo-team-pick-card {
+  background: #ffffff;
+  border: 2.5px solid #e2e8f0;
+  border-bottom: 6px solid #cbd5e1;
+  border-radius: 20px;
+  padding: 16px 14px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  user-select: none;
+  text-align: center;
+}
+
+.duo-team-pick-card:hover {
+  transform: translateY(-3px);
+  border-color: #3b82f6;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.06);
+}
+
+.duo-team-pick-card.selected-team-a {
+  background: #f0fdf4 !important;
+  border-color: #22c55e !important;
+  border-bottom-color: #16a34a !important;
+  box-shadow: 0 8px 25px rgba(34, 197, 94, 0.28) !important;
+  transform: translateY(-2px);
+}
+
+.duo-team-pick-card.selected-team-b {
+  background: #eff6ff !important;
+  border-color: #3b82f6 !important;
+  border-bottom-color: #1d4ed8 !important;
+  box-shadow: 0 8px 25px rgba(59, 130, 246, 0.28) !important;
+  transform: translateY(-2px);
+}
+
+.duo-team-pick-card .team-card-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: #f1f5f9;
+  font-size: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.duo-team-pick-card .team-card-name {
+  font-size: 16px;
+  font-weight: 900;
+  color: #0f172a;
+}
+
+.duo-team-pick-card .team-card-members-count {
+  font-size: 12px;
+  font-weight: 700;
+  color: #64748b;
+  background: #f1f5f9;
+  padding: 3px 10px;
+  border-radius: 20px;
+}
+
+.team-picker-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+
+/* واجهة انتظار المتسابقين والمشاهدين */
+.observer-team-picker-body {
+  padding: 40px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.observer-waiting-animation {
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #facc15 0%, #ca8a04 100%);
+  border: 4px solid #fef08a;
+  border-bottom: 7px solid #a16207;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 40px;
+  color: #0f172a;
+  box-shadow: 0 10px 30px rgba(250, 204, 21, 0.5);
+  animation: countdownPop 1.8s ease-in-out infinite;
+}
+
+.observer-waiting-title {
+  font-size: 24px;
+  font-weight: 900;
+  color: #0f172a;
+  margin: 0;
+}
+
+.observer-waiting-desc {
+  font-size: 15px;
+  font-weight: 700;
+  color: #64748b;
+  max-width: 480px;
+  margin: 0;
+  line-height: 1.6;
+}
+
+/* ========================================================
+   سؤال التوصيل التفاعلي المبعثر للفرق (Duolingo Team Matching)
+   ======================================================== */
+.team-matching-container {
+  max-width: 680px;
+  margin: 16px auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.team-matching-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.team-matching-col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.team-matching-header {
+  font-size: 13.5px;
+  font-weight: 800;
+  color: #475569;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.team-match-tile {
+  background: #ffffff;
+  border: 2px solid #e2e8f0;
+  border-bottom: 4px solid #cbd5e1;
+  border-radius: 14px;
+  padding: 12px 14px;
+  font-size: 16px;
+  font-weight: 800;
+  color: #0f172a;
+  cursor: pointer;
+  transition: all 0.16s ease;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  user-select: none;
+}
+
+.team-match-tile:hover {
+  transform: translateY(-2px);
+  border-color: #3b82f6;
+}
+
+.team-match-tile.selected {
+  background: #eff6ff !important;
+  border-color: #3b82f6 !important;
+  border-bottom-color: #1d4ed8 !important;
+  box-shadow: 0 4px 14px rgba(59, 130, 246, 0.25);
+  transform: translateY(-2px);
+}
+
+.team-match-tile.connected {
+  background: #f0fdf4 !important;
+  border-color: #22c55e !important;
+  border-bottom-color: #16a34a !important;
+  color: #166534 !important;
+}
+
+.team-match-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: #f1f5f9;
+  color: #475569;
+  font-weight: 900;
+  font-size: 14px;
+}
+
+.team-match-tile.connected .team-match-badge {
+  background: #22c55e;
+  color: #ffffff;
+}
+
+/* ========================================================
+   أنماط بطولات وتصفيات الفرق (Knockout Bracket & Archives)
+   ======================================================== */
+
+/* شبكة اختيار الفرق المتعددة في مودال إنشاء الغرفة */
+.tournament-teams-multi-grid::-webkit-scrollbar {
+  width: 6px;
+}
+.tournament-teams-multi-grid::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+.duo-team-checkbox-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: #ffffff;
+  border: 2px solid #e2e8f0;
+  border-bottom: 3.5px solid #cbd5e1;
+  border-radius: 12px;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: all 0.16s ease;
+  user-select: none;
+}
+
+.duo-team-checkbox-card:hover {
+  transform: translateY(-2px);
+  border-color: #3b82f6;
+}
+
+.duo-team-checkbox-card.checked {
+  background: #eff6ff;
+  border-color: #3b82f6;
+  border-bottom-color: #1d4ed8;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+}
+
+.duo-team-checkbox-card input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: #2563eb;
+  cursor: pointer;
+}
+
+/* ألسنة فلترة الفرق في شاشة المشرف */
+.team-filter-pill {
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 12.5px;
+  font-weight: 800;
+  border: 1.5px solid #cbd5e1;
+  background: #ffffff;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.team-filter-pill:hover {
+  border-color: #94a3b8;
+  background: #f8fafc;
+}
+
+.team-filter-pill.active {
+  background: #0f172a;
+  color: #ffffff;
+  border-color: #0f172a;
+}
+
+.team-filter-pill.pending.active {
+  background: #f59e0b;
+  border-color: #d97706;
+  color: #ffffff;
+}
+
+.team-filter-pill.qualified.active {
+  background: #2563eb;
+  border-color: #1d4ed8;
+  color: #ffffff;
+}
+
+.team-filter-pill.eliminated.active {
+  background: #ef4444;
+  border-color: #dc2626;
+  color: #ffffff;
+}
+
+/* شارات الفرق الملونة في بطاقة اختيار الفريق */
+.duo-team-pick-card {
+  position: relative;
+  overflow: visible;
+}
+
+.badge-team-status {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  font-size: 11px;
+  font-weight: 900;
+  padding: 3px 8px;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  z-index: 5;
+}
+
+.badge-team-status.pending {
+  background: #fef08a;
+  color: #854d0e;
+  border: 1.5px solid #facc15;
+}
+
+.badge-team-status.qualified {
+  background: #dbeafe;
+  color: #1e40af;
+  border: 1.5px solid #60a5fa;
+  animation: pulseHighlight 1.5s infinite alternate;
+}
+
+.badge-team-status.eliminated {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1.5px solid #f87171;
+}
+
+.duo-team-pick-card.is-qualified {
+  border-color: #60a5fa !important;
+  background: #f0fdf4 !important;
+  opacity: 0.88;
+}
+
+.duo-team-pick-card.is-eliminated {
+  border-color: #fca5a5 !important;
+  background: #fff5f5 !important;
+  opacity: 0.55;
+  filter: grayscale(0.5);
+}
+
+/* بطاقات أرشيف المسابقات السابقة */
+.past-tournaments-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.past-tournament-card {
+  background: #ffffff;
+  border: 2px solid var(--border-duo);
+  border-bottom: 4px solid var(--border-duo);
+  border-radius: 18px;
+  padding: 16px;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.past-tournament-card:hover {
+  transform: translateY(-3px);
+  border-color: #3b82f6;
+  box-shadow: 0 8px 24px rgba(59, 130, 246, 0.12);
+}
+
+.past-tournament-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 12px;
+  border-bottom: 1.5px dashed #e2e8f0;
+  padding-bottom: 10px;
+}
+
+.past-card-title {
+  font-size: 16.5px;
+  font-weight: 900;
+  color: #0f172a;
+  margin: 0;
+}
+
+.past-card-date {
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 700;
+}
+
+.past-card-champion-box {
+  background: linear-gradient(135deg, #fefce8 0%, #fef08a 100%);
+  border: 2px solid #facc15;
+  border-bottom: 3.5px solid #eab308;
+  border-radius: 12px;
+  padding: 10px 14px;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.champion-trophy-small {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: #facc15;
+  color: #854d0e;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  box-shadow: 0 3px 10px rgba(234, 179, 8, 0.3);
+}
+
+.past-card-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #475569;
+  margin-bottom: 12px;
+}
+
+/* جدول الترتيب المصغر داخل المودال والأرشيف */
+.standing-row-duo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  font-size: 13.5px;
+  font-weight: 800;
+}
+
+.standing-row-duo.rank-1 {
+  background: linear-gradient(90deg, rgba(234, 179, 8, 0.25) 0%, rgba(250, 204, 21, 0.1) 100%);
+  border-color: #facc15;
+  color: #fef08a;
+}
+
+.standing-row-duo.rank-2 {
+  background: linear-gradient(90deg, rgba(148, 163, 184, 0.25) 0%, rgba(203, 213, 225, 0.1) 100%);
+  border-color: #cbd5e1;
+  color: #f1f5f9;
+}
+
+.standing-row-duo.rank-3 {
+  background: linear-gradient(90deg, rgba(180, 83, 9, 0.25) 0%, rgba(217, 119, 6, 0.1) 100%);
+  border-color: #d97706;
+  color: #fed7aa;
+}
+
+.podium-rank-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  font-weight: 900;
+  font-size: 13px;
+}
+
+.tournament-archive-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0;
+  flex-wrap: wrap;
+}
+
 
 

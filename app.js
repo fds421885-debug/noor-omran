@@ -267,6 +267,8 @@ const arenaLobbyWaitingForLeader = document.getElementById("arenaLobbyWaitingFor
 const arenaWaitingLeaderName = document.getElementById("arenaWaitingLeaderName");
 
 // أدوات المسرح
+const stageQuestionCard = document.getElementById("stageQuestionCardMain");
+const stageQuestionCardMain = document.getElementById("stageQuestionCardMain");
 const stageStudentName = document.getElementById("stageStudentName");
 const stageStudentSchool = document.getElementById("stageStudentSchool");
 const stageStudentGrade = document.getElementById("stageStudentGrade");
@@ -720,6 +722,21 @@ function showView(viewName) {
 document.querySelectorAll(".nav-tab").forEach(tabBtn => {
   tabBtn.addEventListener("click", () => {
     const targetTabId = tabBtn.getAttribute("data-tab");
+
+    // حصر التبويبات بحسب الدور ومنع أي وصول لغير المشرف
+    const isSup = currentUser && (currentUser.role === "supervisor" || isSupervisor(currentUser.name));
+    const isTeacher = currentUser && currentUser.role === "teacher";
+    const isPresenter = currentUser && currentUser.role === "presenter";
+
+    if (isTeacher && targetTabId !== "tabQuizzes" && targetTabId !== "tabHonorBoard" && targetTabId !== "tabPastTournaments") {
+      showToast("هذا التبويب خاص بالمشرف العام فقط", "fa-lock");
+      return;
+    }
+    if (isPresenter && targetTabId !== "tabLive" && targetTabId !== "tabHonorBoard" && targetTabId !== "tabPastTournaments") {
+      showToast("هذا التبويب خاص بالمشرف العام فقط", "fa-lock");
+      return;
+    }
+
     document.querySelectorAll(".nav-tab").forEach(t => t.classList.remove("active"));
     document.querySelectorAll(".tab-content-panel").forEach(p => p.classList.remove("active"));
     tabBtn.classList.add("active");
@@ -745,6 +762,9 @@ document.querySelectorAll(".nav-tab").forEach(tabBtn => {
     }
     if (targetTabId === "tabTacticalCards") {
       renderSupervisorCardsCatalog();
+    }
+    if (targetTabId === "tabPastTournaments") {
+      renderPastTournamentsTab();
     }
 
     // تحديث البيانات السحابية في الخلفية بهدوء دون تجميد الواجهة
@@ -1708,6 +1728,12 @@ function updateArenaUIRealtime(room) {
 
   // توجيه مراحل مسابقة الفرق التنافسية (Teams Mode Flow)
   if (room.isTeamMatch) {
+    if (room.teamSelectionState === "selecting" || !room.teamA || !room.teamB) {
+      renderArenaTeamPickerUI(room);
+      return;
+    }
+    document.getElementById("arenaTeamSelectionOverlay")?.classList.add("hidden");
+
     if (!phase || phase === "lobby") {
       showArenaPhase("lobby");
       renderTeamLobbyInfo(room);
@@ -3507,59 +3533,69 @@ function finalizeUserSession(user, isReturning = true) {
 // بناء وتحديث لوحة تحكم المشرف والمعلم
 // --------------------------------------------------------
 function renderSupervisorDashboard() {
-  const isSupervisorRole = currentUser && currentUser.role === "supervisor";
+  const isSupervisorRole = currentUser && (currentUser.role === "supervisor" || isSupervisor(currentUser.name));
   const isPresenterRole = currentUser && currentUser.role === "presenter";
+  const isTeacherRole = currentUser && currentUser.role === "teacher";
 
   // 1. التحكم في ظهور التبويبات بحسب الدور:
-  // الحسابات والإحصائيات محصورة حصراً عند المشرف العام، ومخفية تماماً عن العارض والمعلم
+  // حصر كافة التبويبات الإدارية (الحسابات، الإحصائيات، إدارة الفرق، البطاقات التكتيكية، الإجراءات السريعة) للمشرف فقط
   const tabAccountsBtn = document.querySelector(".nav-tab[data-tab='tabAccounts']");
   const tabOverviewBtn = document.querySelector(".nav-tab[data-tab='tabOverview']");
   const tabQuizzesBtn = document.querySelector(".nav-tab[data-tab='tabQuizzes']");
   const tabLiveBtn = document.querySelector(".nav-tab[data-tab='tabLive']");
   const tabHonorBoardBtn = document.querySelector(".nav-tab[data-tab='tabHonorBoard']");
+  const tabTeamsBtn = document.querySelector(".nav-tab[data-tab='tabTeams']");
   const tabTacticalCardsBtn = document.querySelector(".nav-tab[data-tab='tabTacticalCards']");
   const quickActionsBar = document.querySelector(".quick-actions-bar");
 
-  // تبويب لوحة الشرف وقسم البطاقات التكتيكية متاح دائماً ومرئي للجميع
-  if (tabHonorBoardBtn) tabHonorBoardBtn.style.display = "inline-flex";
-  if (tabTacticalCardsBtn) tabTacticalCardsBtn.style.display = "inline-flex";
+  const tabPastTournamentsBtn = document.querySelector(".nav-tab[data-tab='tabPastTournaments']");
+  if (tabPastTournamentsBtn) tabPastTournamentsBtn.style.display = "inline-flex";
 
   if (isPresenterRole) {
-    // العارض: يرى فقط شاشات العرض والمسابقات الحية ولوحة الشرف
+    // العارض: يرى فقط شاشات العرض والمسابقات الحية ولوحة الشرف وأرشيف المسابقات السابقة
     if (tabAccountsBtn) tabAccountsBtn.style.display = "none";
     if (tabOverviewBtn) tabOverviewBtn.style.display = "none";
     if (quickActionsBar) quickActionsBar.style.display = "none";
     if (tabQuizzesBtn) tabQuizzesBtn.style.display = "none";
+    if (tabTeamsBtn) tabTeamsBtn.style.display = "none";
+    if (tabTacticalCardsBtn) tabTacticalCardsBtn.style.display = "none";
     if (tabLiveBtn) tabLiveBtn.style.display = "inline-flex";
+    if (tabHonorBoardBtn) tabHonorBoardBtn.style.display = "inline-flex";
 
     const activePanel = document.querySelector(".tab-content-panel.active");
-    if (!activePanel || (activePanel.id !== "tabLive" && activePanel.id !== "tabHonorBoard")) {
+    if (!activePanel || (activePanel.id !== "tabLive" && activePanel.id !== "tabHonorBoard" && activePanel.id !== "tabPastTournaments")) {
       document.querySelectorAll(".tab-content-panel").forEach(p => p.classList.remove("active"));
       document.querySelectorAll(".nav-tab").forEach(t => t.classList.remove("active"));
       document.getElementById("tabLive")?.classList.add("active");
       tabLiveBtn?.classList.add("active");
     }
-  } else if (!isSupervisorRole) {
-    // المعلم: يرى بنك الاختبارات والمسابقات الحية ولوحة الشرف
+  } else if (isTeacherRole) {
+    // المعلم: يرى فقط بنك الاختبارات ولوحة الشرف والمسابقات السابقة، ومخفي عنه تماماً تبويبات المشرف (الفرق، البطاقات، الحسابات، الإحصائيات)
     if (tabAccountsBtn) tabAccountsBtn.style.display = "none";
     if (tabOverviewBtn) tabOverviewBtn.style.display = "none";
     if (quickActionsBar) quickActionsBar.style.display = "none";
-    if (tabLiveBtn) tabLiveBtn.style.display = "inline-flex";
+    if (tabTeamsBtn) tabTeamsBtn.style.display = "none";
+    if (tabTacticalCardsBtn) tabTacticalCardsBtn.style.display = "none";
+    if (tabLiveBtn) tabLiveBtn.style.display = "none";
     if (tabQuizzesBtn) tabQuizzesBtn.style.display = "inline-flex";
+    if (tabHonorBoardBtn) tabHonorBoardBtn.style.display = "inline-flex";
 
     const activePanel = document.querySelector(".tab-content-panel.active");
-    if (!activePanel || activePanel.id === "tabAccounts" || activePanel.id === "tabOverview") {
+    if (!activePanel || (activePanel.id !== "tabQuizzes" && activePanel.id !== "tabHonorBoard" && activePanel.id !== "tabPastTournaments")) {
       document.querySelectorAll(".tab-content-panel").forEach(p => p.classList.remove("active"));
       document.querySelectorAll(".nav-tab").forEach(t => t.classList.remove("active"));
       document.getElementById("tabQuizzes")?.classList.add("active");
       tabQuizzesBtn?.classList.add("active");
     }
   } else {
-    // المشرف العام: يرى كافة الأقسام (الإحصائيات، الحسابات، الاختبارات، العروض، لوحة الشرف)
+    // المشرف العام: يرى كافة الأقسام (الإحصائيات، الحسابات، الاختبارات، العروض، إدارة الفرق، البطاقات، لوحة الشرف، أرشيف المسابقات)
     if (tabAccountsBtn) tabAccountsBtn.style.display = "inline-flex";
     if (tabOverviewBtn) tabOverviewBtn.style.display = "inline-flex";
     if (tabQuizzesBtn) tabQuizzesBtn.style.display = "inline-flex";
     if (tabLiveBtn) tabLiveBtn.style.display = "inline-flex";
+    if (tabHonorBoardBtn) tabHonorBoardBtn.style.display = "inline-flex";
+    if (tabTeamsBtn) tabTeamsBtn.style.display = "inline-flex";
+    if (tabTacticalCardsBtn) tabTacticalCardsBtn.style.display = "inline-flex";
     if (quickActionsBar) quickActionsBar.style.display = "block";
   }
 
@@ -5508,26 +5544,31 @@ createRoomForm?.addEventListener("submit", async (e) => {
 
   let teamA = null;
   let teamB = null;
+  let teamSelectionState = "selecting";
+  let selectedTournamentTeams = [];
+  let tournamentState = null;
+
   if (isTeamMode) {
-    const teamAId = document.getElementById("selectTeamA")?.value;
-    const teamBId = document.getElementById("selectTeamB")?.value;
-    if (!teamAId || !teamBId) {
-      showToast("يرجى اختيار الفريقين المتنافسين", "fa-triangle-exclamation");
-      return;
+    const checkedBoxes = Array.from(document.querySelectorAll("#tournamentTeamsMultiSelectGrid .chk-tournament-team:checked"));
+    const selectedIds = checkedBoxes.map(cb => cb.value);
+    selectedTournamentTeams = selectedIds.map(id => teamsCache.find(t => t.id === id)).filter(Boolean);
+
+    if (selectedTournamentTeams.length < 2) {
+      if (teamsCache.length >= 2) {
+        selectedTournamentTeams = [...teamsCache];
+      } else {
+        showToast("يرجى اختيار فريقين على الأقل لبدء بطولة الفرق!", "fa-triangle-exclamation");
+        return;
+      }
     }
-    if (teamAId === teamBId) {
-      showToast("يرجى اختيار فريقين مختلفين للمواجهة الحماسية", "fa-triangle-exclamation");
-      return;
-    }
-    teamA = teamsCache.find(t => t.id === teamAId);
-    teamB = teamsCache.find(t => t.id === teamBId);
-    if (!teamA || !teamB) {
-      showToast("تعذر العثور على بيانات الفريقين في السحابة", "fa-triangle-exclamation");
-      return;
-    }
+
+    tournamentState = initTournamentBracket(selectedTournamentTeams);
+    teamSelectionState = "selecting";
   }
 
-  const roomName = newRoomNameInput.value.trim() || (isTeamMode ? `مواجهة الفرق: ${teamA.name} ضد ${teamB.name}` : `مسابقة نور البيان الكبرى - ${new Date().toLocaleDateString('ar-EG')}`);
+  const roomName = newRoomNameInput.value.trim() || (isTeamMode 
+    ? `بطولة الفرق الكبرى (${selectedTournamentTeams.length} فرق) - ${new Date().toLocaleDateString('ar-EG')}` 
+    : `مسابقة نور البيان الكبرى - ${new Date().toLocaleDateString('ar-EG')}`);
   const quizId = roomQuizSelect.value || (quizzesCache[0]?.id || "quiz_default_1");
   const cardFreqSelect = document.getElementById("roomCardFrequencySelect");
   const cardFreq = cardFreqSelect ? cardFreqSelect.value : "4";
@@ -5572,7 +5613,7 @@ createRoomForm?.addEventListener("submit", async (e) => {
     creatorName: creatorName,
     creatorRole: creatorRole,
     users: [creatorName],
-    phase: "lobby",
+    phase: isTeamMode ? "team_stage" : "lobby",
     contestantId: null,
     contestantName: null,
     contestantSchool: null,
@@ -5581,11 +5622,17 @@ createRoomForm?.addEventListener("submit", async (e) => {
     currentQuestionIdx: 0,
     createdAt: new Date().toISOString(),
     isTeamMatch: isTeamMode,
-    teams: isTeamMode ? [teamA, teamB] : null,
-    teamScores: isTeamMode ? { [teamA.id]: 0, [teamB.id]: 0 } : null,
+    tournamentState: tournamentState,
+    teamSelectionState: isTeamMode ? "selecting" : "none",
+    teamA: null,
+    teamB: null,
+    teams: selectedTournamentTeams,
+    teamScores: {},
+    teamScoresDetails: {},
     teamPlayerScores: isTeamMode ? {} : null,
     currentTeamRound: isTeamMode ? 1 : null,
-    teamRoundState: isTeamMode ? "intro" : null
+    teamRoundStarted: false,
+    teamRoundState: isTeamMode ? "selecting_teams" : null
   };
 
   createRoomForm.dataset.submitting = "true";
@@ -12335,7 +12382,135 @@ async function syncTeamToCloud(team) {
   }
 }
 
+// أسماء أدوار التصفيات التلقائية
+function getRoundNameForTeams(count) {
+  if (count > 16) return "دور الـ 32";
+  if (count > 8) return "دور الـ 16";
+  if (count > 4) return "الدور ربع النهائي (دور الـ 8)";
+  if (count > 2) return "الدور نصف النهائي (المربع الذهبي)";
+  if (count === 2) return "المباراة النهائية الكبرى";
+  return "المواجهة التصفوية";
+}
+
+// تهيئة شجرة البطولة التصفوية
+function initTournamentBracket(teams) {
+  ensureDefaultTeams();
+  const validTeams = (Array.isArray(teams) && teams.length >= 2) ? teams : teamsCache.slice(0, 4);
+  const teamIds = validTeams.map(t => t.id);
+
+  let byeTeamId = null;
+  let pendingIds = [...teamIds];
+  let qualifiedIds = [];
+
+  // إذا كان عدد الفرق فردياً (مثل 7 أو 9 فرق)، يتأهل فريق واحد عشوائياً بالقرعة (Bye) للدور التالي
+  if (pendingIds.length % 2 !== 0 && pendingIds.length > 2) {
+    const byeIdx = Math.floor(Math.random() * pendingIds.length);
+    byeTeamId = pendingIds.splice(byeIdx, 1)[0];
+    qualifiedIds.push(byeTeamId);
+  }
+
+  const roundName = getRoundNameForTeams(validTeams.length);
+
+  return {
+    teams: validTeams,
+    currentRoundIndex: 0,
+    currentRoundName: roundName,
+    isFinished: false,
+    championTeam: null,
+    runnerUpTeam: null,
+    fullStandings: [],
+    rounds: [
+      {
+        roundIndex: 0,
+        roundName: roundName,
+        initialTeamsCount: validTeams.length,
+        pendingTeamIds: pendingIds,
+        qualifiedTeamIds: qualifiedIds,
+        eliminatedTeamIds: [],
+        byeTeamId: byeTeamId,
+        matches: []
+      }
+    ]
+  };
+}
+
+// عرض وتحديث شبكة الفرق المتعددة في مودال إنشاء المسابقة
+function renderTournamentTeamsChecklist() {
+  ensureDefaultTeams();
+  const grid = document.getElementById("tournamentTeamsMultiSelectGrid");
+  const countDisplay = document.getElementById("tournamentSelectedCountDisplay");
+  if (!grid) return;
+
+  grid.innerHTML = teamsCache.map(t => {
+    const scheme = TEAM_COLOR_SCHEMES[t.color] || TEAM_COLOR_SCHEMES.blue;
+    const membersCount = t.members ? t.members.length : 0;
+    return `
+      <label class="duo-team-checkbox-card checked" data-team-id="${escapeHtml(t.id)}">
+        <div style="display:flex;align-items:center;gap:8px;overflow:hidden;">
+          <input type="checkbox" class="chk-tournament-team" value="${escapeHtml(t.id)}" checked style="accent-color:${scheme.hex};">
+          <div style="width:26px;height:26px;border-radius:6px;background:${scheme.badgeBg || '#f1f5f9'};color:${scheme.hex};display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;">
+            <i class="fa-solid ${t.icon || 'fa-shield-halved'}"></i>
+          </div>
+          <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:900;color:#1e293b;">
+            ${escapeHtml(t.name)}
+          </div>
+        </div>
+        <small style="color:#64748b;font-size:11px;font-weight:800;white-space:nowrap;">${membersCount} طلاب</small>
+      </label>
+    `;
+  }).join("");
+
+  function updateSelectedCount() {
+    const checked = grid.querySelectorAll(".chk-tournament-team:checked");
+    const count = checked.length;
+    if (countDisplay) {
+      countDisplay.textContent = String(count);
+      countDisplay.style.color = count >= 2 ? "#1d4ed8" : "#ef4444";
+    }
+    grid.querySelectorAll(".duo-team-checkbox-card").forEach(c => {
+      const chk = c.querySelector(".chk-tournament-team");
+      c.classList.toggle("checked", !!chk?.checked);
+    });
+  }
+
+  grid.querySelectorAll(".chk-tournament-team").forEach(chk => {
+    chk.addEventListener("change", updateSelectedCount);
+  });
+
+  updateSelectedCount();
+
+  // تفعيل أزرار التحديد السريع
+  const btnSelectAll = document.getElementById("btnSelectAllTournamentTeams");
+  if (btnSelectAll) {
+    btnSelectAll.onclick = () => {
+      grid.querySelectorAll(".chk-tournament-team").forEach(c => c.checked = true);
+      updateSelectedCount();
+    };
+  }
+
+  const btnDeselectAll = document.getElementById("btnDeselectAllTournamentTeams");
+  if (btnDeselectAll) {
+    btnDeselectAll.onclick = () => {
+      grid.querySelectorAll(".chk-tournament-team").forEach(c => c.checked = false);
+      updateSelectedCount();
+    };
+  }
+
+  document.querySelectorAll(".btn-pick-preset-count").forEach(btn => {
+    btn.onclick = () => {
+      const targetCount = parseInt(btn.getAttribute("data-count")) || 2;
+      const allCheckboxes = grid.querySelectorAll(".chk-tournament-team");
+      allCheckboxes.forEach((c, idx) => {
+        c.checked = idx < targetCount;
+      });
+      updateSelectedCount();
+      showToast(`تم تحديد أول ${targetCount} فرق للبطولة بنجاح`, "fa-check");
+    };
+  });
+}
+
 function renderTeamsSelectOptions() {
+  renderTournamentTeamsChecklist();
   ensureDefaultTeams();
   const selA = document.getElementById("selectTeamA");
   const selB = document.getElementById("selectTeamB");
@@ -12360,73 +12535,7 @@ function renderTeamsSelectOptions() {
   if (teamsCache.length > 1) {
     selB.value = secondId;
   }
-  updateTeamSelectPreviews();
 }
-
-function updateTeamSelectPreviews() {
-  const selA = document.getElementById("selectTeamA");
-  const selB = document.getElementById("selectTeamB");
-  const prevA = document.getElementById("previewTeamA");
-  const prevB = document.getElementById("previewTeamB");
-
-  const boxA = selA ? selA.closest(".team-select-box") : null;
-  const boxB = selB ? selB.closest(".team-select-box") : null;
-
-  const tA = teamsCache.find(t => t.id === selA?.value);
-  const tB = teamsCache.find(t => t.id === selB?.value);
-
-  const allColors = ["blue", "red", "emerald", "gold", "purple", "amber"];
-  if (boxA) {
-    allColors.forEach(c => boxA.classList.remove(`team-color-${c}`));
-    if (tA && tA.color) {
-      boxA.classList.add(`team-color-${tA.color}`);
-      const schemeA = TEAM_COLOR_SCHEMES[tA.color] || TEAM_COLOR_SCHEMES.blue;
-      selA.style.borderColor = schemeA.hex;
-      selA.style.color = schemeA.hex;
-    }
-  }
-  if (boxB) {
-    allColors.forEach(c => boxB.classList.remove(`team-color-${c}`));
-    if (tB && tB.color) {
-      boxB.classList.add(`team-color-${tB.color}`);
-      const schemeB = TEAM_COLOR_SCHEMES[tB.color] || TEAM_COLOR_SCHEMES.blue;
-      selB.style.borderColor = schemeB.hex;
-      selB.style.color = schemeB.hex;
-    }
-  }
-
-  if (prevA && tA) {
-    const schemeA = TEAM_COLOR_SCHEMES[tA.color] || TEAM_COLOR_SCHEMES.blue;
-    const membersCount = tA.members ? tA.members.length : 0;
-    const names = tA.members?.map(m => m.name).join("، ") || "لا يوجد أعضاء";
-    prevA.innerHTML = `
-      <div class="team-select-preview-badge" style="border: 1.5px solid ${schemeA.border}; background: rgba(255,255,255,0.9);">
-        <i class="fa-solid ${schemeA.icon || 'fa-shield-halved'}" style="color: ${schemeA.hex}; font-size: 14px; margin-top: 2px;"></i>
-        <div>
-          <span style="color: ${schemeA.hex}; font-weight: 900;">${escapeHtml(tA.name)}</span> (${membersCount} طلاب)
-          <div style="font-size: 11px; color: #64748b; margin-top: 2px;">الأعضاء: ${escapeHtml(names)}</div>
-        </div>
-      </div>
-    `;
-  }
-  if (prevB && tB) {
-    const schemeB = TEAM_COLOR_SCHEMES[tB.color] || TEAM_COLOR_SCHEMES.blue;
-    const membersCount = tB.members ? tB.members.length : 0;
-    const names = tB.members?.map(m => m.name).join("، ") || "لا يوجد أعضاء";
-    prevB.innerHTML = `
-      <div class="team-select-preview-badge" style="border: 1.5px solid ${schemeB.border}; background: rgba(255,255,255,0.9);">
-        <i class="fa-solid ${schemeB.icon || 'fa-shield-halved'}" style="color: ${schemeB.hex}; font-size: 14px; margin-top: 2px;"></i>
-        <div>
-          <span style="color: ${schemeB.hex}; font-weight: 900;">${escapeHtml(tB.name)}</span> (${membersCount} طلاب)
-          <div style="font-size: 11px; color: #64748b; margin-top: 2px;">الأعضاء: ${escapeHtml(names)}</div>
-        </div>
-      </div>
-    `;
-  }
-}
-
-document.getElementById("selectTeamA")?.addEventListener("change", updateTeamSelectPreviews);
-document.getElementById("selectTeamB")?.addEventListener("change", updateTeamSelectPreviews);
 
 // إدارة نافذة إنشاء وتعديل الفريق
 let selectedTeamStudents = [];
@@ -13003,7 +13112,8 @@ function runTeamEntranceCinematicShowcase() {
 
 document.getElementById("btnLaunchTeamContest")?.addEventListener("click", async () => {
   if (currentLiveRoom) {
-    currentLiveRoom.teamLaunchTimestamp = Date.now();
+    const now = Date.now();
+    currentLiveRoom.teamLaunchTimestamp = now;
     await saveRooms(currentLiveRoom);
   }
   executeTeamContestLaunch();
@@ -13016,8 +13126,17 @@ async function executeTeamContestLaunch() {
   const countdownWrap = document.getElementById("teamStartCountdownWrapper");
   const circle = document.getElementById("teamCountdownSecCircle");
   const controls = document.getElementById("teamEntranceControls");
+  const vsDivider = document.querySelector(".team-vs-divider");
+  const topBar = document.querySelector(".team-entrance-top-bar");
+  const header = document.querySelector(".team-entrance-header");
+
+  if (window.teamCountdownInterval) {
+    clearInterval(window.teamCountdownInterval);
+    window.teamCountdownInterval = null;
+  }
 
   if (controls) controls.classList.add("hidden");
+  if (topBar) topBar.classList.add("hidden");
 
   // خروج البطاقات بالعكس فورياً (اليمين يذهب يساراً، واليسار يذهب يميناً)
   if (cardA) {
@@ -13028,28 +13147,53 @@ async function executeTeamContestLaunch() {
     cardB.classList.remove("team-left");
     cardB.classList.add("reverse-exit-right");
   }
+  if (vsDivider) {
+    vsDivider.style.transition = "opacity 0.25s ease, transform 0.25s ease";
+    vsDivider.style.opacity = "0";
+    vsDivider.style.transform = "scale(0.5)";
+  }
 
   try { soundFX.pop(); } catch (e) {}
 
   setTimeout(() => {
     if (countdownWrap) countdownWrap.classList.remove("hidden");
     let c = 3;
-    if (circle) circle.textContent = "3";
+    if (circle) {
+      circle.style.fontSize = "64px";
+      circle.textContent = "3";
+    }
     try { soundFX.btnClick(); } catch (e) {}
 
-    const cInt = setInterval(async () => {
+    window.teamCountdownInterval = setInterval(async () => {
       c--;
       if (c > 0) {
-        if (circle) circle.textContent = String(c);
+        if (circle) {
+          circle.style.fontSize = "64px";
+          circle.textContent = String(c);
+        }
         try { soundFX.btnClick(); } catch (e) {}
       } else {
-        clearInterval(cInt);
-        if (circle) circle.textContent = "انطلاق!";
-        try { soundFX.correct(); } catch (e) {}
+        clearInterval(window.teamCountdownInterval);
+        window.teamCountdownInterval = null;
+
+        if (circle) {
+          circle.style.fontSize = "28px";
+          circle.textContent = "انطلاق!";
+        }
+        try { soundFX.celebrate(); } catch (e) {}
 
         setTimeout(async () => {
           if (overlay) overlay.classList.add("hidden");
           if (countdownWrap) countdownWrap.classList.add("hidden");
+          if (cardA) cardA.classList.remove("reverse-exit-left");
+          if (cardB) cardB.classList.remove("reverse-exit-right");
+          if (vsDivider) {
+            vsDivider.style.opacity = "1";
+            vsDivider.style.transform = "scale(1)";
+          }
+          if (topBar) topBar.classList.remove("hidden");
+          if (header) header.classList.remove("hidden");
+
           isTeamEntranceActive = false;
 
           const isSup = currentUser && (currentUser.role === "supervisor" || isSupervisor(currentUser.name) || currentUser.name === currentLiveRoom?.leaderName);
@@ -13057,14 +13201,15 @@ async function executeTeamContestLaunch() {
             currentLiveRoom.phase = "team_stage";
             currentLiveRoom.currentTeamRound = 1;
             currentLiveRoom.currentQuestionIdx = 0;
+            currentLiveRoom.teamRoundStarted = false; // لا يبدأ حتى يضغط المشرف التالي
             currentLiveRoom.teamRoundState = "round_banner";
             await saveRooms(currentLiveRoom);
             launchTeamRound(1);
           }
-        }, 400);
+        }, 550);
       }
     }, 1000);
-  }, 350);
+  }, 380);
 }
 
 // --------------------------------------------------------
@@ -13174,45 +13319,236 @@ function triggerCinematicTeamAlert(cfg) {
   }, 3000);
 }
 
-// العودة لاختيار الفرق عند الخطأ في الاختيار
+// --------------------------------------------------------
+// اختيار فريقي المواجهة داخل المسرح التفاعلي (In-Arena Team Picker)
+// --------------------------------------------------------
+let arenaSelectedTeamA = null;
+let arenaSelectedTeamB = null;
+
+function renderArenaTeamPickerUI(room = null) {
+  const targetRoom = room || currentLiveRoom;
+  if (!targetRoom || !targetRoom.isTeamMatch) return;
+
+  const overlay = document.getElementById("arenaTeamSelectionOverlay");
+  const supervisorBody = document.getElementById("supervisorTeamPickerBody");
+  const observerBody = document.getElementById("observerTeamPickerBody");
+  const teamsGrid = document.getElementById("arenaTeamsCardsGrid");
+  const stepA = document.getElementById("pickerStepA");
+  const stepB = document.getElementById("pickerStepB");
+  const nameA = document.getElementById("selectedTeamANameDisplay");
+  const nameB = document.getElementById("selectedTeamBNameDisplay");
+  const checkA = document.getElementById("stepACheck");
+  const checkB = document.getElementById("stepBCheck");
+  const btnConfirm = document.getElementById("btnConfirmTeamSelection");
+
+  if (!overlay) return;
+
+  const isSup = currentUser && (currentUser.role === "supervisor" || isSupervisor(currentUser.name) || currentUser.name === targetRoom.leaderName);
+
+  // إخفاء كل النوافذ المنبثقة الأخرى والأسئلة لضمان ظهور واجهة الاختيار النقية
+  document.getElementById("teamEntranceOverlay")?.classList.add("hidden");
+  document.getElementById("teamRoundBannerOverlay")?.classList.add("hidden");
+  document.getElementById("teamFlippingModalWrapper")?.classList.add("hidden");
+  document.getElementById("teamStartCountdownWrapper")?.classList.add("hidden");
+  if (stageQuestionCard) stageQuestionCard.classList.add("hidden");
+  if (stageInteractiveArea) stageInteractiveArea.innerHTML = "";
+
+  overlay.classList.remove("hidden");
+
+  if (!isSup) {
+    // عرض شاشة الانتظار للمتسابقين والمشاهدين والعارض
+    if (supervisorBody) supervisorBody.classList.add("hidden");
+    if (observerBody) observerBody.classList.remove("hidden");
+    return;
+  }
+
+  // عرض شاشة المشرف لتحديد الفريقين
+  if (supervisorBody) supervisorBody.classList.remove("hidden");
+  if (observerBody) observerBody.classList.add("hidden");
+
+  const availableTeams = (teamsCache && teamsCache.length > 0) ? teamsCache : [];
+
+  function updatePickerUI() {
+    if (nameA) {
+      nameA.textContent = arenaSelectedTeamA ? arenaSelectedTeamA.name : "انقر على فريق لتحديده";
+      nameA.style.color = arenaSelectedTeamA ? "#16a34a" : "#64748b";
+    }
+    if (nameB) {
+      nameB.textContent = arenaSelectedTeamB ? arenaSelectedTeamB.name : (arenaSelectedTeamA ? "انقر على الفريق الخصم" : "في انتظار تحديد الفريق الأول");
+      nameB.style.color = arenaSelectedTeamB ? "#2563eb" : "#64748b";
+    }
+
+    if (stepA) {
+      stepA.classList.toggle("confirmed", !!arenaSelectedTeamA);
+      stepA.classList.toggle("active", !arenaSelectedTeamA);
+    }
+    if (checkA) checkA.classList.toggle("hidden", !arenaSelectedTeamA);
+
+    if (stepB) {
+      stepB.classList.toggle("confirmed", !!arenaSelectedTeamB);
+      stepB.classList.toggle("active", !!arenaSelectedTeamA && !arenaSelectedTeamB);
+    }
+    if (checkB) checkB.classList.toggle("hidden", !arenaSelectedTeamB);
+
+    if (btnConfirm) {
+      const ready = !!(arenaSelectedTeamA && arenaSelectedTeamB && arenaSelectedTeamA.id !== arenaSelectedTeamB.id);
+      btnConfirm.disabled = !ready;
+      btnConfirm.style.opacity = ready ? "1" : "0.5";
+      btnConfirm.style.cursor = ready ? "pointer" : "not-allowed";
+    }
+
+    // إعادة رسم بطاقات الفرق بثيم دولينجو
+    if (teamsGrid) {
+      if (availableTeams.length === 0) {
+        teamsGrid.innerHTML = `
+          <div style="grid-column: 1/-1; padding: 24px; text-align: center; color: #64748b; font-weight: 800;">
+            لا توجد فرق منشأة بعد في النظام. يرجى الذهاب لتبويب «إدارة الفرق» لإنشاء فريقين أولاً.
+          </div>
+        `;
+        return;
+      }
+
+      teamsGrid.innerHTML = availableTeams.map(t => {
+        const isA = arenaSelectedTeamA && arenaSelectedTeamA.id === t.id;
+        const isB = arenaSelectedTeamB && arenaSelectedTeamB.id === t.id;
+        const scheme = TEAM_COLOR_SCHEMES[t.color] || TEAM_COLOR_SCHEMES.blue;
+        const membersCount = Array.isArray(t.members) ? t.members.length : 0;
+
+        let badgeText = `${membersCount} طلاب`;
+        let cardClass = "duo-team-pick-card";
+        if (isA) {
+          cardClass += " selected-team-a";
+          badgeText = "✔ الفريق الأول";
+        } else if (isB) {
+          cardClass += " selected-team-b";
+          badgeText = "✔ الفريق الثاني (الخصم)";
+        }
+
+        return `
+          <div class="${cardClass}" data-team-id="${escapeHtml(t.id)}">
+            <div class="team-card-icon" style="background:${scheme.badgeBg || '#f1f5f9'}; color:${scheme.badgeText || '#2563eb'};">
+              <i class="fa-solid ${t.icon || 'fa-shield-halved'}"></i>
+            </div>
+            <div class="team-card-name">${escapeHtml(t.name)}</div>
+            <div class="team-card-members-count">${badgeText}</div>
+          </div>
+        `;
+      }).join("");
+
+      teamsGrid.querySelectorAll(".duo-team-pick-card").forEach(c => {
+        c.addEventListener("click", () => {
+          const tId = c.getAttribute("data-team-id");
+          const team = availableTeams.find(t => t.id === tId);
+          if (!team) return;
+
+          try { soundFX.btnClick(); } catch (e) {}
+
+          if (!arenaSelectedTeamA) {
+            arenaSelectedTeamA = team;
+            showToast(`تم تحديد «${team.name}» كفريق أول 🟢`, "fa-flag");
+          } else if (arenaSelectedTeamA.id === team.id) {
+            arenaSelectedTeamA = null;
+          } else if (!arenaSelectedTeamB) {
+            arenaSelectedTeamB = team;
+            showToast(`تم تحديد «${team.name}» كفريق خصم 🔵`, "fa-flag");
+          } else if (arenaSelectedTeamB.id === team.id) {
+            arenaSelectedTeamB = null;
+          } else {
+            arenaSelectedTeamB = team;
+            showToast(`تم تغيير الفريق الثاني إلى «${team.name}» 🔵`, "fa-flag");
+          }
+
+          updatePickerUI();
+        });
+      });
+    }
+  }
+
+  updatePickerUI();
+
+  // مستمع زر إعادة التحديد
+  document.getElementById("btnResetSelectedTeams")?.addEventListener("click", () => {
+    arenaSelectedTeamA = null;
+    arenaSelectedTeamB = null;
+    updatePickerUI();
+  });
+
+  // مستمع زر اعتماد وبدء المواجهة
+  const btnConf = document.getElementById("btnConfirmTeamSelection");
+  if (btnConf) {
+    btnConf.onclick = async () => {
+      if (!arenaSelectedTeamA || !arenaSelectedTeamB) return;
+      if (arenaSelectedTeamA.id === arenaSelectedTeamB.id) {
+        showToast("يرجى اختيار فريقين مختلفين للمواجهة", "fa-triangle-exclamation");
+        return;
+      }
+
+      btnConf.disabled = true;
+      btnConf.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> جاري إطلاق المواجهة...`;
+
+      targetRoom.teamA = arenaSelectedTeamA;
+      targetRoom.teamB = arenaSelectedTeamB;
+      targetRoom.teams = [arenaSelectedTeamA, arenaSelectedTeamB];
+      targetRoom.teamScores = { [arenaSelectedTeamA.id]: 0, [arenaSelectedTeamB.id]: 0 };
+      targetRoom.teamScoresDetails = { [arenaSelectedTeamA.id]: [], [arenaSelectedTeamB.id]: [] };
+      targetRoom.teamSelectionState = "ready";
+      targetRoom.phase = "team_intro";
+      targetRoom.teamEntranceStartedAt = Date.now();
+      targetRoom.teamRoundStarted = false;
+      targetRoom.currentTeamRound = 1;
+      targetRoom.currentQuestionIdx = 0;
+      targetRoom.teamRoundState = "entrance";
+
+      await saveRooms(targetRoom);
+
+      overlay.classList.add("hidden");
+      btnConf.disabled = false;
+      btnConf.innerHTML = `<i class="fa-solid fa-play"></i> اعتماد الفريقين وبدء المواجهة والعرض!`;
+
+      runTeamEntranceCinematicShowcase();
+    };
+  }
+}
+
+// العودة لاختيار وتعديل الفرق داخل المسرح
 async function handleReturnToTeamSelection() {
   const isSup = currentUser && (currentUser.role === "supervisor" || isSupervisor(currentUser.name) || currentUser.name === currentLiveRoom?.leaderName);
   if (!isSup) {
     showToast("عذراً، هذه الصلاحية للمشرف العام فقط لاختيار وتعديل الفرق", "fa-lock");
     return;
   }
+  if (!currentLiveRoom) return;
 
-  const confirmed = await showInAppConfirm({
-    title: "العودة لاختيار الفرق",
-    message: "هل تريد إنهاء هذه الغرفة والعودة لشاشة اختيار وتعديل الفرق المشاركة؟",
-    confirmText: "نعم، العودة لاختيار الفرق",
-    cancelText: "البقاء في المسابقة",
-    type: "warning",
-    icon: "fa-arrow-right"
-  });
+  // إعادة ضبط الغرفة لحالة اختيار الفرق دون حذفها أو طرد المشاركين
+  currentLiveRoom.teamSelectionState = "selecting";
+  currentLiveRoom.phase = "team_stage";
+  currentLiveRoom.teamA = null;
+  currentLiveRoom.teamB = null;
+  currentLiveRoom.teams = [];
+  currentLiveRoom.teamScores = {};
+  currentLiveRoom.teamScoresDetails = {};
+  currentLiveRoom.teamRoundStarted = false;
+  currentLiveRoom.teamRoundState = "selecting_teams";
+  currentLiveRoom.teamLaunchTimestamp = null;
+  currentLiveRoom.teamCountdownStartedAt = null;
+  currentLiveRoom.teamActiveSolver = null;
 
-  if (!confirmed) return;
+  await saveRooms(currentLiveRoom);
 
-  if (currentLiveRoom) {
-    const closing = { ...currentLiveRoom };
-    currentLiveRoom = null;
-    await syncRoomToCloud(closing, true);
-  }
-
-  // إخفاء نوافذ ومسرح الفرق
+  // إخفاء نوافذ ومسرح الفرق فوراً
   document.getElementById("teamEntranceOverlay")?.classList.add("hidden");
   document.getElementById("teamRoundBannerOverlay")?.classList.add("hidden");
   document.getElementById("teamFlippingModalWrapper")?.classList.add("hidden");
   document.getElementById("teamGrandFinaleOverlay")?.classList.add("hidden");
   document.getElementById("teamCinematicPopupCard")?.classList.add("hidden");
+  document.getElementById("teamStartCountdownWrapper")?.classList.add("hidden");
+  if (stageQuestionCard) stageQuestionCard.classList.add("hidden");
 
-  showView("supervisor");
-  showToast("تم إلغاء الغرفة، يمكنك الآن اختيار الفرق الصحيحة", "fa-rotate-left");
-
-  setTimeout(() => {
-    openCreateRoomModal();
-    document.getElementById("modeCardTeams")?.click();
-  }, 200);
+  // فتح شاشة تحديد الفريقين للمشرف وبث شاشة الانتظار للآخرين
+  arenaSelectedTeamA = null;
+  arenaSelectedTeamB = null;
+  renderArenaTeamPickerUI(currentLiveRoom);
+  showToast("تم فتح شاشة اختيار وتعديل الفريقين بنجاح", "fa-rotate-left");
 }
 
 // --------------------------------------------------------
@@ -13225,6 +13561,13 @@ function showTeamRoundBanner(roundNum, onComplete) {
     if (typeof onComplete === "function") onComplete();
     return;
   }
+
+  // إخفاء وحجب أي سؤال أو بطاقة سؤال خلف لافتة الفقرة تماماً لتبقى فقط خلفية المنصة
+  if (stageQuestionCard) stageQuestionCard.classList.add("hidden");
+  if (stageInteractiveArea) stageInteractiveArea.innerHTML = "";
+  if (stageStudentName) stageStudentName.textContent = "";
+  if (stageQuestionText) stageQuestionText.textContent = "";
+
   const tag = document.getElementById("teamRoundBannerTag");
   const title = document.getElementById("teamRoundBannerTitle");
   const rule = document.getElementById("teamRoundBannerRule");
@@ -13266,6 +13609,9 @@ function showTeamRoundBanner(roundNum, onComplete) {
       overlay.classList.add("hidden");
       btnStartNow.disabled = false;
       if (btnStartText) btnStartText.textContent = `التالي: بدء ${cfg.name}`;
+
+      // إظهار بطاقة الأسئلة فقط بعد ضغط المشرف على زر التالي
+      if (stageQuestionCard) stageQuestionCard.classList.remove("hidden");
 
       if (typeof onComplete === "function") {
         onComplete();
@@ -13703,16 +14049,82 @@ function renderTeamQuestion(q, globalQIdx, qIndex) {
         </div>
       `;
     } else if (Array.isArray(q.pairs) && q.pairs.length > 0) {
+      const cleanPairs = q.pairs.map((p, pIdx) => {
+        let left = "";
+        let right = "";
+        if (Array.isArray(p)) { left = p[0] || ""; right = p[1] || ""; }
+        else if (p && typeof p === "object") { left = p.left || p.first || ""; right = p.right || p.second || ""; }
+        return { left: String(left).trim(), right: String(right).trim(), origIdx: pIdx };
+      }).filter(p => p.left || p.right);
+
+      const ARABIC_LETTERS = ["أ", "ب", "ج", "د", "هـ", "و", "ز", "ح", "ط", "ي"];
+      const leftItems = cleanPairs.map((p, idx) => ({
+        id: `team_match_left_${idx}`,
+        text: p.left,
+        num: idx + 1,
+        origIdx: p.origIdx
+      }));
+
+      let rightItems = cleanPairs.map((p, idx) => ({
+        id: `team_match_right_${idx}`,
+        text: p.right,
+        origIdx: p.origIdx,
+        letter: ARABIC_LETTERS[idx] || String(idx + 1)
+      }));
+
+      // خلط عشوائي حقيقي مبعثر ومؤكد بحيث لا تكون أي إجابة مقابلة لسؤالها أفقياً (Strict Scramble Derangement)
+      let scrambledRight = shuffleArray([...rightItems]);
+      if (cleanPairs.length > 1) {
+        for (let tries = 0; tries < 25; tries++) {
+          let hasDirectMatch = false;
+          for (let i = 0; i < scrambledRight.length; i++) {
+            if (scrambledRight[i].origIdx === leftItems[i].origIdx) {
+              hasDirectMatch = true;
+              const swapIdx = (i + 1) % scrambledRight.length;
+              const tmp = scrambledRight[i];
+              scrambledRight[i] = scrambledRight[swapIdx];
+              scrambledRight[swapIdx] = tmp;
+            }
+          }
+          if (!hasDirectMatch) break;
+        }
+      }
+
       specificContentHtml = `
-        <div style="margin: 10px auto; max-width: 520px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-          ${q.pairs.map(p => `
-            <div style="padding:8px 12px;background:#f1f5f9;border-radius:8px;font-weight:700;font-size:14px;text-align:center;">
-              ${escapeHtml(Array.isArray(p) ? p[0] : (p.left || ''))}
+        <div class="team-matching-container">
+          <div style="font-size:14px;font-weight:800;color:#2563eb;margin-bottom:6px;">
+            <i class="fa-solid fa-arrows-split-up-and-left"></i> صِل بين كل عنصر في الطرف (أ) وما يناسبه في الطرف (ب) المبعثر:
+          </div>
+          <div class="team-matching-grid" id="teamMatchInteractiveGrid">
+            <div class="team-matching-col">
+              <div class="team-matching-header"><i class="fa-solid fa-list-ol"></i> الطرف (أ) [الأصول]:</div>
+              ${leftItems.map(it => `
+                <div class="team-match-tile team-match-tile-left font-${q.font || 'quran'}" data-left-id="${it.id}" data-orig-idx="${it.origIdx}" data-num="${it.num}">
+                  <span class="team-match-badge">${it.num}</span>
+                  <span style="flex:1;text-align:right;">${escapeHtml(it.text)}</span>
+                  <span class="match-conn-pill" style="font-size:12px;color:#2563eb;font-weight:900;"></span>
+                </div>
+              `).join("")}
             </div>
-            <div style="padding:8px 12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;font-weight:700;font-size:14px;text-align:center;color:#1d4ed8;">
-              ${escapeHtml(Array.isArray(p) ? p[1] : (p.right || ''))}
+
+            <div class="team-matching-col">
+              <div class="team-matching-header"><i class="fa-solid fa-shuffle"></i> الطرف (ب) [مبعثر]:</div>
+              ${scrambledRight.map(it => `
+                <div class="team-match-tile team-match-tile-right font-${q.font || 'quran'}" data-right-id="${it.id}" data-orig-idx="${it.origIdx}" data-letter="${it.letter}">
+                  <span class="team-match-badge" style="background:#eff6ff;color:#1d4ed8;">${it.letter}</span>
+                  <span style="flex:1;text-align:right;">${escapeHtml(it.text)}</span>
+                  <span class="match-conn-pill" style="font-size:12px;color:#16a34a;font-weight:900;"></span>
+                </div>
+              `).join("")}
             </div>
-          `).join("")}
+          </div>
+          ${canSolve ? `
+            <div style="margin-top:10px;">
+              <button type="button" id="btnSubmitTeamMatch" class="btn-duo-green" style="font-size:15px;padding:8px 24px;display:none;">
+                <i class="fa-solid fa-check-double"></i> اعتماد التوصيل
+              </button>
+            </div>
+          ` : ''}
         </div>
       `;
     }
@@ -13737,6 +14149,86 @@ function renderTeamQuestion(q, globalQIdx, qIndex) {
         `}
       </div>
     `;
+
+    // تفعيل تفاعل النقر للتوصيل إن وجد
+    if (canSolve) {
+      let selectedLeftTile = null;
+      const connections = [];
+      const grid = document.getElementById("teamMatchInteractiveGrid");
+      const btnSubMatch = document.getElementById("btnSubmitTeamMatch");
+
+      if (grid) {
+        grid.querySelectorAll(".team-match-tile-left").forEach(lTile => {
+          lTile.addEventListener("click", () => {
+            if (lTile.classList.contains("connected")) {
+              const idx = connections.findIndex(c => c.leftTile === lTile);
+              if (idx > -1) {
+                connections[idx].rightTile.classList.remove("connected");
+                connections[idx].rightTile.querySelector(".match-conn-pill").textContent = "";
+                connections.splice(idx, 1);
+              }
+              lTile.classList.remove("connected", "selected");
+              lTile.querySelector(".match-conn-pill").textContent = "";
+              if (btnSubMatch) btnSubMatch.style.display = (connections.length === grid.querySelectorAll(".team-match-tile-left").length) ? "inline-flex" : "none";
+              return;
+            }
+            grid.querySelectorAll(".team-match-tile-left").forEach(t => t.classList.remove("selected"));
+            lTile.classList.add("selected");
+            selectedLeftTile = lTile;
+            try { soundFX.btnClick(); } catch (e) {}
+          });
+        });
+
+        grid.querySelectorAll(".team-match-tile-right").forEach(rTile => {
+          rTile.addEventListener("click", () => {
+            if (!selectedLeftTile) {
+              showToast("انقر على عنصر من الطرف (أ) أولاً ثم صله بالطرف (ب)", "fa-hand-pointer");
+              return;
+            }
+            if (rTile.classList.contains("connected")) {
+              const idx = connections.findIndex(c => c.rightTile === rTile);
+              if (idx > -1) {
+                connections[idx].leftTile.classList.remove("connected");
+                connections[idx].leftTile.querySelector(".match-conn-pill").textContent = "";
+                connections.splice(idx, 1);
+              }
+            }
+            const leftNum = selectedLeftTile.getAttribute("data-num");
+            const rightLetter = rTile.getAttribute("data-letter");
+            const leftOrig = parseInt(selectedLeftTile.getAttribute("data-orig-idx"));
+            const rightOrig = parseInt(rTile.getAttribute("data-orig-idx"));
+
+            selectedLeftTile.classList.remove("selected");
+            selectedLeftTile.classList.add("connected");
+            rTile.classList.add("connected");
+
+            selectedLeftTile.querySelector(".match-conn-pill").textContent = `⟵ [${rightLetter}]`;
+            rTile.querySelector(".match-conn-pill").textContent = `[${leftNum}] ⟶`;
+
+            connections.push({ leftOrig, rightOrig, leftTile: selectedLeftTile, rightTile: rTile });
+            selectedLeftTile = null;
+
+            try { soundFX.btnClick(); } catch (e) {}
+
+            const totalLeft = grid.querySelectorAll(".team-match-tile-left").length;
+            if (btnSubMatch) {
+              btnSubMatch.style.display = (connections.length === totalLeft) ? "inline-flex" : "none";
+            }
+          });
+        });
+
+        btnSubMatch?.addEventListener("click", () => {
+          clearInterval(liveTimerInterval);
+          const allCorrect = connections.every(c => c.leftOrig === c.rightOrig);
+          if (allCorrect) {
+            try { soundFX.correct(); } catch (e) {}
+          } else {
+            try { soundFX.wrong(); } catch (e) {}
+          }
+          handleTeamQuestionResult(allCorrect, null, allCorrect ? 5 : 0);
+        });
+      }
+    }
 
     document.getElementById("btnTeamEvaluateCorrect")?.addEventListener("click", () => {
       clearInterval(liveTimerInterval);
@@ -13979,18 +14471,35 @@ document.getElementById("btnCloseTeamContest")?.addEventListener("click", () => 
 function syncTeamStageRealtime(room) {
   // مزامنة حالة مسرح الفرق اللحظية لجميع الأجهزة
   if (!room || !room.isTeamMatch) return;
+
+  // إذا كانت الغرفة في وضع اختيار وتحديد فريقي المواجهة
+  if (room.teamSelectionState === "selecting" || !room.teamA || !room.teamB) {
+    renderArenaTeamPickerUI(room);
+    return;
+  }
+  document.getElementById("arenaTeamSelectionOverlay")?.classList.add("hidden");
+
   ensureTeamQuestionsPopulated(room);
   showArenaPhase("stage");
 
   const isSup = currentUser && (currentUser.role === "supervisor" || isSupervisor(currentUser.name) || currentUser.name === room.leaderName);
 
-  // إظهار زر العودة لاختيار الفرق للمشرف في شريط المسرح
+  // إظهار زر العودة لاختيار الفرق وزر الإعدادات للمشرف فقط
   const btnReturn = document.getElementById("btnReturnToTeamSelect");
   if (btnReturn) {
-    if (isSup && room.isTeamMatch) {
-      btnReturn.classList.remove("hidden");
-    } else {
-      btnReturn.classList.add("hidden");
+    btnReturn.classList.toggle("hidden", !(isSup && room.isTeamMatch));
+  }
+  const btnSettings = document.getElementById("btnOpenRoomSettingsModal");
+  if (btnSettings) {
+    btnSettings.classList.toggle("hidden", !isSup);
+  }
+
+  // إذا لم تبدأ الفقرة بعد (لافتة الفقرة معروضة): تأكد من إخفاء بطاقة السؤال خلفها تماماً
+  if (!room.teamRoundStarted) {
+    if (stageQuestionCard) stageQuestionCard.classList.add("hidden");
+  } else {
+    if (stageQuestionCard && (!document.getElementById("teamRoundBannerOverlay") || document.getElementById("teamRoundBannerOverlay").classList.contains("hidden"))) {
+      stageQuestionCard.classList.remove("hidden");
     }
   }
 
