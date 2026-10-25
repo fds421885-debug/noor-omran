@@ -40,6 +40,8 @@ import {
   collection, 
   getDocs, 
   query, 
+  where,
+  limit,
   orderBy, 
   serverTimestamp,
   onSnapshot,
@@ -346,23 +348,33 @@ function isSupervisor(name) {
   const norm = normalizeArabic(name).trim();
   const rawClean = name.trim().toLowerCase();
 
+  // 1. الكلمات المفتاحية الإدارية المحجوزة حصراً للمشرف العام
   const directKeywords = [
     "مشرف", "المشرف", "المشرف العام", "مشرف البرنامج", "مشرف المسابقة",
     "admin", "administrator", "super", "supervisor", "ادمن", "الادمن",
-    "رئيس المسابقة", "ادارة المسابقة", "الادارة", "ادارة"
+    "رئيس المسابقة", "ادارة المسابقة"
   ];
   if (directKeywords.includes(norm) || directKeywords.includes(rawClean)) {
     return true;
   }
 
+  // 2. المطابقة التامة الدقيقة للاسم الكامل للمشرف العام فقط لا غير (دون أي اشتمال جزئي)
   const masterNorm = normalizeArabic(MASTER_SUPERVISOR_NAME); // "محمد منتصر محمد يونس"
-  if (norm === masterNorm || norm.startsWith(masterNorm)) return true;
+  if (norm === masterNorm) return true;
 
-  if (norm === "محمد منتصر" || norm === "منتصر" || norm === "منتصر يونس" || norm === "محمد منتصر يونس" || norm === "محمد منتصر راغب يونس") {
-    return true;
-  }
-  if (norm.includes("محمد منتصر") || (norm.includes("منتصر") && (norm.includes("راغب") || norm.includes("يونس")))) {
-    return true;
+  // دعم الصيغة الثنائية المباشرة إذا كتب المشرف اسمه الثنائي تحديداً "محمد منتصر" فقط
+  if (norm === "محمد منتصر") return true;
+
+  // 3. فحص الحسابات المعتمدة مسبقاً في النظام بدور مشرف (مطابقة تامة لكامل الاسم)
+  if (Array.isArray(participantsCache) && participantsCache.length > 0) {
+    const isRegisteredSupervisor = participantsCache.some(p => 
+      p && p.role === "supervisor" && (
+        p.normalizedName === norm || 
+        normalizeArabic(p.name || "") === norm ||
+        (p.name && p.name.trim().toLowerCase() === rawClean)
+      )
+    );
+    if (isRegisteredSupervisor) return true;
   }
 
   return false;
@@ -453,6 +465,9 @@ function getDocumentId(normalizedName) {
   const hashStr = Math.abs(hash).toString(36);
   return "user_" + encoded.slice(0, 40) + "_" + hashStr;
 }
+
+// المعرف الثابت الموحد لحساب المشرف العام الرئيسي
+const MASTER_SUPERVISOR_DOC_ID = getDocumentId(normalizeArabic(MASTER_SUPERVISOR_NAME));
 
 // خوارزمية Fisher-Yates لخلط وتشتيت العناصر عشوائياً (مبهدلة للتفكير والذكاء)
 function shuffleArray(arr) {
@@ -839,12 +854,14 @@ function loadInitialStorage() {
     participantsCache = [];
   }
 
-  // التأكد من وجود المشرف العام والمعلم والعارض دائماً
+  // التأكد من وجود المشرف العام والمعلم والعارض دائماً مع إزالة أي تكرار
   const supNorm = normalizeArabic(MASTER_SUPERVISOR_NAME);
-  const supExists = participantsCache.find(p => p.normalizedName === supNorm || p.role === "supervisor");
+  // تنظيف أي حسابات مكررة للمشرف العام
+  participantsCache = participantsCache.filter(p => !(p && p.name === MASTER_SUPERVISOR_NAME && p.id !== MASTER_SUPERVISOR_DOC_ID));
+  const supExists = participantsCache.find(p => p.id === MASTER_SUPERVISOR_DOC_ID || (p.normalizedName === supNorm && p.role === "supervisor"));
   if (!supExists) {
     participantsCache.unshift({
-      id: getDocumentId(supNorm),
+      id: MASTER_SUPERVISOR_DOC_ID,
       name: MASTER_SUPERVISOR_NAME,
       normalizedName: supNorm,
       role: "supervisor",
@@ -854,6 +871,8 @@ function loadInitialStorage() {
       lastLoginAt: new Date().toISOString(),
       loginCount: 1
     });
+  } else {
+    supExists.id = MASTER_SUPERVISOR_DOC_ID;
   }
 
   const teacherNorm = normalizeArabic("المعلم المعتمد");
@@ -1088,11 +1107,12 @@ async function fetchParticipantsFromCloud(forceFresh = false) {
       }
     });
 
-    // ضمان وجود حساب المشرف العام دائماً
+    // ضمان وجود حساب المشرف العام الرئيسي الموحد مع إزالة أي تكرار
     const supNorm = normalizeArabic(MASTER_SUPERVISOR_NAME);
-    if (!cloudUsers.some(p => p.normalizedName === supNorm || p.name === MASTER_SUPERVISOR_NAME)) {
-      cloudUsers.unshift({
-        id: getDocumentId(supNorm),
+    let masterSupFound = cloudUsers.find(p => p.id === MASTER_SUPERVISOR_DOC_ID || (p.normalizedName === supNorm && p.role === "supervisor"));
+    if (!masterSupFound) {
+      masterSupFound = {
+        id: MASTER_SUPERVISOR_DOC_ID,
         name: MASTER_SUPERVISOR_NAME,
         normalizedName: supNorm,
         role: "supervisor",
@@ -1101,11 +1121,18 @@ async function fetchParticipantsFromCloud(forceFresh = false) {
         firstLoginAt: new Date().toISOString(),
         lastLoginAt: new Date().toISOString(),
         loginCount: 1
-      });
+      };
+      cloudUsers.unshift(masterSupFound);
+    } else {
+      masterSupFound.id = MASTER_SUPERVISOR_DOC_ID;
+      masterSupFound.name = MASTER_SUPERVISOR_NAME;
     }
 
-    if (cloudUsers.length > 0) {
-      participantsCache = cloudUsers;
+    // تنقية القائمة لمنع أي تكرار للمشرف العام
+    const finalCloudUsers = cloudUsers.filter(p => !(p && p.name === MASTER_SUPERVISOR_NAME && p.id !== MASTER_SUPERVISOR_DOC_ID));
+
+    if (finalCloudUsers.length > 0) {
+      participantsCache = finalCloudUsers;
       saveParticipants();
       renderAccountsTable();
       if (currentUser && (currentUser.role === "supervisor" || currentUser.role === "teacher" || currentUser.role === "presenter")) {
@@ -1332,9 +1359,10 @@ function setupRealtimeCloudListeners() {
         });
       });
       const supNorm = normalizeArabic(MASTER_SUPERVISOR_NAME);
-      if (!cloudUsers.some(p => p.normalizedName === supNorm)) {
-        cloudUsers.unshift({
-          id: getDocumentId(supNorm),
+      let masterSup = cloudUsers.find(p => p.id === MASTER_SUPERVISOR_DOC_ID || (p.normalizedName === supNorm && p.role === "supervisor"));
+      if (!masterSup) {
+        masterSup = {
+          id: MASTER_SUPERVISOR_DOC_ID,
           name: MASTER_SUPERVISOR_NAME,
           normalizedName: supNorm,
           role: "supervisor",
@@ -1343,12 +1371,18 @@ function setupRealtimeCloudListeners() {
           firstLoginAt: new Date().toISOString(),
           lastLoginAt: new Date().toISOString(),
           loginCount: 1
-        });
+        };
+        cloudUsers.unshift(masterSup);
+      } else {
+        masterSup.id = MASTER_SUPERVISOR_DOC_ID;
+        masterSup.name = MASTER_SUPERVISOR_NAME;
       }
-      if (currentUser && !cloudUsers.some(p => p.id === currentUser.id || p.normalizedName === currentUser.normalizedName || p.name === currentUser.name)) {
-        cloudUsers.push(currentUser);
+      // تنقية شاملة لمنع أي تكرار للمشرف العام
+      const cleanUsers = cloudUsers.filter(p => !(p && p.name === MASTER_SUPERVISOR_NAME && p.id !== MASTER_SUPERVISOR_DOC_ID));
+      if (currentUser && !cleanUsers.some(p => p.id === currentUser.id || p.normalizedName === currentUser.normalizedName || p.name === currentUser.name)) {
+        cleanUsers.push(currentUser);
       }
-      participantsCache = cloudUsers;
+      participantsCache = cleanUsers;
       localStorage.setItem("nour_participants", JSON.stringify(participantsCache));
 
       // الحفاظ على جلسة المستخدم الحالي وتحديث بياناته وترقيته فورياً دون الحاجة لتحديث الصفحة
@@ -2354,12 +2388,11 @@ async function loadCloudData(forceServer = false) {
 
       // التأكد من وجود حساب المشرف العام دائماً
       const supNorm = normalizeArabic(MASTER_SUPERVISOR_NAME);
-      const supDocId = getDocumentId(supNorm);
       const listToCheck = cloudUsers.length > 0 ? cloudUsers : participantsCache;
-      let masterSup = listToCheck.find(p => p.normalizedName === supNorm || p.id === supDocId || p.name === MASTER_SUPERVISOR_NAME);
+      let masterSup = listToCheck.find(p => p.id === MASTER_SUPERVISOR_DOC_ID || (p.normalizedName === supNorm && p.role === "supervisor"));
       if (!masterSup) {
         masterSup = {
-          id: supDocId,
+          id: MASTER_SUPERVISOR_DOC_ID,
           name: MASTER_SUPERVISOR_NAME,
           normalizedName: supNorm,
           role: "supervisor",
@@ -2377,12 +2410,18 @@ async function loadCloudData(forceServer = false) {
         if (!isQuotaExhausted()) {
           syncParticipantToCloud(masterSup).catch(() => {});
         }
+      } else {
+        masterSup.id = MASTER_SUPERVISOR_DOC_ID;
+        masterSup.name = MASTER_SUPERVISOR_NAME;
       }
+
       if (cloudUsers.length > 0) {
-        if (currentUser && !cloudUsers.some(p => p.id === currentUser.id || p.normalizedName === currentUser.normalizedName || p.name === currentUser.name)) {
-          cloudUsers.push(currentUser);
+        // تنقية القائمة لمنع أي تكرار للمشرف العام
+        let finalCloudUsers = cloudUsers.filter(p => !(p && p.name === MASTER_SUPERVISOR_NAME && p.id !== MASTER_SUPERVISOR_DOC_ID));
+        if (currentUser && !finalCloudUsers.some(p => p.id === currentUser.id || p.normalizedName === currentUser.normalizedName || p.name === currentUser.name)) {
+          finalCloudUsers.push(currentUser);
         }
-        participantsCache = cloudUsers;
+        participantsCache = finalCloudUsers;
         localStorage.setItem("nour_participants", JSON.stringify(participantsCache));
       }
       counts.users = participantsCache.length;
@@ -2526,6 +2565,9 @@ function updateDropdowns() {
   }
 
   renderSchoolsAndGradesTags();
+  if (typeof updateHonorBoardFiltersDropdowns === "function") {
+    try { updateHonorBoardFiltersDropdowns(); } catch (e) { console.warn("Honor filters dropdown update notice:", e); }
+  }
 }
 
 // --------------------------------------------------------
@@ -3015,11 +3057,29 @@ async function handleLoginSubmit(event) {
     }
 
     // 1. الدخول الفوري السريع للمشرف العام
-    if (isSupervisor(rawName)) {
-      let supUser = participantsCache.find(p => p.role === "supervisor" || isSupervisor(p.name));
+    const isMasterAdmin = (
+      norm === normalizeArabic(MASTER_SUPERVISOR_NAME) ||
+      norm === "محمد منتصر" ||
+      ["مشرف", "المشرف", "المشرف العام", "مشرف البرنامج", "مشرف المسابقة", "admin", "administrator", "super", "supervisor", "ادمن", "الادمن", "رئيس المسابقة", "ادارة المسابقة"].includes(norm) ||
+      ["مشرف", "المشرف", "المشرف العام", "مشرف البرنامج", "مشرف المسابقة", "admin", "administrator", "super", "supervisor", "ادمن", "الادمن", "رئيس المسابقة", "ادارة المسابقة"].includes(rawName.trim().toLowerCase())
+    );
+
+    if (isMasterAdmin) {
+      let supUser = participantsCache.find(p => p && (p.id === MASTER_SUPERVISOR_DOC_ID || (p.normalizedName === normalizeArabic(MASTER_SUPERVISOR_NAME) && p.role === "supervisor") || p.name === MASTER_SUPERVISOR_NAME));
+      if (!supUser && db) {
+        try {
+          const supSnap = await withTimeout(getDoc(doc(db, "participants", MASTER_SUPERVISOR_DOC_ID)), 3000, null);
+          if (supSnap && supSnap.exists && supSnap.exists()) {
+            supUser = { id: MASTER_SUPERVISOR_DOC_ID, ...supSnap.data() };
+          }
+        } catch (e) {
+          console.warn("[LOGIN FLOW] Firestore master supervisor fetch notice:", e);
+        }
+      }
+
       if (!supUser) {
         supUser = {
-          id: docId,
+          id: MASTER_SUPERVISOR_DOC_ID,
           name: MASTER_SUPERVISOR_NAME,
           normalizedName: normalizeArabic(MASTER_SUPERVISOR_NAME),
           role: "supervisor",
@@ -3030,21 +3090,52 @@ async function handleLoginSubmit(event) {
           loginCount: 1,
           authUid: auth?.currentUser?.uid || null
         };
-        participantsCache.unshift(supUser);
-        saveParticipants();
-        syncParticipantToCloud(supUser).catch(err => console.error("[LOGIN FLOW] Supervisor cloud sync error:", err));
       } else {
+        supUser.id = MASTER_SUPERVISOR_DOC_ID;
+        supUser.name = MASTER_SUPERVISOR_NAME;
+        supUser.role = "supervisor";
         supUser.lastLoginAt = new Date().toISOString();
         supUser.loginCount = (supUser.loginCount || 1) + 1;
         supUser.authUid = auth?.currentUser?.uid || supUser.authUid || null;
-        saveParticipants();
-        syncParticipantToCloud(supUser).catch(err => console.error("[LOGIN FLOW] Supervisor cloud sync error:", err));
       }
+
+      // تنقية الكاش لحذف أي حسابات مكررة للمشرف العام
+      participantsCache = participantsCache.filter(p => !(p && p.name === MASTER_SUPERVISOR_NAME && p.id !== MASTER_SUPERVISOR_DOC_ID));
+      const supIdx = participantsCache.findIndex(p => p.id === MASTER_SUPERVISOR_DOC_ID);
+      if (supIdx >= 0) {
+        participantsCache[supIdx] = supUser;
+      } else {
+        participantsCache.unshift(supUser);
+      }
+      saveParticipants();
+      syncParticipantToCloud(supUser).catch(err => console.error("[LOGIN FLOW] Supervisor cloud sync error:", err));
 
       try { renderSupervisorDashboard(); } catch (e) { console.warn(e); }
       try { renderAccountsTable(); } catch (e) { console.warn(e); }
       finalizeUserSession(supUser, true);
       showToast("مرحباً بك يا مشرف البرنامج! تم الدخول بنجاح", "fa-crown");
+      loadCloudData().catch(() => {});
+      return;
+    }
+
+    // 1b. الدخول لمشرف معتمد إضافي مسجل مسبقاً في النظام
+    const registeredSupervisor = participantsCache.find(p => 
+      p && p.role === "supervisor" && (
+        p.normalizedName === norm || 
+        normalizeArabic(p.name || "") === norm ||
+        (p.name && p.name.trim().toLowerCase() === rawName.toLowerCase())
+      )
+    );
+    if (registeredSupervisor) {
+      registeredSupervisor.lastLoginAt = new Date().toISOString();
+      registeredSupervisor.loginCount = (registeredSupervisor.loginCount || 1) + 1;
+      registeredSupervisor.authUid = auth?.currentUser?.uid || registeredSupervisor.authUid || null;
+      saveParticipants();
+      syncParticipantToCloud(registeredSupervisor).catch(err => console.error("[LOGIN FLOW] Co-supervisor cloud sync error:", err));
+      try { renderSupervisorDashboard(); } catch (e) { console.warn(e); }
+      try { renderAccountsTable(); } catch (e) { console.warn(e); }
+      finalizeUserSession(registeredSupervisor, true);
+      showToast("مرحباً بعودتك يا " + registeredSupervisor.name + "! تم الدخول كمشرف معتمد", "fa-crown");
       loadCloudData().catch(() => {});
       return;
     }
@@ -3162,6 +3253,20 @@ async function handleLoginSubmit(event) {
           }
         } catch (e) {
           console.warn("[LOGIN FLOW] Firestore participant lookup notice:", e?.message || e);
+        }
+
+        // بحث احتياطي في قاعدة البيانات السحابية بالاسم الموحد لضمان عدم معاملة الطالب المسجل مسبقاً كطالب جديد
+        if (!foundUser) {
+          try {
+            const qNorm = query(collection(db, "participants"), where("normalizedName", "==", norm), limit(1));
+            const qSnap = await withTimeout(getDocs(qNorm), 3000, null);
+            if (qSnap && !qSnap.empty) {
+              const docItem = qSnap.docs[0];
+              foundUser = { id: docItem.id, ...docItem.data() };
+            }
+          } catch (qErr) {
+            console.warn("[LOGIN FLOW] Firestore participant fallback query notice:", qErr?.message || qErr);
+          }
         }
       }
 
@@ -3476,9 +3581,14 @@ function finalizeUserSession(user, isReturning = true) {
 
   const cleanRole = (user.role || (isSupervisor(rawName) ? "supervisor" : "student")).toLowerCase().trim();
   const cleanNorm = user.normalizedName || normalizeArabic(rawName);
-  const cleanId = user.id || getDocumentId(cleanNorm);
+  let cleanId = user.id || getDocumentId(cleanNorm);
+  if (cleanRole === "supervisor" && (user.name === MASTER_SUPERVISOR_NAME || cleanNorm === normalizeArabic(MASTER_SUPERVISOR_NAME))) {
+    cleanId = MASTER_SUPERVISOR_DOC_ID;
+  }
 
-  user.name = rawName;
+  user.name = (cleanRole === "supervisor" && (user.name === MASTER_SUPERVISOR_NAME || cleanNorm === normalizeArabic(MASTER_SUPERVISOR_NAME)))
+    ? MASTER_SUPERVISOR_NAME 
+    : rawName;
   user.role = cleanRole;
   user.normalizedName = cleanNorm;
   user.id = cleanId;
@@ -11520,11 +11630,22 @@ function recordHonorScore(studentName, sessionFinalScore) {
 
   // 1. تحديث قائمة لوحة الشرف
   const existingIdx = honorLeaderboardCache.findIndex(x => x.name === studentName);
+  const nowIso = new Date().toISOString();
   if (existingIdx >= 0) {
     honorLeaderboardCache[existingIdx].score = newTotal;
-    honorLeaderboardCache[existingIdx].timestamp = new Date().toISOString();
+    honorLeaderboardCache[existingIdx].timestamp = nowIso;
+    if (studentUser) {
+      honorLeaderboardCache[existingIdx].school = studentUser.school || honorLeaderboardCache[existingIdx].school || "";
+      honorLeaderboardCache[existingIdx].grade = studentUser.grade || honorLeaderboardCache[existingIdx].grade || "";
+    }
   } else {
-    honorLeaderboardCache.push({ name: studentName, score: newTotal, timestamp: new Date().toISOString() });
+    honorLeaderboardCache.push({
+      name: studentName,
+      score: newTotal,
+      timestamp: nowIso,
+      school: studentUser?.school || "",
+      grade: studentUser?.grade || ""
+    });
   }
 
   // ترتيب تنازلي
@@ -11571,11 +11692,22 @@ function showHonorBoardModal(openNextStudentAfter = false, onDone = null, highli
     previousTargetScore = Math.max(0, currentTargetScore - scoreDelta);
 
     const existingEntry = honorLeaderboardCache.find(x => x.name === highlightStudentName);
+    const nowIsoModal = new Date().toISOString();
     if (existingEntry) {
       existingEntry.score = currentTargetScore;
-      existingEntry.timestamp = new Date().toISOString();
+      existingEntry.timestamp = nowIsoModal;
+      if (studentUser) {
+        existingEntry.school = studentUser.school || existingEntry.school || "";
+        existingEntry.grade = studentUser.grade || existingEntry.grade || "";
+      }
     } else {
-      honorLeaderboardCache.push({ name: highlightStudentName, score: currentTargetScore, timestamp: new Date().toISOString() });
+      honorLeaderboardCache.push({
+        name: highlightStudentName,
+        score: currentTargetScore,
+        timestamp: nowIsoModal,
+        school: studentUser?.school || "",
+        grade: studentUser?.grade || ""
+      });
     }
     honorLeaderboardCache.sort((a, b) => b.score - a.score);
     localStorage.setItem("nour_honor_board", JSON.stringify(honorLeaderboardCache));
@@ -11994,60 +12126,364 @@ document.getElementById("btnResetHonorBoard")?.addEventListener("click", async (
   }
 });
 
+// --------------------------------------------------------
+// مساعدات لوحة الشرف التفاعلية والفلترة الذكية
+// --------------------------------------------------------
+function parseHonorTimestamp(raw) {
+  if (!raw) return null;
+  if (typeof raw === "number") return raw;
+  if (typeof raw === "object" && typeof raw.toMillis === "function") return raw.toMillis();
+  if (typeof raw === "object" && raw.seconds) return raw.seconds * 1000;
+  const t = new Date(raw).getTime();
+  return isNaN(t) ? null : t;
+}
+
+function formatHonorRelativeTime(raw) {
+  const ts = parseHonorTimestamp(raw);
+  if (!ts) return "سابقاً";
+  const now = Date.now();
+  const diffSec = Math.max(0, Math.floor((now - ts) / 1000));
+  if (diffSec < 60) return "الآن";
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) {
+    if (diffMin === 1) return "منذ دقيقة";
+    if (diffMin === 2) return "منذ دقيقتين";
+    if (diffMin <= 10) return `منذ ${diffMin} دقائق`;
+    return `منذ ${diffMin} دقيقة`;
+  }
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) {
+    if (diffHr === 1) return "منذ ساعة";
+    if (diffHr === 2) return "منذ ساعتين";
+    if (diffHr <= 10) return `منذ ${diffHr} ساعات`;
+    return `منذ ${diffHr} ساعة`;
+  }
+  const diffDays = Math.floor(diffHr / 24);
+  if (diffDays === 1) return "أمس";
+  if (diffDays === 2) return "منذ يومين";
+  if (diffDays <= 10) return `منذ ${diffDays} أيام`;
+  if (diffDays < 30) {
+    const weeks = Math.floor(diffDays / 7);
+    if (weeks <= 1) return "منذ أسبوع";
+    if (weeks === 2) return "منذ أسبوعين";
+    return `منذ ${weeks} أسابيع`;
+  }
+  const diffMonths = Math.floor(diffDays / 30);
+  if (diffMonths <= 1) return "منذ شهر";
+  if (diffMonths === 2) return "منذ شهرين";
+  if (diffMonths <= 10) return `منذ ${diffMonths} أشهر`;
+  return `منذ ${diffMonths} شهر`;
+}
+
+function updateHonorBoardFiltersDropdowns() {
+  const schoolSelect = document.getElementById("honorSchoolFilterSelect");
+  const gradeSelect = document.getElementById("honorGradeFilterSelect");
+  if (!schoolSelect || !gradeSelect) return;
+
+  const currentSchool = schoolSelect.value || "all";
+  const currentGrade = gradeSelect.value || "all";
+
+  // تجميع كافة المدارس من الذاكرة والطلاب وسجلات لوحة الشرف
+  const schoolsSet = new Set(Array.isArray(schoolsCache) ? schoolsCache.filter(Boolean) : []);
+  if (Array.isArray(participantsCache)) {
+    participantsCache.forEach(p => { if (p && p.school && p.school.trim()) schoolsSet.add(p.school.trim()); });
+  }
+  if (Array.isArray(honorLeaderboardCache)) {
+    honorLeaderboardCache.forEach(h => { if (h && h.school && h.school.trim()) schoolsSet.add(h.school.trim()); });
+  }
+  const sortedSchools = Array.from(schoolsSet).filter(s => s && s !== "all").sort((a, b) => a.localeCompare(b, "ar"));
+
+  let schoolHtml = '<option value="all">جميع المدارس والمراكز</option>';
+  sortedSchools.forEach(s => {
+    schoolHtml += `<option value="${s}">${s}</option>`;
+  });
+  schoolSelect.innerHTML = schoolHtml;
+  if (sortedSchools.includes(currentSchool) || currentSchool === "all") {
+    schoolSelect.value = currentSchool;
+  } else {
+    schoolSelect.value = "all";
+  }
+
+  // تجميع كافة الصفوف والفئات
+  const gradesSet = new Set(Array.isArray(gradesCache) ? gradesCache.filter(Boolean) : []);
+  if (Array.isArray(participantsCache)) {
+    participantsCache.forEach(p => { if (p && p.grade && p.grade.trim()) gradesSet.add(p.grade.trim()); });
+  }
+  if (Array.isArray(honorLeaderboardCache)) {
+    honorLeaderboardCache.forEach(h => { if (h && h.grade && h.grade.trim()) gradesSet.add(h.grade.trim()); });
+  }
+  const sortedGrades = Array.from(gradesSet).filter(g => g && g !== "all").sort((a, b) => a.localeCompare(g, "ar"));
+
+  let gradeHtml = '<option value="all">جميع الصفوف والفئات</option>';
+  sortedGrades.forEach(g => {
+    gradeHtml += `<option value="${g}">${g}</option>`;
+  });
+  gradeSelect.innerHTML = gradeHtml;
+  if (sortedGrades.includes(currentGrade) || currentGrade === "all") {
+    gradeSelect.value = currentGrade;
+  } else {
+    gradeSelect.value = "all";
+  }
+}
+
+let _honorFiltersListenersInitialized = false;
+function setupHonorBoardFiltersListeners() {
+  if (_honorFiltersListenersInitialized) return;
+  const schoolSelect = document.getElementById("honorSchoolFilterSelect");
+  const gradeSelect = document.getElementById("honorGradeFilterSelect");
+  const periodSelect = document.getElementById("honorTimePeriodSelect");
+  const searchInput = document.getElementById("honorSearchInput");
+  const resetBtn = document.getElementById("btnResetHonorFilters");
+
+  if (!schoolSelect || !gradeSelect || !periodSelect) return;
+
+  const onFilterChange = () => {
+    renderHonorLeaderboardTab();
+  };
+
+  schoolSelect.addEventListener("change", onFilterChange);
+  gradeSelect.addEventListener("change", onFilterChange);
+  periodSelect.addEventListener("change", onFilterChange);
+  if (searchInput) {
+    searchInput.addEventListener("input", onFilterChange);
+  }
+
+  if (resetBtn) {
+    resetBtn.addEventListener("click", () => {
+      schoolSelect.value = "all";
+      gradeSelect.value = "all";
+      periodSelect.value = "all";
+      if (searchInput) searchInput.value = "";
+      renderHonorLeaderboardTab();
+      showToast("تمت استعادة كافة المتسابقين في لوحة الشرف", "fa-rotate-left");
+    });
+  }
+
+  _honorFiltersListenersInitialized = true;
+}
+
 // دالة عرض وتحديث لوحة الشرف التفاعلية في التبويب وواجهة الطالب
 function renderHonorLeaderboardTab() {
   const tabList = document.getElementById("honorBoardTabList");
   const studentList = document.getElementById("studentHonorBoardList");
 
-  const buildHtml = (container) => {
-    if (!container) return;
-    if (!honorLeaderboardCache || honorLeaderboardCache.length === 0) {
-      container.innerHTML = `
+  // تهيئة مستمعات الأحداث وتحديث القوائم المنسدلة
+  setupHonorBoardFiltersListeners();
+  const schoolSelect = document.getElementById("honorSchoolFilterSelect");
+  if (schoolSelect && schoolSelect.options.length <= 1) {
+    updateHonorBoardFiltersDropdowns();
+  }
+
+  const schoolFilter = document.getElementById("honorSchoolFilterSelect")?.value || "all";
+  const gradeFilter = document.getElementById("honorGradeFilterSelect")?.value || "all";
+  const periodFilter = document.getElementById("honorTimePeriodSelect")?.value || "all";
+  const searchQuery = (document.getElementById("honorSearchInput")?.value || "").trim().toLowerCase();
+
+  // حساب وقت البداية للفترة الزمنية
+  let timeCutoff = null;
+  const now = Date.now();
+  if (periodFilter === "day") {
+    timeCutoff = now - 24 * 60 * 60 * 1000;
+  } else if (periodFilter === "week") {
+    timeCutoff = now - 7 * 24 * 60 * 60 * 1000;
+  } else if (periodFilter === "month") {
+    timeCutoff = now - 30 * 24 * 60 * 60 * 1000;
+  }
+
+  const totalRawCount = Array.isArray(honorLeaderboardCache) ? honorLeaderboardCache.length : 0;
+
+  // فلترة متسابقي لوحة الشرف
+  const filteredList = (Array.isArray(honorLeaderboardCache) ? honorLeaderboardCache : []).filter(item => {
+    const studentData = Array.isArray(participantsCache) ? participantsCache.find(p => p.name === item.name) : null;
+    const itemSchool = item.school || studentData?.school || "مدرسة نور البيان";
+    const itemGrade = item.grade || studentData?.grade || "عام";
+    const itemRawTime = item.timestamp || studentData?.lastLoginAt || studentData?.updatedAt || studentData?.createdAt || null;
+    const itemTimeMs = parseHonorTimestamp(itemRawTime);
+
+    // 1. فلترة المدرسة
+    if (schoolFilter !== "all" && itemSchool !== schoolFilter) {
+      return false;
+    }
+
+    // 2. فلترة الصف
+    if (gradeFilter !== "all" && itemGrade !== gradeFilter) {
+      return false;
+    }
+
+    // 3. فلترة الفترة الزمنية
+    if (timeCutoff !== null) {
+      if (!itemTimeMs || itemTimeMs < timeCutoff) {
+        return false;
+      }
+    }
+
+    // 4. فلترة البحث بالاسم
+    if (searchQuery) {
+      const nameMatch = (item.name || "").toLowerCase().includes(searchQuery);
+      const schoolMatch = (itemSchool || "").toLowerCase().includes(searchQuery);
+      const gradeMatch = (itemGrade || "").toLowerCase().includes(searchQuery);
+      if (!nameMatch && !schoolMatch && !gradeMatch) {
+        return false;
+      }
+    }
+
+    return true;
+  });
+
+  // تحديث شارة عدد النتائج
+  const countBadge = document.getElementById("honorFilteredCountBadge");
+  if (countBadge) {
+    const isFiltered = (schoolFilter !== "all" || gradeFilter !== "all" || periodFilter !== "all" || searchQuery !== "");
+    if (totalRawCount === 0) {
+      countBadge.textContent = "لا توجد نتائج";
+      countBadge.style.background = "#e2e8f0";
+      countBadge.style.color = "#475569";
+    } else if (isFiltered) {
+      countBadge.textContent = `المعروض: ${filteredList.length} من أصل ${totalRawCount}`;
+      countBadge.style.background = filteredList.length > 0 ? "#dcfce7" : "#fee2e2";
+      countBadge.style.color = filteredList.length > 0 ? "#15803d" : "#b91c1c";
+    } else {
+      countBadge.textContent = `الإجمالي: ${totalRawCount} متسابق`;
+      countBadge.style.background = "#e2e8f0";
+      countBadge.style.color = "#475569";
+    }
+  }
+
+  // بناء عرض المشرف المفصل (tabList)
+  if (tabList) {
+    if (totalRawCount === 0) {
+      tabList.innerHTML = `
         <div style="text-align: center; padding: 40px 15px; color: #64748b; background: #f8fafc; border-radius: var(--radius-md); border: 2px dashed #cbd5e1;">
           <i class="fa-solid fa-trophy" style="font-size: 45px; color: #facc15; margin-bottom: 12px; display: block;"></i>
           <h4 style="font-weight: 800; font-size: 17px; color: #334155; margin-bottom: 6px;">لا توجد نتائج مسجلة حتى الآن</h4>
           <p style="font-size: 13.5px; color: #94a3b8; margin: 0;">ستظهر أسماء المتسابقين ونقاطهم المحفوظة هنا فور تقييمهم في المسابقات الحية.</p>
         </div>
       `;
-      return;
-    }
-
-    container.innerHTML = honorLeaderboardCache.map((item, idx) => {
-      const isMe = currentUser && currentUser.name === item.name;
-      let rankClass = "";
-      if (idx === 0) rankClass = "rank-1";
-      else if (idx === 1) rankClass = "rank-2";
-      else if (idx === 2) rankClass = "rank-3";
-
-      const studentData = participantsCache.find(p => p.name === item.name);
-      const schoolInfo = studentData ? `${studentData.school || 'مدرسة نور البيان'} | ${studentData.grade || 'طالب'}` : 'متسابق معتمد';
-
-      return `
-        <div class="honor-board-tab-item ${rankClass} ${isMe ? 'current-user-item' : ''}">
-          <div class="honor-item-left">
-            <div class="honor-item-rank">
-              ${idx === 0 ? '<i class="fa-solid fa-crown" style="color: #ca8a04;"></i>' : `#${idx + 1}`}
-            </div>
-            <div class="honor-item-meta">
-              <span class="honor-item-name">
-                ${item.name}
-                ${isMe ? '<span style="font-size:11px; background:#22c55e; color:#fff; padding:2px 8px; border-radius:10px; margin-right:6px;">أنت</span>' : ''}
-              </span>
-              <span class="honor-item-school"><i class="fa-solid fa-school" style="font-size:11px; margin-left:4px;"></i>${schoolInfo}</span>
-            </div>
+    } else if (filteredList.length === 0) {
+      tabList.innerHTML = `
+        <div style="text-align: center; padding: 36px 16px; background: #fff; border-radius: 16px; border: 2px dashed #cbd5e1; margin-top: 8px;">
+          <div style="width: 58px; height: 58px; border-radius: 50%; background: #f1f5f9; display: flex; align-items: center; justify-content: center; margin: 0 auto 12px auto;">
+            <i class="fa-solid fa-filter-circle-xmark" style="font-size: 26px; color: #64748b;"></i>
           </div>
-          <div class="honor-item-score">
-            <i class="fa-solid fa-trophy" style="color:#eab308; font-size:16px;"></i>
-            <span>${item.score}</span>
-            <span style="font-size:13px; font-weight:700; color:#64748b;">نقطة</span>
-          </div>
+          <h4 style="font-weight: 800; font-size: 16.5px; color: #1e293b; margin-bottom: 6px;">لا يوجد متسابقون يطابقون الفلاتر المحددة</h4>
+          <p style="font-size: 13.5px; color: #64748b; margin-bottom: 16px; max-width: 440px; margin-left: auto; margin-right: auto;">
+            لم يُعثر على متسابقين وفق المدرسة أو الصف أو الفترة الزمنية المختارة. جرب تغيير الفلترة أو تفريغ الفلاتر.
+          </p>
+          <button type="button" id="btnResetEmptyHonorFilters" class="btn-duo-primary btn-sm" style="padding: 8px 18px; font-weight: 800; font-size: 13px;">
+            <i class="fa-solid fa-rotate-left"></i> تفريغ الفلاتر وعرض الجميع
+          </button>
         </div>
       `;
-    }).join("");
-  };
+      const resetEmptyBtn = tabList.querySelector("#btnResetEmptyHonorFilters");
+      if (resetEmptyBtn) {
+        resetEmptyBtn.addEventListener("click", () => {
+          const s = document.getElementById("honorSchoolFilterSelect");
+          const g = document.getElementById("honorGradeFilterSelect");
+          const p = document.getElementById("honorTimePeriodSelect");
+          const q = document.getElementById("honorSearchInput");
+          if (s) s.value = "all";
+          if (g) g.value = "all";
+          if (p) p.value = "all";
+          if (q) q.value = "";
+          renderHonorLeaderboardTab();
+        });
+      }
+    } else {
+      tabList.innerHTML = filteredList.map((item, idx) => {
+        const isMe = currentUser && currentUser.name === item.name;
+        let rankClass = "";
+        if (idx === 0) rankClass = "rank-1";
+        else if (idx === 1) rankClass = "rank-2";
+        else if (idx === 2) rankClass = "rank-3";
 
-  buildHtml(tabList);
-  buildHtml(studentList);
+        const studentData = Array.isArray(participantsCache) ? participantsCache.find(p => p.name === item.name) : null;
+        const itemSchool = item.school || studentData?.school || "مدرسة نور البيان";
+        const itemGrade = item.grade || studentData?.grade || "عام";
+        const itemRawTime = item.timestamp || studentData?.lastLoginAt || studentData?.updatedAt || studentData?.createdAt || null;
+        const timeText = formatHonorRelativeTime(itemRawTime);
+
+        return `
+          <div class="honor-board-tab-item ${rankClass} ${isMe ? 'current-user-item' : ''}">
+            <div class="honor-item-left">
+              <div class="honor-item-rank">
+                ${idx === 0 ? '<i class="fa-solid fa-crown" style="color: #ca8a04;"></i>' : `#${idx + 1}`}
+              </div>
+              <div class="honor-item-meta">
+                <span class="honor-item-name">
+                  ${item.name}
+                  ${isMe ? '<span style="font-size:11px; background:#22c55e; color:#fff; padding:2px 8px; border-radius:10px; margin-right:6px;">أنت</span>' : ''}
+                </span>
+                <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px;">
+                  <span class="honor-item-school" style="margin: 0;">
+                    <i class="fa-solid fa-school" style="font-size:11px; margin-left:4px; color: #3b82f6;"></i>${itemSchool}
+                  </span>
+                  <span style="font-size: 11px; color: #cbd5e1;">•</span>
+                  <span style="font-size: 12px; font-weight: 700; color: #64748b;">
+                    <i class="fa-solid fa-layer-group" style="font-size: 11px; margin-left: 3px; color: #ca8a04;"></i>${itemGrade}
+                  </span>
+                  <span style="font-size: 11px; color: #cbd5e1;">•</span>
+                  <span style="font-size: 11.5px; font-weight: 700; color: #0284c7; background: #e0f2fe; padding: 1px 8px; border-radius: 6px;">
+                    <i class="fa-regular fa-clock" style="font-size: 10.5px; margin-left: 3px;"></i>${timeText}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div class="honor-item-score">
+              <i class="fa-solid fa-trophy" style="color:#eab308; font-size:16px;"></i>
+              <span>${item.score}</span>
+              <span style="font-size:13px; font-weight:700; color:#64748b;">نقطة</span>
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+  }
+
+  // بناء عرض لوحة الشرف الخاصة بملف الطالب (أعلى المتصدرين الإجمالي دون تقييد بفلاتر المشرف)
+  if (studentList) {
+    if (totalRawCount === 0) {
+      studentList.innerHTML = `
+        <div style="text-align: center; padding: 30px 15px; color: #64748b; background: #f8fafc; border-radius: var(--radius-md); border: 2px dashed #cbd5e1;">
+          <i class="fa-solid fa-trophy" style="font-size: 38px; color: #facc15; margin-bottom: 10px; display: block;"></i>
+          <h4 style="font-weight: 800; font-size: 15.5px; color: #334155; margin-bottom: 4px;">لوحة الشرف فارغة حالياً</h4>
+          <p style="font-size: 13px; color: #94a3b8; margin: 0;">أظهر تفوقك في المسابقات لتكون أول المعتلين للصدارة!</p>
+        </div>
+      `;
+    } else {
+      studentList.innerHTML = honorLeaderboardCache.slice(0, 15).map((item, idx) => {
+        const isMe = currentUser && currentUser.name === item.name;
+        let rankClass = "";
+        if (idx === 0) rankClass = "rank-1";
+        else if (idx === 1) rankClass = "rank-2";
+        else if (idx === 2) rankClass = "rank-3";
+
+        const studentData = Array.isArray(participantsCache) ? participantsCache.find(p => p.name === item.name) : null;
+        const schoolInfo = `${item.school || studentData?.school || "مدرسة نور البيان"} | ${item.grade || studentData?.grade || "طالب"}`;
+
+        return `
+          <div class="honor-board-tab-item ${rankClass} ${isMe ? 'current-user-item' : ''}">
+            <div class="honor-item-left">
+              <div class="honor-item-rank">
+                ${idx === 0 ? '<i class="fa-solid fa-crown" style="color: #ca8a04;"></i>' : `#${idx + 1}`}
+              </div>
+              <div class="honor-item-meta">
+                <span class="honor-item-name">
+                  ${item.name}
+                  ${isMe ? '<span style="font-size:11px; background:#22c55e; color:#fff; padding:2px 8px; border-radius:10px; margin-right:6px;">أنت</span>' : ''}
+                </span>
+                <span class="honor-item-school"><i class="fa-solid fa-school" style="font-size:11px; margin-left:4px;"></i>${schoolInfo}</span>
+              </div>
+            </div>
+            <div class="honor-item-score">
+              <i class="fa-solid fa-trophy" style="color:#eab308; font-size:16px;"></i>
+              <span>${item.score}</span>
+              <span style="font-size:13px; font-weight:700; color:#64748b;">نقطة</span>
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+  }
 }
 
 // الاسم البديل لدعم الاستدعاءات القادمة من مستمعي Firestore

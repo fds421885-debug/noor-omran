@@ -581,6 +581,67 @@
                 <i class="fa-solid fa-rotate-left"></i> إعادة تعيين لوحة الشرف
               </button>
             </div>
+
+            <!-- شريط تصفية وفلترة لوحة الشرف الذكي للمشرف (مدرسة، صف، فترة زمنية) -->
+            <div class="honor-filters-panel" style="background: #f8fafc; border: 2px solid var(--border-duo, #e2e8f0); border-radius: 16px; padding: 16px 20px; margin-bottom: 20px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+                <span style="font-size: 14.5px; font-weight: 800; color: #1e293b; display: flex; align-items: center; gap: 8px;">
+                  <i class="fa-solid fa-filter" style="color: var(--duo-blue, #3b82f6);"></i> تصفية وفرز المتصدرين:
+                </span>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                  <span id="honorFilteredCountBadge" style="font-size: 12.5px; font-weight: 800; color: #475569; background: #e2e8f0; padding: 4px 12px; border-radius: var(--radius-pill, 9999px);">
+                    جاري الفرز...
+                  </span>
+                  <button type="button" id="btnResetHonorFilters" class="btn-duo-outline btn-sm" style="font-size: 12px; padding: 4px 12px;" title="إعادة تعيين الفلاتر">
+                    <i class="fa-solid fa-rotate-left"></i> تفريغ الفلاتر
+                  </button>
+                </div>
+              </div>
+
+              <div class="honor-filters-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
+                <!-- 1. فلترة حسب المدرسة -->
+                <div class="filter-group">
+                  <label class="input-label" style="font-size: 12.5px; margin-bottom: 4px; color: #475569;">
+                    <i class="fa-solid fa-school" style="color: var(--duo-green, #22c55e);"></i> المدرسة / المركز
+                  </label>
+                  <select id="honorSchoolFilterSelect" class="form-control form-select" style="height: 40px; font-size: 13px;">
+                    <option value="all">جميع المدارس والمراكز</option>
+                  </select>
+                </div>
+
+                <!-- 2. فلترة حسب الصف الدراسي -->
+                <div class="filter-group">
+                  <label class="input-label" style="font-size: 12.5px; margin-bottom: 4px; color: #475569;">
+                    <i class="fa-solid fa-layer-group" style="color: #ca8a04;"></i> الصف / الفئة الدراسية
+                  </label>
+                  <select id="honorGradeFilterSelect" class="form-control form-select" style="height: 40px; font-size: 13px;">
+                    <option value="all">جميع الصفوف والفئات</option>
+                  </select>
+                </div>
+
+                <!-- 3. فلترة حسب الفترة الزمنية (يوم، أسبوع، شهر) -->
+                <div class="filter-group">
+                  <label class="input-label" style="font-size: 12.5px; margin-bottom: 4px; color: #475569;">
+                    <i class="fa-solid fa-calendar-days" style="color: var(--duo-purple, #8b5cf6);"></i> الفترة الزمنية
+                  </label>
+                  <select id="honorTimePeriodSelect" class="form-control form-select" style="height: 40px; font-size: 13px;">
+                    <option value="all">كل الأوقات (المجموع التراكمي)</option>
+                    <option value="day">اليوم (آخر 24 ساعة)</option>
+                    <option value="week">هذا الأسبوع (آخر 7 أيام)</option>
+                    <option value="month">هذا الشهر (آخر 30 يوماً)</option>
+                  </select>
+                </div>
+
+                <!-- 4. بحث سريع بالاسم -->
+                <div class="filter-group">
+                  <label class="input-label" style="font-size: 12.5px; margin-bottom: 4px; color: #475569;">
+                    <i class="fa-solid fa-magnifying-glass" style="color: #64748b;"></i> بحث بالاسم
+                  </label>
+                  <input type="text" id="honorSearchInput" class="form-control" placeholder="اسم المتسابق..." style="height: 40px; font-size: 13px;">
+                </div>
+              </div>
+            </div>
+
             <div id="honorBoardTabList" class="honor-board-tab-list">
               <!-- تُملأ تلقائياً -->
             </div>
