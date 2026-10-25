@@ -18,9 +18,18 @@ class DuoSoundFX {
   playCardFlip() {}
   playRouletteTick() {}
   playTimerTick() {}
+  celebrate() {}
+  winner() {}
+  buzzer() {}
+  tick() {}
+  cardDraw() {}
+  applause() {}
   toggleMute() {
     return true;
   }
 }
 
 export const soundFX = new DuoSoundFX();
+if (typeof window !== "undefined") {
+  window.soundFX = soundFX;
+}

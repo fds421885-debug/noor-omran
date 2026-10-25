@@ -2697,14 +2697,20 @@
         </div>
       </div>
 
-      <div class="grand-finale-actions-row" style="display:flex;gap:10px;margin-top:16px;justify-content:center;flex-wrap:wrap;">
+      <!-- إشعار إنهاء المسابقة وإغلاق الغرفة للجميع -->
+      <div id="finaleTournamentClosedNotice" class="hidden" style="background: rgba(34, 197, 94, 0.2); border: 2px solid #22c55e; border-radius: 14px; padding: 12px 20px; color: #86efac; font-size: 15px; font-weight: 800; display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%;">
+        <i class="fa-solid fa-circle-check" style="color:#4ade80;font-size:18px;"></i>
+        <span>تم إنهاء المسابقة وإغلاق الغرفة بنجاح وتوثيق النتائج والمراكز في الأرشيف!</span>
+      </div>
+
+      <div class="grand-finale-actions-row" id="grandFinaleActionsRow" style="display:flex;gap:12px;margin-top:16px;justify-content:center;flex-wrap:wrap;width:100%;">
         <button type="button" id="btnRestartTeamContest" class="btn-duo-yellow" style="font-size:15px;padding:10px 22px;font-weight:800;">
           <i class="fa-solid fa-rotate-right"></i> أعد البطولة
         </button>
         <button type="button" id="btnEndAndSaveTeamContest" class="btn-duo-green" style="font-size:15px;padding:10px 24px;font-weight:800;box-shadow:0 4px 14px rgba(34,197,94,0.4);">
           <i class="fa-solid fa-floppy-disk"></i> إنهاء وحفظ المسابقة
         </button>
-        <button type="button" id="btnCloseTeamContest" class="btn-duo-slate" style="font-size:15px;padding:10px 22px;font-weight:800;">
+        <button type="button" id="btnCloseTeamContest" class="btn-duo-slate" style="font-size:15px;padding:10px 26px;font-weight:900;">
           <i class="fa-solid fa-house"></i> خروج للمنصة
         </button>
       </div>
