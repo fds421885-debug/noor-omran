@@ -68,6 +68,10 @@
           <i class="fa-solid fa-trophy"></i>
           <span>لوحة الشرف</span>
         </button>
+        <button type="button" id="btnHeaderPastTournaments" class="btn-honor-header" style="border-color: #3b82f6; color: #1d4ed8; background: #eff6ff;" title="عرض أرشيف المسابقات والبطولات السابقة">
+          <i class="fa-solid fa-box-archive"></i>
+          <span>مسابقات سابقة</span>
+        </button>
         <div id="userQuickStatus" class="user-quick-status hidden">
           <span class="quick-role-badge" id="quickRoleBadge">مشرف</span>
           <span class="quick-user-name" id="quickUserName"></span>
@@ -2154,6 +2158,59 @@
 
       <div class="honor-footer">
         <span class="honor-timer-note">تغلق تلقائياً خلال <strong id="honorCountdownSec">3</strong> ثوانٍ</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- مودال أرشيف المسابقات والبطولات السابقة (متاح للجميع من الهيدر وأي مكان) -->
+  <div id="pastTournamentsModal" class="modal-overlay hidden" style="z-index: 10012;">
+    <div class="duo-modal-box modal-wide" style="max-width: 900px; max-height: 90vh; display: flex; flex-direction: column;">
+      <div class="modal-header">
+        <div class="modal-title-with-icon">
+          <div class="modal-icon-bubble blue">
+            <i class="fa-solid fa-box-archive"></i>
+          </div>
+          <div>
+            <h3>أرشيف المسابقات والبطولات السابقة</h3>
+            <span class="modal-subtitle">سجل البطولات المكتملة ونتائج منصات التتويج والمراكز الرسمية</span>
+          </div>
+        </div>
+        <button class="btn-modal-close" data-close-modal="pastTournamentsModal" title="إغلاق">&times;</button>
+      </div>
+      <div class="modal-body-content" style="flex: 1; overflow-y: auto; padding: 16px;">
+        <div class="tournament-archive-toolbar" style="margin-top: 0;">
+          <div class="search-input-duo" style="flex: 1; max-width: 450px;">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input type="text" id="modalSearchPastTournamentsInput" placeholder="ابحث باسم المسابقة أو الفريق البطل أو المشرف..." class="form-control">
+          </div>
+          <div class="archive-count-summary">
+            إجمالي البطولات المحفوظة: <strong id="modalTotalPastTournamentsCount">0</strong> بطولة
+          </div>
+        </div>
+        <div id="modalPastTournamentsListGrid" class="past-tournaments-cards-grid">
+          <!-- تُبنى ديناميكياً -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- مودال تفاصيل وشجرة مراكز البطولة المحفوظة -->
+  <div id="tournamentDetailsModal" class="modal-overlay hidden" style="z-index: 10014;">
+    <div class="duo-modal-box" style="max-width: 650px; max-height: 90vh; overflow-y: auto;">
+      <div class="modal-header">
+        <div class="modal-title-with-icon">
+          <div class="modal-icon-bubble gold">
+            <i class="fa-solid fa-trophy"></i>
+          </div>
+          <div>
+            <h3 id="detailsModalTournamentTitle">تفاصيل البطولة</h3>
+            <span class="modal-subtitle" id="detailsModalTournamentMeta">--</span>
+          </div>
+        </div>
+        <button class="btn-modal-close" data-close-modal="tournamentDetailsModal" title="إغلاق">&times;</button>
+      </div>
+      <div class="modal-body-content" id="tournamentDetailsContent" style="padding: 16px;">
+        <!-- تُبنى ديناميكياً -->
       </div>
     </div>
   </div>

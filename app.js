@@ -315,6 +315,7 @@ let gradesCache = [];
 let quizzesCache = [];
 const recentLocalQuizUpdates = new Map(); // قفل زمني وتتبع محلي للاختبارات التي تم تعديلها أو إنشاؤها لمنع استبدالها بنسخ قديمة
 let activeRooms = [];
+let pastTournamentsCache = [];
 let currentLiveRoom = null;
 let currentRoomUnsubscribe = null;
 let lastKnownUsersList = [];
@@ -884,6 +885,14 @@ function loadInitialStorage() {
     honorLeaderboardCache = savedHonor ? JSON.parse(savedHonor) : [];
   } catch (e) {
     honorLeaderboardCache = [];
+  }
+
+  // أرشيف المسابقات والبطولات السابقة
+  try {
+    const savedPast = localStorage.getItem("nour_past_tournaments");
+    pastTournamentsCache = savedPast ? JSON.parse(savedPast) : [];
+  } catch (e) {
+    pastTournamentsCache = [];
   }
 
   updateDropdowns();
@@ -2184,14 +2193,15 @@ async function loadCloudData(forceServer = false) {
 
   try {
     // جلب كافة المجموعات السحابية بالتوازي مع مهل مستقلة لحماية كل مجموعة من التعطيل
-    const [sgDoc, quizDocs, partDocs, roomDocs, honorDoc, quizCfgDoc, teamDocs] = await Promise.all([
+    const [sgDoc, quizDocs, partDocs, roomDocs, honorDoc, quizCfgDoc, teamDocs, archiveDocs] = await Promise.all([
       withTimeout(getDoc(doc(db, "system_settings", "schools_and_grades")), 8000, null),
       withTimeout(getDocs(collection(db, "quizzes")), 12000, null),
       withTimeout(getDocs(collection(db, "participants")), 9000, null),
       withTimeout(getDocs(collection(db, "live_rooms")), 8000, null),
       withTimeout(getDoc(doc(db, "system_settings", "honor_board")), 8000, null),
       withTimeout(getDoc(doc(db, "system_settings", "quizzes_config")), 8000, null),
-      withTimeout(getDocs(collection(db, "teams")), 8000, null)
+      withTimeout(getDocs(collection(db, "teams")), 8000, null),
+      withTimeout(getDocs(collection(db, "tournament_archives")), 8000, null)
     ]);
 
     const sgRes = { status: sgDoc ? "fulfilled" : "rejected", value: sgDoc };
@@ -2201,8 +2211,9 @@ async function loadCloudData(forceServer = false) {
     const honorRes = { status: honorDoc ? "fulfilled" : "rejected", value: honorDoc };
     const quizCfgRes = { status: quizCfgDoc ? "fulfilled" : "rejected", value: quizCfgDoc };
     const teamRes = { status: teamDocs ? "fulfilled" : "rejected", value: teamDocs };
+    const archiveRes = { status: archiveDocs ? "fulfilled" : "rejected", value: archiveDocs };
 
-    const anyFulfilled = [sgDoc, quizDocs, partDocs, roomDocs, honorDoc, quizCfgDoc, teamDocs].some(Boolean);
+    const anyFulfilled = [sgDoc, quizDocs, partDocs, roomDocs, honorDoc, quizCfgDoc, teamDocs, archiveDocs].some(Boolean);
     if (!anyFulfilled) {
       counts.isOffline = true;
     }
@@ -2377,7 +2388,19 @@ async function loadCloudData(forceServer = false) {
     }
     ensureDefaultTeams();
 
-    // 7. تحديث كافة الواجهات بأمان تام دون أي انهيار
+    // 7. أرشيف المسابقات والبطولات السابقة المحفوظة سحابياً (tournament_archives)
+    if (archiveRes && archiveRes.status === "fulfilled" && archiveRes.value) {
+      const cloudPast = [];
+      archiveRes.value.forEach(d => {
+        cloudPast.push({ id: d.id, ...d.data() });
+      });
+      if (cloudPast.length > 0) {
+        pastTournamentsCache = cloudPast;
+        localStorage.setItem("nour_past_tournaments", JSON.stringify(pastTournamentsCache));
+      }
+    }
+
+    // 8. تحديث كافة الواجهات بأمان تام دون أي انهيار
     try { updateDropdowns(); } catch (e) { console.warn("updateDropdowns notice:", e); }
     try { renderSchoolsAndGradesTags(); } catch (e) { console.warn("renderSchoolsAndGradesTags notice:", e); }
     try { renderAccountsTable(); } catch (e) { console.warn("renderAccountsTable notice:", e); }
@@ -2386,6 +2409,7 @@ async function loadCloudData(forceServer = false) {
     try { renderLiveRoomsList(); } catch (e) { console.warn("renderLiveRoomsList notice:", e); }
     try { renderHonorLeaderboardTab(); } catch (e) { console.warn("renderHonorLeaderboardTab notice:", e); }
     try { renderTeamsManagementTab(); } catch (e) { console.warn("renderTeamsManagementTab notice:", e); }
+    try { renderPastTournamentsTab(); } catch (e) { console.warn("renderPastTournamentsTab notice:", e); }
 
     if (currentUser && (currentUser.role === "supervisor" || currentUser.role === "teacher" || currentUser.role === "presenter")) {
       try { renderSupervisorDashboard(); } catch (e) { console.warn("renderSupervisorDashboard notice:", e); }
@@ -13320,10 +13344,11 @@ function triggerCinematicTeamAlert(cfg) {
 }
 
 // --------------------------------------------------------
-// اختيار فريقي المواجهة داخل المسرح التفاعلي (In-Arena Team Picker)
+// اختيار فريقي المواجهة داخل المسرح التفاعلي ونظام التصفيات (Tournament Bracket Team Picker)
 // --------------------------------------------------------
 let arenaSelectedTeamA = null;
 let arenaSelectedTeamB = null;
+let currentArenaTeamFilter = "all";
 
 function renderArenaTeamPickerUI(room = null) {
   const targetRoom = room || currentLiveRoom;
@@ -13340,8 +13365,68 @@ function renderArenaTeamPickerUI(room = null) {
   const checkA = document.getElementById("stepACheck");
   const checkB = document.getElementById("stepBCheck");
   const btnConfirm = document.getElementById("btnConfirmTeamSelection");
+  const roundTitleEl = document.getElementById("arenaCurrentRoundTitle");
+  const roundStatusEl = document.getElementById("arenaRoundMatchesStatus");
+  const observerRoundTag = document.getElementById("observerRoundTag");
+  const observerWaitingDesc = document.getElementById("observerWaitingDesc");
 
   if (!overlay) return;
+
+  // إيقاف أي مؤقت فوراً وتجميده لمنع أي عداد أثناء اختيار الفرق
+  if (liveTimerInterval) {
+    clearInterval(liveTimerInterval);
+    liveTimerInterval = null;
+  }
+  lastTimerConfigKey = "team_picker_paused";
+  if (stageTimerSeconds) stageTimerSeconds.textContent = "⏸️";
+
+  // تهيئة شجرة البطولة إذا لم تكن موجودة بعد في الغرفة
+  if (!targetRoom.tournamentState) {
+    const initTeams = (Array.isArray(targetRoom.teams) && targetRoom.teams.length >= 2) 
+      ? targetRoom.teams 
+      : (teamsCache.length >= 2 ? [...teamsCache] : []);
+    targetRoom.tournamentState = initTournamentBracket(initTeams);
+  }
+
+  const tState = targetRoom.tournamentState;
+  let currentRound = tState.rounds?.[tState.currentRoundIndex];
+  if (!currentRound) {
+    const tList = tState.teams || targetRoom.teams || teamsCache;
+    currentRound = {
+      roundIndex: 0,
+      roundName: getRoundNameForTeams(tList.length),
+      initialTeamsCount: tList.length,
+      pendingTeamIds: tList.map(t => t.id),
+      qualifiedTeamIds: [],
+      eliminatedTeamIds: [],
+      byeTeamId: null,
+      matches: []
+    };
+    tState.rounds = [currentRound];
+    tState.currentRoundIndex = 0;
+  }
+
+  // تحديث لافتة الدور الحالي
+  if (roundTitleEl) roundTitleEl.textContent = currentRound.roundName || "المواجهة التصفوية";
+  if (roundStatusEl) {
+    const pendingCount = currentRound.pendingTeamIds ? currentRound.pendingTeamIds.length : 0;
+    if (pendingCount > 0) {
+      roundStatusEl.textContent = `باقي ${Math.ceil(pendingCount / 2)} مواجهة في هذا الدور (${pendingCount} فرق بالانتظار)`;
+      roundStatusEl.style.background = "#e0f2fe";
+      roundStatusEl.style.color = "#0369a1";
+    } else {
+      roundStatusEl.textContent = `اكتملت جميع مواجهات هذا الدور!`;
+      roundStatusEl.style.background = "#dcfce7";
+      roundStatusEl.style.color = "#15803d";
+    }
+  }
+
+  if (observerRoundTag) {
+    observerRoundTag.textContent = `مرحلة البطولة: ${currentRound.roundName || 'التصفيات'}`;
+  }
+  if (observerWaitingDesc) {
+    observerWaitingDesc.textContent = `يقوم المشرف العام الآن بتحديد فريقي المواجهة ضمن ${currentRound.roundName || 'التصفيات'}، استعدوا للمواجهة وتشجيع أبطالكم!`;
+  }
 
   const isSup = currentUser && (currentUser.role === "supervisor" || isSupervisor(currentUser.name) || currentUser.name === targetRoom.leaderName);
 
@@ -13366,11 +13451,41 @@ function renderArenaTeamPickerUI(room = null) {
   if (supervisorBody) supervisorBody.classList.remove("hidden");
   if (observerBody) observerBody.classList.add("hidden");
 
-  const availableTeams = (teamsCache && teamsCache.length > 0) ? teamsCache : [];
+  // تجميع قائمة كافة الفرق المشاركة في البطولة
+  const allTournamentTeams = (tState.teams && tState.teams.length > 0) ? tState.teams : teamsCache;
+
+  // فحص أزرار الفلترة
+  document.querySelectorAll(".team-filter-pill").forEach(pill => {
+    pill.onclick = () => {
+      document.querySelectorAll(".team-filter-pill").forEach(p => p.classList.remove("active"));
+      pill.classList.add("active");
+      currentArenaTeamFilter = pill.getAttribute("data-filter") || "all";
+      updatePickerUI();
+    };
+  });
+
+  // تفعيل زر السحب بالقرعة تلقائياً لفريقين في الانتظار
+  const btnAutoDraw = document.getElementById("btnAutoDrawTeams");
+  if (btnAutoDraw) {
+    btnAutoDraw.onclick = () => {
+      const pendingIds = currentRound.pendingTeamIds || [];
+      const pendingTeams = pendingIds.map(id => allTournamentTeams.find(t => t.id === id)).filter(Boolean);
+      if (pendingTeams.length < 2) {
+        showToast("لا توجد فرق كافية في الانتظار للسحب بالقرعة لهذا الدور!", "fa-triangle-exclamation");
+        return;
+      }
+      const shuffled = shuffleArray([...pendingTeams]);
+      arenaSelectedTeamA = shuffled[0];
+      arenaSelectedTeamB = shuffled[1];
+      try { soundFX.celebrate(); } catch (e) {}
+      showToast(`🎲 تم سحب فريقي المواجهة بالقرعة: «${arenaSelectedTeamA.name}» ضد «${arenaSelectedTeamB.name}»!`, "fa-dice", 3500);
+      updatePickerUI();
+    };
+  }
 
   function updatePickerUI() {
     if (nameA) {
-      nameA.textContent = arenaSelectedTeamA ? arenaSelectedTeamA.name : "انقر على فريق لتحديده";
+      nameA.textContent = arenaSelectedTeamA ? arenaSelectedTeamA.name : "انقر على فريق بالانتظار لتحديده";
       nameA.style.color = arenaSelectedTeamA ? "#16a34a" : "#64748b";
     }
     if (nameB) {
@@ -13397,40 +13512,83 @@ function renderArenaTeamPickerUI(room = null) {
       btnConfirm.style.cursor = ready ? "pointer" : "not-allowed";
     }
 
-    // إعادة رسم بطاقات الفرق بثيم دولينجو
+    // تحديث أرقام عدادات الفلاتر
+    const pendingIds = currentRound.pendingTeamIds || [];
+    const qualifiedIds = currentRound.qualifiedTeamIds || [];
+    const eliminatedIds = currentRound.eliminatedTeamIds || [];
+
+    const countAllEl = document.getElementById("countAllFilter");
+    const countPendEl = document.getElementById("countPendingFilter");
+    const countQualEl = document.getElementById("countQualifiedFilter");
+    const countElimEl = document.getElementById("countEliminatedFilter");
+
+    if (countAllEl) countAllEl.textContent = String(allTournamentTeams.length);
+    if (countPendEl) countPendEl.textContent = String(pendingIds.length);
+    if (countQualEl) countQualEl.textContent = String(qualifiedIds.length);
+    if (countElimEl) countElimEl.textContent = String(eliminatedIds.length);
+
+    // تصفية الفرق وفق الفلتر المحدد
+    let displayedTeams = allTournamentTeams;
+    if (currentArenaTeamFilter === "pending") {
+      displayedTeams = allTournamentTeams.filter(t => pendingIds.includes(t.id));
+    } else if (currentArenaTeamFilter === "qualified") {
+      displayedTeams = allTournamentTeams.filter(t => qualifiedIds.includes(t.id));
+    } else if (currentArenaTeamFilter === "eliminated") {
+      displayedTeams = allTournamentTeams.filter(t => eliminatedIds.includes(t.id));
+    }
+
+    // رسم بطاقات الفرق
     if (teamsGrid) {
-      if (availableTeams.length === 0) {
+      if (displayedTeams.length === 0) {
         teamsGrid.innerHTML = `
           <div style="grid-column: 1/-1; padding: 24px; text-align: center; color: #64748b; font-weight: 800;">
-            لا توجد فرق منشأة بعد في النظام. يرجى الذهاب لتبويب «إدارة الفرق» لإنشاء فريقين أولاً.
+            لا توجد فرق في هذا التصنيف حالياً.
           </div>
         `;
         return;
       }
 
-      teamsGrid.innerHTML = availableTeams.map(t => {
+      teamsGrid.innerHTML = displayedTeams.map(t => {
         const isA = arenaSelectedTeamA && arenaSelectedTeamA.id === t.id;
         const isB = arenaSelectedTeamB && arenaSelectedTeamB.id === t.id;
         const scheme = TEAM_COLOR_SCHEMES[t.color] || TEAM_COLOR_SCHEMES.blue;
         const membersCount = Array.isArray(t.members) ? t.members.length : 0;
 
-        let badgeText = `${membersCount} طلاب`;
+        const isQualified = qualifiedIds.includes(t.id);
+        const isEliminated = eliminatedIds.includes(t.id);
+        const isPending = pendingIds.includes(t.id);
+
+        let statusBadgeHtml = "";
         let cardClass = "duo-team-pick-card";
+
+        if (isQualified) {
+          cardClass += " is-qualified";
+          statusBadgeHtml = `<span class="badge-team-status qualified"><i class="fa-solid fa-bolt"></i> متأهل</span>`;
+        } else if (isEliminated) {
+          cardClass += " is-eliminated";
+          statusBadgeHtml = `<span class="badge-team-status eliminated"><i class="fa-solid fa-xmark"></i> تم إقصاؤه</span>`;
+        } else {
+          cardClass += " is-pending";
+          statusBadgeHtml = `<span class="badge-team-status pending"><i class="fa-solid fa-hourglass-half"></i> لم ينافس بعد</span>`;
+        }
+
+        let selectionSubtext = `${membersCount} طلاب`;
         if (isA) {
           cardClass += " selected-team-a";
-          badgeText = "✔ الفريق الأول";
+          selectionSubtext = "✔ الفريق الأول";
         } else if (isB) {
           cardClass += " selected-team-b";
-          badgeText = "✔ الفريق الثاني (الخصم)";
+          selectionSubtext = "✔ الفريق الثاني (الخصم)";
         }
 
         return `
-          <div class="${cardClass}" data-team-id="${escapeHtml(t.id)}">
+          <div class="${cardClass}" data-team-id="${escapeHtml(t.id)}" data-status="${isQualified ? 'qualified' : (isEliminated ? 'eliminated' : 'pending')}">
+            ${statusBadgeHtml}
             <div class="team-card-icon" style="background:${scheme.badgeBg || '#f1f5f9'}; color:${scheme.badgeText || '#2563eb'};">
               <i class="fa-solid ${t.icon || 'fa-shield-halved'}"></i>
             </div>
             <div class="team-card-name">${escapeHtml(t.name)}</div>
-            <div class="team-card-members-count">${badgeText}</div>
+            <div class="team-card-members-count">${selectionSubtext}</div>
           </div>
         `;
       }).join("");
@@ -13438,8 +13596,25 @@ function renderArenaTeamPickerUI(room = null) {
       teamsGrid.querySelectorAll(".duo-team-pick-card").forEach(c => {
         c.addEventListener("click", () => {
           const tId = c.getAttribute("data-team-id");
-          const team = availableTeams.find(t => t.id === tId);
+          const status = c.getAttribute("data-status");
+          const team = allTournamentTeams.find(t => t.id === tId);
           if (!team) return;
+
+          // 1. منع اختيار الفريق المقضي
+          if (status === "eliminated") {
+            try { soundFX.wrong(); } catch (e) {}
+            showToast(`❌ تم إقصاء فريق «${team.name}» من البطولة ولا يمكن اختياره للمنافسة!`, "fa-circle-xmark", 2500);
+            return;
+          }
+
+          // 2. فحص اختيار فريق متأهل بينما لم ينتهِ الدور الحالي
+          if (status === "qualified") {
+            if (pendingIds.length > 0) {
+              try { soundFX.wrong(); } catch (e) {}
+              showToast(`⚠️ لم تنتهي المرحلة بعد! يجب إكمال جميع مواجهات الدور الحالي أولاً قبل اختيار المتأهلين.`, "fa-lock", 3000);
+              return;
+            }
+          }
 
           try { soundFX.btnClick(); } catch (e) {}
 
@@ -13510,7 +13685,7 @@ function renderArenaTeamPickerUI(room = null) {
   }
 }
 
-// العودة لاختيار وتعديل الفرق داخل المسرح
+// العودة لاختيار وتعديل الفرق داخل المسرح مع إيقاف المؤقت بشكل حاسم وفوري
 async function handleReturnToTeamSelection() {
   const isSup = currentUser && (currentUser.role === "supervisor" || isSupervisor(currentUser.name) || currentUser.name === currentLiveRoom?.leaderName);
   if (!isSup) {
@@ -13519,7 +13694,23 @@ async function handleReturnToTeamSelection() {
   }
   if (!currentLiveRoom) return;
 
-  // إعادة ضبط الغرفة لحالة اختيار الفرق دون حذفها أو طرد المشاركين
+  // 1. إيقاف وتجميد المؤقت نهائياً وفورياً لجميع الحاضرين
+  if (liveTimerInterval) {
+    clearInterval(liveTimerInterval);
+    liveTimerInterval = null;
+  }
+  lastTimerConfigKey = "team_picker_paused";
+  if (stageTimerSeconds) stageTimerSeconds.textContent = "⏸️";
+
+  currentLiveRoom.timerState = {
+    isFrozen: true,
+    remainingSeconds: currentLiveRoom.questionTimer || 30,
+    isCorrectionPaused: false,
+    isWalletSelectionPaused: false,
+    updatedAt: Date.now()
+  };
+
+  // 2. إعادة ضبط الغرفة لحالة اختيار الفرق دون حذفها أو طرد المشاركين
   currentLiveRoom.teamSelectionState = "selecting";
   currentLiveRoom.phase = "team_stage";
   currentLiveRoom.teamA = null;
@@ -13535,7 +13726,7 @@ async function handleReturnToTeamSelection() {
 
   await saveRooms(currentLiveRoom);
 
-  // إخفاء نوافذ ومسرح الفرق فوراً
+  // 3. إخفاء نوافذ ومسرح الفرق وبطاقة السؤال فوراً
   document.getElementById("teamEntranceOverlay")?.classList.add("hidden");
   document.getElementById("teamRoundBannerOverlay")?.classList.add("hidden");
   document.getElementById("teamFlippingModalWrapper")?.classList.add("hidden");
@@ -13543,16 +13734,18 @@ async function handleReturnToTeamSelection() {
   document.getElementById("teamCinematicPopupCard")?.classList.add("hidden");
   document.getElementById("teamStartCountdownWrapper")?.classList.add("hidden");
   if (stageQuestionCard) stageQuestionCard.classList.add("hidden");
+  if (stageInteractiveArea) stageInteractiveArea.innerHTML = "";
 
-  // فتح شاشة تحديد الفريقين للمشرف وبث شاشة الانتظار للآخرين
+  // 4. فتح شاشة تحديد الفريقين للمشرف وبث شاشة الانتظار للآخرين
   arenaSelectedTeamA = null;
   arenaSelectedTeamB = null;
   renderArenaTeamPickerUI(currentLiveRoom);
-  showToast("تم فتح شاشة اختيار وتعديل الفريقين بنجاح", "fa-rotate-left");
+  showToast("تم فتح شاشة اختيار وتعديل الفريقين وتجميد المؤقت بنجاح", "fa-rotate-left");
 }
 
 // --------------------------------------------------------
 // لافتة الفقرة مع زر تحكم المشرف (التالي لبدء الفقرة يدوياً)
+// مع إيقاف المؤقت وحجب بطاقة السؤال نهائياً لتبقى فقط خلفية المنصة
 // --------------------------------------------------------
 function showTeamRoundBanner(roundNum, onComplete) {
   const overlay = document.getElementById("teamRoundBannerOverlay");
@@ -13562,7 +13755,28 @@ function showTeamRoundBanner(roundNum, onComplete) {
     return;
   }
 
-  // إخفاء وحجب أي سؤال أو بطاقة سؤال خلف لافتة الفقرة تماماً لتبقى فقط خلفية المنصة
+  // 1. إيقاف وتجميد مؤقت السؤال فورياً للجميع بالتزامن التام
+  if (liveTimerInterval) {
+    clearInterval(liveTimerInterval);
+    liveTimerInterval = null;
+  }
+  lastTimerConfigKey = "round_banner_paused";
+  if (stageTimerSeconds) {
+    stageTimerSeconds.innerHTML = `<span style="font-size:12.5px;color:#d97706;font-weight:800;"><i class="fa-solid fa-pause"></i> في انتظار بدء الفقرة</span>`;
+  }
+
+  if (currentLiveRoom) {
+    currentLiveRoom.timerState = {
+      isFrozen: true,
+      remainingSeconds: currentLiveRoom.questionTimer || 30,
+      isCorrectionPaused: false,
+      isWalletSelectionPaused: false,
+      isBannerPaused: true,
+      updatedAt: Date.now()
+    };
+  }
+
+  // 2. إخفاء وحجب أي سؤال أو بطاقة سؤال أو خانة تفاعل تماماً لتبقى فقط خلفية المنصة
   if (stageQuestionCard) stageQuestionCard.classList.add("hidden");
   if (stageInteractiveArea) stageInteractiveArea.innerHTML = "";
   if (stageStudentName) stageStudentName.textContent = "";
@@ -13906,11 +14120,16 @@ function executeNextTeamQuestion(qIndex) {
       }
       launchTeamRound(nextRound);
     } else {
+      // انتهت الفقرات الأربع للمواجهة بين الفريقين! معالجة نتيجة المواجهة وشجرة البطولة
       if (isSup) {
-        currentLiveRoom.phase = "team_finale";
-        saveRooms(currentLiveRoom);
+        handleTournamentMatchFinished();
+      } else {
+        setTimeout(() => {
+          if (currentLiveRoom?.phase === "team_finale") {
+            showTeamGrandFinaleModal();
+          }
+        }, 1500);
       }
-      showTeamGrandFinaleModal();
     }
     return;
   }
@@ -14395,20 +14614,230 @@ async function handleTeamQuestionResult(isCorrect, choiceIdx, earnedPoints) {
 // --------------------------------------------------------
 // منصة التتويج النهائي للفرق الفائزة (Grand Finale Podium)
 // --------------------------------------------------------
+// --------------------------------------------------------
+// معالجة نتيجة مواجهة الفرق وشجرة التصفيات (Tournament Knockout Engine)
+// --------------------------------------------------------
+async function handleTournamentMatchFinished() {
+  const room = currentLiveRoom;
+  if (!room || !room.isTeamMatch) return;
+
+  const teamA = room.teams?.[0] || room.teamA;
+  const teamB = room.teams?.[1] || room.teamB;
+  if (!teamA || !teamB) {
+    showTeamGrandFinaleModal();
+    return;
+  }
+
+  // إيقاف أي مؤقت فورا
+  if (liveTimerInterval) {
+    clearInterval(liveTimerInterval);
+    liveTimerInterval = null;
+  }
+  lastTimerConfigKey = "match_finished_paused";
+
+  const scoreA = room.teamScores?.[teamA.id] || 0;
+  const scoreB = room.teamScores?.[teamB.id] || 0;
+
+  // تحديد الفائز والخاسر
+  let winner = scoreA >= scoreB ? teamA : teamB;
+  let loser = scoreA >= scoreB ? teamB : teamA;
+
+  if (!room.tournamentState) {
+    const allT = (Array.isArray(room.teams) && room.teams.length >= 2) ? room.teams : teamsCache;
+    room.tournamentState = initTournamentBracket(allT);
+  }
+
+  const tState = room.tournamentState;
+  let currentRound = tState.rounds?.[tState.currentRoundIndex];
+  if (!currentRound) {
+    currentRound = {
+      roundIndex: 0,
+      roundName: getRoundNameForTeams(tState.teams?.length || 2),
+      initialTeamsCount: tState.teams?.length || 2,
+      pendingTeamIds: (tState.teams || []).map(t => t.id),
+      qualifiedTeamIds: [],
+      eliminatedTeamIds: [],
+      byeTeamId: null,
+      matches: []
+    };
+    tState.rounds = [currentRound];
+    tState.currentRoundIndex = 0;
+  }
+
+  // 1. تسجيل نتيجة المواجهة في سجل الدور
+  currentRound.matches = currentRound.matches || [];
+  currentRound.matches.push({
+    teamA: { id: teamA.id, name: teamA.name, color: teamA.color },
+    teamB: { id: teamB.id, name: teamB.name, color: teamB.color },
+    scoreA: scoreA,
+    scoreB: scoreB,
+    winnerId: winner.id,
+    winnerName: winner.name,
+    loserId: loser.id,
+    loserName: loser.name,
+    timestamp: Date.now()
+  });
+
+  // 2. الفائز ينضم لقائمة المتأهلين والخاسر للمقصيين
+  if (!currentRound.qualifiedTeamIds.includes(winner.id)) {
+    currentRound.qualifiedTeamIds.push(winner.id);
+  }
+  if (!currentRound.eliminatedTeamIds.includes(loser.id)) {
+    currentRound.eliminatedTeamIds.push(loser.id);
+  }
+  currentRound.pendingTeamIds = (currentRound.pendingTeamIds || []).filter(id => id !== teamA.id && id !== teamB.id);
+
+  // 3. فحص حالة الفريق الفردي المتبقي في الدور (تأهل تلقائي بالقرعة Bye)
+  if (currentRound.pendingTeamIds.length === 1) {
+    const byeId = currentRound.pendingTeamIds[0];
+    const byeTeam = (tState.teams || []).find(t => t.id === byeId);
+    if (!currentRound.qualifiedTeamIds.includes(byeId)) {
+      currentRound.qualifiedTeamIds.push(byeId);
+    }
+    currentRound.byeTeamId = byeId;
+    currentRound.pendingTeamIds = [];
+    showToast(`🎲 تأهل فريق «${byeTeam?.name || 'المتبقي'}» بالقرعة للدور القادم مباشرة!`, "fa-dice", 3500);
+  }
+
+  // 4. هل لا تزال هناك مواجهات متبقية في هذا الدور؟
+  if (currentRound.pendingTeamIds.length >= 2) {
+    showToast(`🏆 مبروك لفريق «${winner.name}» الفوز (${Math.max(scoreA, scoreB)} - ${Math.min(scoreA, scoreB)}) والتأهل للدور القادم!`, "fa-circle-check", 3200);
+    try { soundFX.celebrate(); } catch (e) {}
+
+    await saveRooms(room);
+    setTimeout(async () => {
+      await handleReturnToTeamSelection();
+    }, 2500);
+    return;
+  }
+
+  // 5. اكتملت جميع مواجهات هذا الدور!
+  const isFinalMatch = currentRound.roundName.includes("النهائي") || currentRound.initialTeamsCount <= 2 || currentRound.qualifiedTeamIds.length === 1;
+
+  if (isFinalMatch) {
+    // تتويج بطل البطولة النهائي!
+    tState.isFinished = true;
+    tState.championTeam = winner;
+    tState.runnerUpTeam = loser;
+
+    // بناء جدول الترتيب الكامل لجميع الفرق المشاركة من الأول إلى الأخير
+    const standings = [];
+    standings.push({
+      rank: 1,
+      team: winner,
+      stageLabel: "البطل المتوج بالمركز الأول 🏆",
+      points: room.teamScores[winner.id] || 0
+    });
+    standings.push({
+      rank: 2,
+      team: loser,
+      stageLabel: "وصيف البطولة - المركز الثاني 🥈",
+      points: room.teamScores[loser.id] || 0
+    });
+
+    const allTeams = tState.teams || [];
+    for (let rIdx = tState.rounds.length - 1; rIdx >= 0; rIdx--) {
+      const r = tState.rounds[rIdx];
+      (r.eliminatedTeamIds || []).forEach(tId => {
+        if (tId !== loser.id && !standings.some(s => s.team.id === tId)) {
+          const tObj = allTeams.find(t => t.id === tId);
+          if (tObj) {
+            standings.push({
+              rank: standings.length + 1,
+              team: tObj,
+              stageLabel: r.roundName,
+              points: 0
+            });
+          }
+        }
+      });
+    }
+
+    allTeams.forEach(tObj => {
+      if (!standings.some(s => s.team.id === tObj.id)) {
+        standings.push({
+          rank: standings.length + 1,
+          team: tObj,
+          stageLabel: "مشارك في البطولة",
+          points: 0
+        });
+      }
+    });
+
+    tState.fullStandings = standings;
+    room.phase = "team_finale";
+    await saveRooms(room);
+    showTeamGrandFinaleModal();
+    return;
+  }
+
+  // انتقال لدور التصفيات التالي
+  const nextTeamsCount = currentRound.qualifiedTeamIds.length;
+  const nextRoundName = getRoundNameForTeams(nextTeamsCount);
+  const nextRoundIndex = tState.currentRoundIndex + 1;
+
+  let nextPending = [...currentRound.qualifiedTeamIds];
+  let nextQualified = [];
+  let nextByeId = null;
+
+  if (nextPending.length % 2 !== 0 && nextPending.length > 2) {
+    const byeIdx = Math.floor(Math.random() * nextPending.length);
+    nextByeId = nextPending.splice(byeIdx, 1)[0];
+    nextQualified.push(nextByeId);
+  }
+
+  const newRound = {
+    roundIndex: nextRoundIndex,
+    roundName: nextRoundName,
+    initialTeamsCount: nextTeamsCount,
+    pendingTeamIds: nextPending,
+    qualifiedTeamIds: nextQualified,
+    eliminatedTeamIds: [],
+    byeTeamId: nextByeId,
+    matches: []
+  };
+
+  tState.rounds.push(newRound);
+  tState.currentRoundIndex = nextRoundIndex;
+  tState.currentRoundName = nextRoundName;
+
+  await saveRooms(room);
+
+  showToast(`🚀 اكتملت مواجهات ${currentRound.roundName}! تأهلت ${nextTeamsCount} فرق إلى: ${nextRoundName}!`, "fa-bolt", 4000);
+  try { soundFX.celebrate(); } catch (e) {}
+
+  setTimeout(async () => {
+    await handleReturnToTeamSelection();
+  }, 2800);
+}
+
+// --------------------------------------------------------
+// منصة التتويج النهائي للفرق الفائزة (Grand Finale Podium)
+// --------------------------------------------------------
 function showTeamGrandFinaleModal() {
   const overlay = document.getElementById("teamGrandFinaleOverlay");
   if (!overlay || !currentLiveRoom) return;
 
-  const teamA = currentLiveRoom.teams?.[0] || { id: "a", name: "الفريق الأول" };
-  const teamB = currentLiveRoom.teams?.[1] || { id: "b", name: "الفريق الثاني" };
+  // إيقاف أي مؤقت فورا
+  if (liveTimerInterval) {
+    clearInterval(liveTimerInterval);
+    liveTimerInterval = null;
+  }
+  lastTimerConfigKey = "grand_finale_paused";
+  if (stageTimerSeconds) stageTimerSeconds.textContent = "🏆";
+
+  const teamA = currentLiveRoom.teams?.[0] || currentLiveRoom.teamA || { id: "a", name: "الفريق الأول" };
+  const teamB = currentLiveRoom.teams?.[1] || currentLiveRoom.teamB || { id: "b", name: "الفريق الثاني" };
 
   const scoreA = currentLiveRoom.teamScores?.[teamA.id] || 0;
   const scoreB = currentLiveRoom.teamScores?.[teamB.id] || 0;
 
-  const winningTeam = scoreA >= scoreB ? teamA : teamB;
+  const tState = currentLiveRoom.tournamentState;
+  const winningTeam = tState?.championTeam || (scoreA >= scoreB ? teamA : teamB);
+  const runnerUpTeam = tState?.runnerUpTeam || (scoreA >= scoreB ? teamB : teamA);
   const winningScore = Math.max(scoreA, scoreB);
 
-  // حساب أفضل طالب (MVP) من الفريقين
+  // حساب أفضل طالب (MVP) من الفرق
   let mvpName = "--";
   let maxPScore = 0;
   const pScores = currentLiveRoom.teamPlayerScores || {};
@@ -14419,8 +14848,8 @@ function showTeamGrandFinaleModal() {
     }
   });
 
-  if (mvpName === "--" && teamA.members?.length > 0) {
-    mvpName = teamA.members[0].name;
+  if (mvpName === "--" && winningTeam.members?.length > 0) {
+    mvpName = winningTeam.members[0].name;
     maxPScore = Math.round(winningScore / 2);
   }
 
@@ -14436,26 +14865,415 @@ function showTeamGrandFinaleModal() {
   if (mvpNameEl) mvpNameEl.textContent = mvpName;
   if (mvpScoreEl) mvpScoreEl.textContent = `${maxPScore} نقطة مسجلة`;
 
+  // ملء جدول الترتيب النهائي للبطولة من المركز الأول للأخير
+  const standingsGrid = document.getElementById("tournamentStandingsGrid");
+  const standings = tState?.fullStandings || [
+    { rank: 1, team: winningTeam, stageLabel: "البطل المتوج بالمركز الأول 🏆", points: winningScore },
+    { rank: 2, team: runnerUpTeam, stageLabel: "وصيف البطولة - المركز الثاني 🥈", points: Math.min(scoreA, scoreB) }
+  ];
+
+  if (standingsGrid) {
+    standingsGrid.innerHTML = standings.map((item, idx) => {
+      const rank = item.rank || (idx + 1);
+      let rankClass = "";
+      let medalHtml = `<span class="podium-rank-badge" style="background:#334155;color:#fff;">${rank}</span>`;
+      if (rank === 1) {
+        rankClass = "rank-1";
+        medalHtml = `<span class="podium-rank-badge" style="background:#facc15;color:#854d0e;">🥇</span>`;
+      } else if (rank === 2) {
+        rankClass = "rank-2";
+        medalHtml = `<span class="podium-rank-badge" style="background:#cbd5e1;color:#1e293b;">🥈</span>`;
+      } else if (rank === 3) {
+        rankClass = "rank-3";
+        medalHtml = `<span class="podium-rank-badge" style="background:#d97706;color:#fff;">🥉</span>`;
+      }
+
+      return `
+        <div class="standing-row-duo ${rankClass}">
+          <div style="display:flex;align-items:center;gap:10px;">
+            ${medalHtml}
+            <div>
+              <strong style="font-size:14.5px;">${escapeHtml(item.team?.name || 'فريق')}</strong>
+              <div style="font-size:11.5px;opacity:0.85;">${escapeHtml(item.stageLabel || '')}</div>
+            </div>
+          </div>
+          <div style="font-size:13px;font-weight:900;">
+            ${item.points ? `${item.points} نقطة` : ''}
+          </div>
+        </div>
+      `;
+    }).join("");
+  }
+
   overlay.classList.remove("hidden");
   try { soundFX.celebrate(); } catch (e) {}
 }
 
-document.getElementById("btnRestartTeamContest")?.addEventListener("click", async () => {
-  document.getElementById("teamGrandFinaleOverlay")?.classList.add("hidden");
-  if (currentLiveRoom) {
-    currentLiveRoom.teamScores = { [currentLiveRoom.teams[0].id]: 0, [currentLiveRoom.teams[1].id]: 0 };
-    currentLiveRoom.teamPlayerScores = {};
-    currentLiveRoom.currentTeamRound = 1;
-    currentLiveRoom.currentQuestionIdx = 0;
-    currentLiveRoom.teamMemberTurnPool = {
-      [currentLiveRoom.teams[0].id]: [],
-      [currentLiveRoom.teams[1].id]: []
+// إنهاء وحفظ البطولة في أرشيف المسابقات السابقة
+async function saveCurrentTournamentToArchive() {
+  if (!currentLiveRoom) return;
+  showGlobalLoader("جاري حفظ وتوثيق البطولة...", "يتم حفظ المسابقة والمراكز في أرشيف المسابقات السابقة سحابياً للجميع");
+
+  try {
+    const tState = currentLiveRoom.tournamentState || {};
+    const teamA = currentLiveRoom.teams?.[0] || currentLiveRoom.teamA || { id: "a", name: "الفريق الأول" };
+    const teamB = currentLiveRoom.teams?.[1] || currentLiveRoom.teamB || { id: "b", name: "الفريق الثاني" };
+    const scoreA = currentLiveRoom.teamScores?.[teamA.id] || 0;
+    const scoreB = currentLiveRoom.teamScores?.[teamB.id] || 0;
+    const winningTeam = tState.championTeam || (scoreA >= scoreB ? teamA : teamB);
+    const runnerUpTeam = tState.runnerUpTeam || (scoreA >= scoreB ? teamB : teamA);
+
+    let mvpName = "--";
+    let maxPScore = 0;
+    const pScores = currentLiveRoom.teamPlayerScores || {};
+    Object.keys(pScores).forEach(name => {
+      if (pScores[name] > maxPScore) {
+        maxPScore = pScores[name];
+        mvpName = name;
+      }
+    });
+    if (mvpName === "--" && winningTeam.members?.length > 0) {
+      mvpName = winningTeam.members[0].name;
+      maxPScore = Math.round(Math.max(scoreA, scoreB) / 2);
+    }
+
+    const archiveId = "tourn_" + Date.now();
+    const tournamentArchiveDoc = {
+      id: archiveId,
+      roomId: currentLiveRoom.id,
+      title: currentLiveRoom.name,
+      championTeam: winningTeam,
+      runnerUpTeam: runnerUpTeam,
+      fullStandings: tState.fullStandings || [
+        { rank: 1, team: winningTeam, stageLabel: "البطل المتوج بالمركز الأول 🏆", points: Math.max(scoreA, scoreB) },
+        { rank: 2, team: runnerUpTeam, stageLabel: "وصيف البطولة - المركز الثاني 🥈", points: Math.min(scoreA, scoreB) }
+      ],
+      totalTeamsCount: tState.teams?.length || currentLiveRoom.teams?.length || 2,
+      roundsCount: tState.rounds?.length || 1,
+      rounds: tState.rounds || [],
+      supervisorName: currentLiveRoom.leaderName || currentLiveRoom.creatorName || MASTER_SUPERVISOR_NAME,
+      completedAt: new Date().toISOString(),
+      formattedDate: new Date().toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' }),
+      mvpStudent: { name: mvpName, score: maxPScore },
+      createdAt: serverTimestamp()
     };
-    currentLiveRoom.lastPickedStudentByTeam = {};
-    currentLiveRoom.phase = "team_intro";
-    await saveRooms(currentLiveRoom);
+
+    const cleanDoc = sanitizeForFirestore(tournamentArchiveDoc);
+    await setDoc(doc(db, "tournament_archives", archiveId), cleanDoc);
+
+    pastTournamentsCache = pastTournamentsCache.filter(t => t.id !== archiveId);
+    pastTournamentsCache.unshift(tournamentArchiveDoc);
+    localStorage.setItem("nour_past_tournaments", JSON.stringify(pastTournamentsCache));
+
+    document.getElementById("teamGrandFinaleOverlay")?.classList.add("hidden");
+
+    try {
+      await updateDoc(doc(db, "live_rooms", currentLiveRoom.id), {
+        isFinished: true,
+        savedToArchive: true,
+        lastUpdated: serverTimestamp()
+      });
+    } catch (e) {}
+
+    showToast("🏆 تم حفظ وتوثيق البطولة بنجاح في أرشيف المسابقات السابقة!", "fa-trophy", 3500);
+
+    renderPastTournamentsTab();
+    if (currentUser && (currentUser.role === "supervisor" || isSupervisor(currentUser.name))) {
+      showView("supervisor");
+      const tabBtn = document.querySelector(".nav-tab[data-tab='tabPastTournaments']");
+      tabBtn?.click();
+    } else {
+      openPastTournamentsModal();
+    }
+  } catch (err) {
+    console.error("Error saving tournament archive:", err);
+    showToast("تعذر حفظ البطولة سحابياً: " + (err.message || "خطأ غير متوقع"), "fa-triangle-exclamation");
+  } finally {
+    hideGlobalLoader();
   }
-  runTeamEntranceCinematicShowcase();
+}
+
+// --------------------------------------------------------
+// قسم وأرشيف المسابقات السابقة (Past Tournaments Section)
+// --------------------------------------------------------
+function renderPastTournamentsCard(tourn) {
+  const isSup = currentUser && (currentUser.role === "supervisor" || isSupervisor(currentUser.name));
+  const champion = tourn.championTeam || { name: "غير محدد", color: "gold" };
+  const runnerUp = tourn.runnerUpTeam || { name: "غير محدد" };
+  const totalTeams = tourn.totalTeamsCount || (tourn.fullStandings?.length) || 2;
+  const dateStr = tourn.formattedDate || (tourn.completedAt ? new Date(tourn.completedAt).toLocaleDateString('ar-EG') : 'حديثاً');
+
+  return `
+    <div class="past-tournament-card" data-tourn-id="${escapeHtml(tourn.id)}">
+      <div class="past-tournament-card-header">
+        <div>
+          <h3 class="past-card-title"><i class="fa-solid fa-trophy" style="color:#eab308;margin-left:6px;"></i> ${escapeHtml(tourn.title || "بطولة مسابقة نور البيان")}</h3>
+          <span class="past-card-date"><i class="fa-regular fa-calendar-days"></i> ${escapeHtml(dateStr)} • المشرف: ${escapeHtml(tourn.supervisorName || MASTER_SUPERVISOR_NAME)}</span>
+        </div>
+        <span class="badge" style="background:#dbeafe;color:#1e40af;font-weight:900;padding:4px 10px;border-radius:12px;font-size:12px;">
+          ${totalTeams} فرق
+        </span>
+      </div>
+
+      <div class="past-card-champion-box">
+        <div class="champion-trophy-small">
+          <i class="fa-solid fa-crown"></i>
+        </div>
+        <div style="flex:1;">
+          <div style="font-size:11.5px;color:#854d0e;font-weight:800;">الفريق البطل المتوج بالمركز الأول 🏆</div>
+          <strong style="font-size:17px;color:#713f12;display:block;">${escapeHtml(champion.name)}</strong>
+        </div>
+      </div>
+
+      <div class="past-card-meta-row">
+        <span>🥈 الوصيف: <strong>${escapeHtml(runnerUp.name)}</strong></span>
+        ${tourn.mvpStudent ? `<span>⭐ هداف البطولة: <strong>${escapeHtml(tourn.mvpStudent.name)} (${tourn.mvpStudent.score}ن)</strong></span>` : ''}
+      </div>
+
+      <div style="display:flex;gap:8px;margin-top:12px;">
+        <button type="button" class="btn-duo-blue btn-sm btn-view-tournament-details" data-id="${escapeHtml(tourn.id)}" style="flex:1;font-size:12.5px;padding:7px 12px;font-weight:800;">
+          <i class="fa-solid fa-ranking-star"></i> عرض المراكز والترتيب
+        </button>
+        ${isSup ? `
+          <button type="button" class="btn-duo-outline btn-sm btn-delete-past-tourn" data-id="${escapeHtml(tourn.id)}" style="color:#ef4444;border-color:#fca5a5;padding:7px 10px;" title="حذف من الأرشيف">
+            <i class="fa-solid fa-trash-can"></i>
+          </button>
+        ` : ''}
+      </div>
+    </div>
+  `;
+}
+
+function updatePastTournamentsBadges() {
+  const count = pastTournamentsCache.length;
+  const badge1 = document.getElementById("badgePastTournamentsCount");
+  const count1 = document.getElementById("totalPastTournamentsCount");
+  const count2 = document.getElementById("modalTotalPastTournamentsCount");
+  if (badge1) badge1.textContent = String(count);
+  if (count1) count1.textContent = String(count);
+  if (count2) count2.textContent = String(count);
+}
+
+function renderPastTournamentsTab(filterQuery = "") {
+  updatePastTournamentsBadges();
+  const q = normalizeArabic((filterQuery || "").trim());
+  const filtered = q
+    ? pastTournamentsCache.filter(t => 
+        normalizeArabic(t.title || "").includes(q) ||
+        normalizeArabic(t.championTeam?.name || "").includes(q) ||
+        normalizeArabic(t.runnerUpTeam?.name || "").includes(q) ||
+        normalizeArabic(t.supervisorName || "").includes(q)
+      )
+    : pastTournamentsCache;
+
+  const emptyHtml = `
+    <div style="grid-column: 1/-1; padding: 40px 20px; text-align: center; background: #ffffff; border: 2px dashed #cbd5e1; border-radius: 18px; color: #64748b;">
+      <i class="fa-solid fa-box-open" style="font-size: 38px; color: #94a3b8; margin-bottom: 12px; display: block;"></i>
+      <h4 style="font-size: 17px; font-weight: 800; color: #1e293b; margin: 0 0 6px;">لا توجد مسابقات سابقة محفوظة حالياً</h4>
+      <p style="font-size: 13.5px; margin: 0;">عند إتمام أي مسابقة فرق والضغط على «إنهاء وحفظ المسابقة»، سيتم توثيقها وحفظها هنا فورياً لجميع المستخدمين.</p>
+    </div>
+  `;
+
+  const cardsHtml = filtered.length === 0 ? emptyHtml : filtered.map(t => renderPastTournamentsCard(t)).join("");
+
+  const supervisorGrid = document.getElementById("pastTournamentsListGrid");
+  const studentGrid = document.getElementById("studentPastTournamentsList");
+  const modalGrid = document.getElementById("modalPastTournamentsListGrid");
+
+  if (supervisorGrid) supervisorGrid.innerHTML = cardsHtml;
+  if (studentGrid) studentGrid.innerHTML = cardsHtml;
+  if (modalGrid) modalGrid.innerHTML = cardsHtml;
+
+  // ربط الأزرار التفاعلية
+  [supervisorGrid, studentGrid, modalGrid].forEach(container => {
+    if (!container) return;
+    container.querySelectorAll(".btn-view-tournament-details").forEach(btn => {
+      btn.onclick = () => {
+        const id = btn.getAttribute("data-id");
+        openTournamentDetailsModal(id);
+      };
+    });
+    container.querySelectorAll(".btn-delete-past-tourn").forEach(btn => {
+      btn.onclick = () => {
+        const id = btn.getAttribute("data-id");
+        deletePastTournament(id);
+      };
+    });
+  });
+}
+
+function openPastTournamentsModal() {
+  const modal = document.getElementById("pastTournamentsModal");
+  if (!modal) return;
+  renderPastTournamentsTab();
+  modal.classList.remove("hidden");
+}
+
+function openTournamentDetailsModal(tournamentId) {
+  const tourn = pastTournamentsCache.find(t => t.id === tournamentId);
+  if (!tourn) return;
+
+  const modal = document.getElementById("tournamentDetailsModal");
+  const titleEl = document.getElementById("detailsModalTournamentTitle");
+  const metaEl = document.getElementById("detailsModalTournamentMeta");
+  const contentEl = document.getElementById("tournamentDetailsContent");
+  if (!modal || !contentEl) return;
+
+  if (titleEl) titleEl.textContent = tourn.title || "تفاصيل البطولة";
+  if (metaEl) metaEl.textContent = `التاريخ: ${tourn.formattedDate || (tourn.completedAt ? new Date(tourn.completedAt).toLocaleDateString('ar-EG') : 'حديثاً')} • المشرف: ${tourn.supervisorName || MASTER_SUPERVISOR_NAME}`;
+
+  const champion = tourn.championTeam || { name: "غير محدد" };
+  const runnerUp = tourn.runnerUpTeam || { name: "غير محدد" };
+  const standings = tourn.fullStandings || [];
+
+  contentEl.innerHTML = `
+    <!-- بطاقة البطل والوصيف -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+      <div style="background:linear-gradient(135deg,#fefce8 0%,#fef08a 100%);border:2px solid #facc15;border-radius:14px;padding:12px;text-align:center;">
+        <div style="font-size:24px;">🏆</div>
+        <div style="font-size:12px;color:#854d0e;font-weight:800;">بطل البطولة (المركز الأول)</div>
+        <strong style="font-size:18px;color:#713f12;display:block;margin-top:2px;">${escapeHtml(champion.name)}</strong>
+      </div>
+      <div style="background:linear-gradient(135deg,#f1f5f9 0%,#e2e8f0 100%);border:2px solid #cbd5e1;border-radius:14px;padding:12px;text-align:center;">
+        <div style="font-size:24px;">🥈</div>
+        <div style="font-size:12px;color:#334155;font-weight:800;">وصيف البطولة (المركز الثاني)</div>
+        <strong style="font-size:18px;color:#0f172a;display:block;margin-top:2px;">${escapeHtml(runnerUp.name)}</strong>
+      </div>
+    </div>
+
+    ${tourn.mvpStudent ? `
+      <div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:12px;padding:10px 14px;margin-bottom:16px;display:flex;align-items:center;gap:10px;">
+        <i class="fa-solid fa-star" style="color:#eab308;font-size:20px;"></i>
+        <div>
+          <span style="font-size:12px;color:#166534;font-weight:800;">نجم وهداف البطولة (MVP):</span>
+          <strong style="font-size:14.5px;color:#14532d;display:block;">${escapeHtml(tourn.mvpStudent.name)} (${tourn.mvpStudent.score} نقطة)</strong>
+        </div>
+      </div>
+    ` : ''}
+
+    <!-- جدول الترتيب الكامل للبطولة -->
+    <h4 style="font-size:15px;font-weight:900;color:#1e293b;margin:0 0 10px;display:flex;align-items:center;gap:6px;">
+      <i class="fa-solid fa-ranking-star" style="color:#2563eb;"></i> جدول الترتيب النهائي لفرق البطولة (${standings.length || tourn.totalTeamsCount || 0} فرق):
+    </h4>
+    <div style="display:flex;flex-direction:column;gap:6px;max-height:280px;overflow-y:auto;padding-left:4px;">
+      ${standings.map((s, idx) => {
+        const rank = s.rank || (idx + 1);
+        let rankBadge = `<span class="podium-rank-badge" style="background:#475569;color:#fff;">${rank}</span>`;
+        let rowStyle = "background:#f8fafc;border:1.5px solid #e2e8f0;color:#1e293b;";
+        if (rank === 1) {
+          rankBadge = `<span class="podium-rank-badge" style="background:#facc15;color:#854d0e;">🥇</span>`;
+          rowStyle = "background:#fefce8;border:2px solid #facc15;color:#854d0e;";
+        } else if (rank === 2) {
+          rankBadge = `<span class="podium-rank-badge" style="background:#cbd5e1;color:#1e293b;">🥈</span>`;
+          rowStyle = "background:#f1f5f9;border:1.5px solid #cbd5e1;color:#1e293b;";
+        } else if (rank === 3) {
+          rankBadge = `<span class="podium-rank-badge" style="background:#fed7aa;color:#c2410c;">🥉</span>`;
+          rowStyle = "background:#fff7ed;border:1.5px solid #fdba74;color:#9a3412;";
+        }
+        return `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-radius:10px;${rowStyle}">
+            <div style="display:flex;align-items:center;gap:10px;">
+              ${rankBadge}
+              <div>
+                <strong style="font-size:14px;">${escapeHtml(s.team?.name || 'فريق')}</strong>
+                <div style="font-size:11px;opacity:0.8;">${escapeHtml(s.stageLabel || '')}</div>
+              </div>
+            </div>
+            ${s.points ? `<span style="font-weight:900;font-size:13px;">${s.points} نقطة</span>` : ''}
+          </div>
+        `;
+      }).join("")}
+    </div>
+  `;
+
+  modal.classList.remove("hidden");
+}
+
+async function deletePastTournament(id) {
+  const isSup = currentUser && (currentUser.role === "supervisor" || isSupervisor(currentUser.name));
+  if (!isSup) {
+    showToast("عذراً، حذف المسابقات من الأرشيف متاح للمشرف العام فقط.", "fa-lock");
+    return;
+  }
+
+  showConfirmDialog(
+    "حذف مسابقة من الأرشيف",
+    "هل أنت متأكد من حذف هذه المسابقة وسجل تتويجها نهائياً من الأرشيف السحابي؟",
+    async () => {
+      try {
+        await deleteDoc(doc(db, "tournament_archives", id));
+        pastTournamentsCache = pastTournamentsCache.filter(t => t.id !== id);
+        localStorage.setItem("nour_past_tournaments", JSON.stringify(pastTournamentsCache));
+        renderPastTournamentsTab();
+        showToast("تم حذف المسابقة من الأرشيف بنجاح.", "fa-trash-can");
+      } catch (err) {
+        console.error("Error deleting past tournament:", err);
+        showToast("تعذر حذف المسابقة من السحابة: " + (err.message || "خطأ غير متوقع"), "fa-triangle-exclamation");
+      }
+    },
+    null,
+    "نعم، حذف نهائي",
+    "إلغاء"
+  );
+}
+
+// مستمعي أزرار شاشة التتويج والأرشيف
+document.getElementById("btnRestartTeamContest")?.addEventListener("click", async () => {
+  if (!currentLiveRoom) return;
+  const isSup = currentUser && (currentUser.role === "supervisor" || isSupervisor(currentUser.name) || currentUser.name === currentLiveRoom.leaderName);
+  if (!isSup) {
+    showToast("عذراً، إعادة المسابقة متاحة للمشرف فقط.", "fa-lock");
+    return;
+  }
+
+  showConfirmDialog(
+    "إعادة البطولة من البداية",
+    "هل تريد إعادة بدء بطولة الفرق من الدور الأول وتصفير النتائج؟",
+    async () => {
+      document.getElementById("teamGrandFinaleOverlay")?.classList.add("hidden");
+      const originalTeams = currentLiveRoom.tournamentState?.teams || currentLiveRoom.teams || teamsCache;
+      currentLiveRoom.tournamentState = initTournamentBracket(originalTeams);
+      currentLiveRoom.teamScores = {};
+      currentLiveRoom.teamPlayerScores = {};
+      currentLiveRoom.currentTeamRound = 1;
+      currentLiveRoom.currentQuestionIdx = 0;
+      currentLiveRoom.teamMemberTurnPool = {};
+      currentLiveRoom.lastPickedStudentByTeam = {};
+      currentLiveRoom.teamRoundStarted = false;
+      currentLiveRoom.teamActiveSolver = null;
+      currentLiveRoom.phase = "team_stage";
+      currentLiveRoom.teamSelectionState = "selecting";
+      currentLiveRoom.teamA = null;
+      currentLiveRoom.teamB = null;
+
+      await saveRooms(currentLiveRoom);
+      await handleReturnToTeamSelection();
+      showToast("تمت إعادة البطولة من البداية بنجاح!", "fa-rotate-right");
+    },
+    null,
+    "نعم، أعد البطولة",
+    "إلغاء"
+  );
+});
+
+document.getElementById("btnEndAndSaveTeamContest")?.addEventListener("click", () => {
+  if (!currentLiveRoom) return;
+  const isSup = currentUser && (currentUser.role === "supervisor" || isSupervisor(currentUser.name) || currentUser.name === currentLiveRoom.leaderName);
+  if (!isSup) {
+    showToast("عذراً، حفظ وإنهاء المسابقة متاح للمشرف فقط.", "fa-lock");
+    return;
+  }
+
+  showConfirmDialog(
+    "إنهاء وحفظ المسابقة في الأرشيف",
+    "هل تريد إنهاء المسابقة وتوثيق كافة نتائج البطولة وجدول ترتيب المراكز في قسم «مسابقات سابقة»؟",
+    async () => {
+      await saveCurrentTournamentToArchive();
+    },
+    null,
+    "نعم، إنهاء وحفظ المسابقة",
+    "تراجع"
+  );
 });
 
 document.getElementById("btnChooseOtherTeams")?.addEventListener("click", async () => {
@@ -14468,9 +15286,46 @@ document.getElementById("btnCloseTeamContest")?.addEventListener("click", () => 
   showView(currentUser ? (currentUser.role === "student" ? "student" : "supervisor") : "hero");
 });
 
+document.getElementById("btnHeaderPastTournaments")?.addEventListener("click", () => {
+  if (currentUser && (currentUser.role === "supervisor" || isSupervisor(currentUser.name))) {
+    showView("supervisor");
+    const tabPast = document.querySelector(".nav-tab[data-tab='tabPastTournaments']");
+    if (tabPast) {
+      tabPast.click();
+      return;
+    }
+  }
+  openPastTournamentsModal();
+});
+
+document.getElementById("btnRefreshPastTournaments")?.addEventListener("click", async () => {
+  showGlobalLoader("جاري تحديث أرشيف المسابقات...", "يتم جلب أحدث البطولات المحفوظة من السحابة");
+  await loadPastTournamentsFromCloud();
+  renderPastTournamentsTab();
+  hideGlobalLoader();
+  showToast("تم تحديث أرشيف المسابقات السابقة بنجاح!", "fa-check");
+});
+
+document.getElementById("searchPastTournamentsInput")?.addEventListener("input", (e) => {
+  renderPastTournamentsTab(e.target.value);
+});
+document.getElementById("modalSearchPastTournamentsInput")?.addEventListener("input", (e) => {
+  renderPastTournamentsTab(e.target.value);
+});
+
 function syncTeamStageRealtime(room) {
   // مزامنة حالة مسرح الفرق اللحظية لجميع الأجهزة
   if (!room || !room.isTeamMatch) return;
+
+  // إذا انتهت البطولة بالكامل وتوج البطل النهائي
+  if (room.phase === "team_finale" || room.tournamentState?.isFinished) {
+    document.getElementById("arenaTeamSelectionOverlay")?.classList.add("hidden");
+    document.getElementById("teamRoundBannerOverlay")?.classList.add("hidden");
+    document.getElementById("teamEntranceOverlay")?.classList.add("hidden");
+    if (stageQuestionCard) stageQuestionCard.classList.add("hidden");
+    showTeamGrandFinaleModal();
+    return;
+  }
 
   // إذا كانت الغرفة في وضع اختيار وتحديد فريقي المواجهة
   if (room.teamSelectionState === "selecting" || !room.teamA || !room.teamB) {
