@@ -652,9 +652,33 @@ function showInAppConfirm(options, legacyCallback = null) {
       closeAndResolve(false);
     };
 
+    modal.style.zIndex = "100005";
     modal.classList.remove("hidden");
   });
 }
+
+function showConfirmDialog(title, message, onConfirm, onCancel = null, confirmText = "نعم، تأكيد", cancelText = "إلغاء", type = "warning", icon = "fa-triangle-exclamation") {
+  return showInAppConfirm({
+    title: title || "تأكيد الإجراء",
+    message: message || "هل أنت متأكد من المتابعة؟",
+    confirmText: confirmText || "نعم، تأكيد",
+    cancelText: cancelText || "إلغاء",
+    type: type || "warning",
+    icon: icon || "fa-triangle-exclamation"
+  }).then(async (confirmed) => {
+    if (confirmed) {
+      if (typeof onConfirm === "function") {
+        await onConfirm();
+      }
+    } else {
+      if (typeof onCancel === "function") {
+        await onCancel();
+      }
+    }
+    return confirmed;
+  });
+}
+window.showConfirmDialog = showConfirmDialog;
 
 // --------------------------------------------------------
 // إدارة التنقل بين الشاشات والتبويبات
@@ -7257,6 +7281,20 @@ function syncAndRunLiveTimer(timerState, onTimeout = null) {
     return;
   }
 
+  // في مسابقات الفرق: إيقاف وتجميد المؤقت تماماً في حالات اختيار الفرق أو انتظار بدء الفقرة أو التتويج
+  if (currentLiveRoom?.isTeamMatch) {
+    if (currentLiveRoom.teamSelectionState === "selecting" || !currentLiveRoom.teamRoundStarted || currentLiveRoom.phase === "team_finale" || currentLiveRoom.tournamentState?.isFinished) {
+      if (liveTimerInterval) { clearInterval(liveTimerInterval); liveTimerInterval = null; }
+      lastTimerConfigKey = "team_paused";
+      timerDisplay.textContent = "⏸️";
+      if (timerPill) {
+        timerPill.classList.remove("timer-urgent", "timer-infinite");
+        timerPill.classList.add("timer-frozen");
+      }
+      return;
+    }
+  }
+
   // تحديث حالة زر الإيقاف/الاستئناف للمشرف
   updateSupervisorTimerButtonUI(!!(timerState.isFrozen || timerState.isCorrectionPaused || timerState.isWalletSelectionPaused));
 
@@ -13808,24 +13846,25 @@ function showTeamRoundBanner(roundNum, onComplete) {
   try { soundFX.celebrate(); } catch (e) {}
 
   if (btnStartNow) {
-    btnStartNow.onclick = async () => {
+    btnStartNow.onclick = () => {
       btnStartNow.onclick = null;
       btnStartNow.disabled = true;
-      btnStartNow.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> جاري الانطلاق...`;
+
+      // إخفاء لافتة الفقرة فوراً وبشكل حاسم دون انتظار السحابة
+      overlay.classList.add("hidden");
 
       if (currentLiveRoom) {
         currentLiveRoom.teamRoundStarted = true;
         currentLiveRoom.teamRoundStartedAt = Date.now();
         currentLiveRoom.teamRoundState = "round_active";
-        await saveRooms(currentLiveRoom);
+        saveRooms(currentLiveRoom).catch(e => console.warn("Notice saving round start:", e));
       }
 
-      overlay.classList.add("hidden");
       btnStartNow.disabled = false;
       if (btnStartText) btnStartText.textContent = `التالي: بدء ${cfg.name}`;
 
-      // إظهار بطاقة الأسئلة فقط بعد ضغط المشرف على زر التالي
-      if (stageQuestionCard) stageQuestionCard.classList.remove("hidden");
+      // تبقى بطاقة السؤال مخفية حتى تنتهي البطاقة الدوارة تماماً
+      if (stageQuestionCard) stageQuestionCard.classList.add("hidden");
 
       if (typeof onComplete === "function") {
         onComplete();
@@ -13834,7 +13873,9 @@ function showTeamRoundBanner(roundNum, onComplete) {
   }
 }
 
-// البطاقة الدوارة لاختيار الفريق والطالب (تتقلب وتتدحرج من اليمين للمنتصف سريعاً، تظهر اسم الفريق، ثم روليت سريع لاختيار الطالب، ثم تتشقلب لليسار)
+let isTeamRollingCardActive = false;
+
+// البطاقة الدوارة لاختيار الفريق والطالب (سريعة، رشيقة، محكمة وبدون تداخل للطبقات)
 function showTeamRollingStudentCard(team, studentName, onComplete) {
   const wrapper = document.getElementById("teamFlippingModalWrapper");
   const card = document.getElementById("teamRollingCard");
@@ -13847,7 +13888,8 @@ function showTeamRollingStudentCard(team, studentName, onComplete) {
   const rouletteBox = document.getElementById("rollingRouletteBox");
   const targetStudent = document.getElementById("rollingCardTargetStudent");
 
-  // إخفاء منطقة السؤال الحالية تماماً حتى لا يظهر السؤال قبل رحيل البطاقة
+  // إخفاء بطاقة السؤال ومنطقة التفاعل تماماً لمنع أي تداخل طبقات أثناء السحب
+  if (stageQuestionCard) stageQuestionCard.classList.add("hidden");
   if (stageInteractiveArea) stageInteractiveArea.innerHTML = "";
   if (stageQuestionText) stageQuestionText.textContent = "";
 
@@ -13855,6 +13897,12 @@ function showTeamRollingStudentCard(team, studentName, onComplete) {
     if (typeof onComplete === "function") onComplete();
     return;
   }
+
+  // منع أي تشغيل مزدوج أو متداخل لبطاقة السحب الدوارة
+  if (isTeamRollingCardActive) {
+    return;
+  }
+  isTeamRollingCardActive = true;
 
   const scheme = TEAM_COLOR_SCHEMES[team.color] || TEAM_COLOR_SCHEMES.blue;
   card.style.background = scheme.bg;
@@ -13877,7 +13925,7 @@ function showTeamRollingStudentCard(team, studentName, onComplete) {
   card.className = "team-rolling-card animate-enter-flip";
   try { soundFX.pop(); } catch (e) {}
 
-  // بعد استقرار البطاقة في المنتصف (650ms)، إبقاء اسم الفريق واضحاً (1400ms) ثم الانتقال لاختيار الطالب
+  // بعد استقرار البطاقة في المنتصف سريعاً (400ms)، عرض اسم الفريق لـ 550ms ثم روليت اختيار الطالب
   setTimeout(() => {
     try { soundFX.whoosh(); } catch (e) {}
 
@@ -13885,17 +13933,17 @@ function showTeamRollingStudentCard(team, studentName, onComplete) {
       if (phaseTeam) phaseTeam.classList.add("hidden");
       if (phaseStudent) phaseStudent.classList.remove("hidden");
 
-      // تشغيل روليت حماسي مشوق لأسماء طلاب الفريق
+      // تشغيل روليت حماسي وسريع لأسماء طلاب الفريق
       const members = (team.members && team.members.length > 0) 
         ? team.members 
         : [{ name: studentName }];
       
-      const namesList = members.map(m => m.name);
+      const namesList = members.map(m => typeof m === "object" ? m.name : String(m));
       if (!namesList.includes(studentName)) namesList.push(studentName);
 
       let step = 0;
-      const totalSteps = 10;
-      let delay = 80;
+      const totalSteps = 6;
+      let delay = 55;
 
       function spinNextStudent() {
         step++;
@@ -13915,22 +13963,23 @@ function showTeamRollingStudentCard(team, studentName, onComplete) {
           if (rouletteBox) rouletteBox.classList.add("settled");
           try { soundFX.correct(); } catch (e) {}
 
-          // إبقاء اسم الطالب ظاهراً بوضوح للجميع (2200ms) ثم تشقلب البطاقة وخروجها لليسار
+          // إبقاء اسم الطالب ظاهراً بوضوح للجميع (750ms) ثم تشقلب البطاقة وخروجها لليسار
           setTimeout(() => {
             card.className = "team-rolling-card animate-exit-flip";
             try { soundFX.pop(); } catch (e) {}
 
             setTimeout(() => {
               wrapper.classList.add("hidden");
+              isTeamRollingCardActive = false;
               if (typeof onComplete === "function") onComplete();
-            }, 550);
-          }, 2200);
+            }, 380);
+          }, 750);
         }
       }
 
       spinNextStudent();
-    }, 1400);
-  }, 650);
+    }, 550);
+  }, 400);
 }
 
 // بطاقات الفرق الجانبية المتحركة (Score Flyers)
@@ -14173,7 +14222,10 @@ function executeNextTeamQuestion(qIndex) {
     isRebound: false,
     startedAt: solverStamp
   };
-  saveRooms(currentLiveRoom);
+  saveRooms(currentLiveRoom).catch(e => console.warn("Notice saving active solver:", e));
+
+  // إخفاء بطاقة السؤال تماماً قبل وأثناء ظهور بطاقة السحب
+  if (stageQuestionCard) stageQuestionCard.classList.add("hidden");
 
   const targetQuestion = questions[globalQIdx % questions.length];
   showTeamRollingStudentCard(targetTeam, chosenStudent.name, () => {
@@ -14183,6 +14235,11 @@ function executeNextTeamQuestion(qIndex) {
 
 function renderTeamQuestion(q, globalQIdx, qIndex) {
   if (!q || !stageInteractiveArea) return;
+
+  // إظهار بطاقة الأسئلة الآن بعد اكتمال سحب واختيار المتسابق
+  if (stageQuestionCard) {
+    stageQuestionCard.classList.remove("hidden");
+  }
 
   const totalInQuiz = currentLiveRoom?.roundQuestions?.length || 1;
   const displayQNum = (typeof globalQIdx === "number") ? (globalQIdx + 1) : ((qIndex || 0) + 1);
@@ -15010,7 +15067,7 @@ function renderPastTournamentsCard(tourn) {
           <h3 class="past-card-title"><i class="fa-solid fa-trophy" style="color:#eab308;margin-left:6px;"></i> ${escapeHtml(tourn.title || "بطولة مسابقة نور البيان")}</h3>
           <span class="past-card-date"><i class="fa-regular fa-calendar-days"></i> ${escapeHtml(dateStr)} • المشرف: ${escapeHtml(tourn.supervisorName || MASTER_SUPERVISOR_NAME)}</span>
         </div>
-        <span class="badge" style="background:#dbeafe;color:#1e40af;font-weight:900;padding:4px 10px;border-radius:12px;font-size:12px;">
+        <span class="past-teams-pill">
           ${totalTeams} فرق
         </span>
       </div>
@@ -15020,22 +15077,22 @@ function renderPastTournamentsCard(tourn) {
           <i class="fa-solid fa-crown"></i>
         </div>
         <div style="flex:1;">
-          <div style="font-size:11.5px;color:#854d0e;font-weight:800;">الفريق البطل المتوج بالمركز الأول 🏆</div>
-          <strong style="font-size:17px;color:#713f12;display:block;">${escapeHtml(champion.name)}</strong>
+          <div class="champion-badge-subtitle">الفريق البطل المتوج بالمركز الأول 🏆</div>
+          <strong class="champion-badge-name">${escapeHtml(champion.name)}</strong>
         </div>
       </div>
 
       <div class="past-card-meta-row">
-        <span>🥈 الوصيف: <strong>${escapeHtml(runnerUp.name)}</strong></span>
-        ${tourn.mvpStudent ? `<span>⭐ هداف البطولة: <strong>${escapeHtml(tourn.mvpStudent.name)} (${tourn.mvpStudent.score}ن)</strong></span>` : ''}
+        <span class="past-meta-pill">🥈 الوصيف: <strong>${escapeHtml(runnerUp.name)}</strong></span>
+        ${tourn.mvpStudent ? `<span class="past-meta-pill mvp">⭐ هداف البطولة: <strong>${escapeHtml(tourn.mvpStudent.name)} (${tourn.mvpStudent.score}ن)</strong></span>` : ''}
       </div>
 
-      <div style="display:flex;gap:8px;margin-top:12px;">
-        <button type="button" class="btn-duo-blue btn-sm btn-view-tournament-details" data-id="${escapeHtml(tourn.id)}" style="flex:1;font-size:12.5px;padding:7px 12px;font-weight:800;">
+      <div style="display:flex;gap:8px;margin-top:auto;padding-top:10px;">
+        <button type="button" class="btn-duo-green btn-sm btn-view-tournament-details" data-id="${escapeHtml(tourn.id)}" style="flex:1;font-size:13px;padding:9px 14px;font-weight:900;">
           <i class="fa-solid fa-ranking-star"></i> عرض المراكز والترتيب
         </button>
         ${isSup ? `
-          <button type="button" class="btn-duo-outline btn-sm btn-delete-past-tourn" data-id="${escapeHtml(tourn.id)}" style="color:#ef4444;border-color:#fca5a5;padding:7px 10px;" title="حذف من الأرشيف">
+          <button type="button" class="btn-duo-outline btn-sm btn-delete-past-tourn" data-id="${escapeHtml(tourn.id)}" style="color:#ef4444;border-color:#fca5a5;padding:8px 12px;" title="حذف من الأرشيف">
             <i class="fa-solid fa-trash-can"></i>
           </button>
         ` : ''}
@@ -15067,10 +15124,12 @@ function renderPastTournamentsTab(filterQuery = "") {
     : pastTournamentsCache;
 
   const emptyHtml = `
-    <div style="grid-column: 1/-1; padding: 40px 20px; text-align: center; background: #ffffff; border: 2px dashed #cbd5e1; border-radius: 18px; color: #64748b;">
-      <i class="fa-solid fa-box-open" style="font-size: 38px; color: #94a3b8; margin-bottom: 12px; display: block;"></i>
-      <h4 style="font-size: 17px; font-weight: 800; color: #1e293b; margin: 0 0 6px;">لا توجد مسابقات سابقة محفوظة حالياً</h4>
-      <p style="font-size: 13.5px; margin: 0;">عند إتمام أي مسابقة فرق والضغط على «إنهاء وحفظ المسابقة»، سيتم توثيقها وحفظها هنا فورياً لجميع المستخدمين.</p>
+    <div style="grid-column: 1/-1; padding: 48px 24px; text-align: center; background: #ffffff; border: 2.5px dashed #6ee7b7; border-radius: 24px; color: #065f46; box-shadow: 0 6px 20px rgba(5, 150, 105, 0.05);">
+      <div style="width: 72px; height: 72px; border-radius: 50%; background: #ecfdf5; border: 2px solid #a7f3d0; color: #059669; display: flex; align-items: center; justify-content: center; font-size: 32px; margin: 0 auto 16px;">
+        <i class="fa-solid fa-box-open"></i>
+      </div>
+      <h4 style="font-size: 20px; font-weight: 900; color: #064e3b; margin: 0 0 8px;">لا توجد مسابقات سابقة محفوظة حالياً</h4>
+      <p style="font-size: 14.5px; margin: 0; color: #047857; max-width: 520px; margin-inline: auto; line-height: 1.6;">عند إتمام أي مسابقة فرق والضغط على «إنهاء وحفظ المسابقة»، سيتم توثيقها وتتويج أبطالها وحفظها هنا فورياً بتزامن كامل لجميع المشرفين والطلاب.</p>
     </div>
   `;
 
@@ -15127,59 +15186,59 @@ function openTournamentDetailsModal(tournamentId) {
   const standings = tourn.fullStandings || [];
 
   contentEl.innerHTML = `
-    <!-- بطاقة البطل والوصيف -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
-      <div style="background:linear-gradient(135deg,#fefce8 0%,#fef08a 100%);border:2px solid #facc15;border-radius:14px;padding:12px;text-align:center;">
-        <div style="font-size:24px;">🏆</div>
-        <div style="font-size:12px;color:#854d0e;font-weight:800;">بطل البطولة (المركز الأول)</div>
-        <strong style="font-size:18px;color:#713f12;display:block;margin-top:2px;">${escapeHtml(champion.name)}</strong>
+    <!-- منصة التتويج المصغرة للبطل والوصيف -->
+    <div class="podium-showcase-grid">
+      <div class="podium-card-duo gold">
+        <div class="podium-icon">🏆</div>
+        <div class="podium-card-role">بطل البطولة (المركز الأول)</div>
+        <strong class="podium-card-name">${escapeHtml(champion.name)}</strong>
       </div>
-      <div style="background:linear-gradient(135deg,#f1f5f9 0%,#e2e8f0 100%);border:2px solid #cbd5e1;border-radius:14px;padding:12px;text-align:center;">
-        <div style="font-size:24px;">🥈</div>
-        <div style="font-size:12px;color:#334155;font-weight:800;">وصيف البطولة (المركز الثاني)</div>
-        <strong style="font-size:18px;color:#0f172a;display:block;margin-top:2px;">${escapeHtml(runnerUp.name)}</strong>
+      <div class="podium-card-duo silver">
+        <div class="podium-icon">🥈</div>
+        <div class="podium-card-role">وصيف البطولة (المركز الثاني)</div>
+        <strong class="podium-card-name">${escapeHtml(runnerUp.name)}</strong>
       </div>
     </div>
 
     ${tourn.mvpStudent ? `
-      <div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:12px;padding:10px 14px;margin-bottom:16px;display:flex;align-items:center;gap:10px;">
-        <i class="fa-solid fa-star" style="color:#eab308;font-size:20px;"></i>
+      <div class="mvp-highlight-banner">
+        <i class="fa-solid fa-star" style="color:#eab308;font-size:22px;"></i>
         <div>
           <span style="font-size:12px;color:#166534;font-weight:800;">نجم وهداف البطولة (MVP):</span>
-          <strong style="font-size:14.5px;color:#14532d;display:block;">${escapeHtml(tourn.mvpStudent.name)} (${tourn.mvpStudent.score} نقطة)</strong>
+          <strong style="font-size:15px;color:#14532d;display:block;">${escapeHtml(tourn.mvpStudent.name)} (${tourn.mvpStudent.score} نقطة)</strong>
         </div>
       </div>
     ` : ''}
 
     <!-- جدول الترتيب الكامل للبطولة -->
-    <h4 style="font-size:15px;font-weight:900;color:#1e293b;margin:0 0 10px;display:flex;align-items:center;gap:6px;">
+    <h4 class="tournament-standings-heading">
       <i class="fa-solid fa-ranking-star" style="color:#2563eb;"></i> جدول الترتيب النهائي لفرق البطولة (${standings.length || tourn.totalTeamsCount || 0} فرق):
     </h4>
-    <div style="display:flex;flex-direction:column;gap:6px;max-height:280px;overflow-y:auto;padding-left:4px;">
+    <div class="tournament-standings-scroll">
       ${standings.map((s, idx) => {
         const rank = s.rank || (idx + 1);
-        let rankBadge = `<span class="podium-rank-badge" style="background:#475569;color:#fff;">${rank}</span>`;
-        let rowStyle = "background:#f8fafc;border:1.5px solid #e2e8f0;color:#1e293b;";
+        let rankClass = "rank-other";
+        let rankBadge = `<span class="podium-rank-badge rank-other">${rank}</span>`;
         if (rank === 1) {
-          rankBadge = `<span class="podium-rank-badge" style="background:#facc15;color:#854d0e;">🥇</span>`;
-          rowStyle = "background:#fefce8;border:2px solid #facc15;color:#854d0e;";
+          rankClass = "rank-1";
+          rankBadge = `<span class="podium-rank-badge rank-1">🥇</span>`;
         } else if (rank === 2) {
-          rankBadge = `<span class="podium-rank-badge" style="background:#cbd5e1;color:#1e293b;">🥈</span>`;
-          rowStyle = "background:#f1f5f9;border:1.5px solid #cbd5e1;color:#1e293b;";
+          rankClass = "rank-2";
+          rankBadge = `<span class="podium-rank-badge rank-2">🥈</span>`;
         } else if (rank === 3) {
-          rankBadge = `<span class="podium-rank-badge" style="background:#fed7aa;color:#c2410c;">🥉</span>`;
-          rowStyle = "background:#fff7ed;border:1.5px solid #fdba74;color:#9a3412;";
+          rankClass = "rank-3";
+          rankBadge = `<span class="podium-rank-badge rank-3">🥉</span>`;
         }
         return `
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-radius:10px;${rowStyle}">
-            <div style="display:flex;align-items:center;gap:10px;">
+          <div class="standing-row-duo ${rankClass}">
+            <div style="display:flex;align-items:center;gap:12px;">
               ${rankBadge}
               <div>
-                <strong style="font-size:14px;">${escapeHtml(s.team?.name || 'فريق')}</strong>
-                <div style="font-size:11px;opacity:0.8;">${escapeHtml(s.stageLabel || '')}</div>
+                <strong class="standing-team-name">${escapeHtml(s.team?.name || 'فريق')}</strong>
+                <div class="standing-stage-label">${escapeHtml(s.stageLabel || '')}</div>
               </div>
             </div>
-            ${s.points ? `<span style="font-weight:900;font-size:13px;">${s.points} نقطة</span>` : ''}
+            ${s.points ? `<span class="standing-points-pill"><i class="fa-solid fa-award"></i> ${s.points} نقطة</span>` : ''}
           </div>
         `;
       }).join("")}
@@ -15329,6 +15388,8 @@ function syncTeamStageRealtime(room) {
 
   // إذا كانت الغرفة في وضع اختيار وتحديد فريقي المواجهة
   if (room.teamSelectionState === "selecting" || !room.teamA || !room.teamB) {
+    if (liveTimerInterval) { clearInterval(liveTimerInterval); liveTimerInterval = null; }
+    if (stageTimerSeconds) stageTimerSeconds.textContent = "⏸️";
     renderArenaTeamPickerUI(room);
     return;
   }
@@ -15349,12 +15410,17 @@ function syncTeamStageRealtime(room) {
     btnSettings.classList.toggle("hidden", !isSup);
   }
 
-  // إذا لم تبدأ الفقرة بعد (لافتة الفقرة معروضة): تأكد من إخفاء بطاقة السؤال خلفها تماماً
+  // إذا لم تبدأ الفقرة بعد (لافتة الفقرة معروضة): تأكد من إخفاء بطاقة السؤال خلفها تماماً وإيقاف المؤقت
   if (!room.teamRoundStarted) {
     if (stageQuestionCard) stageQuestionCard.classList.add("hidden");
+    if (liveTimerInterval) { clearInterval(liveTimerInterval); liveTimerInterval = null; }
+    if (stageTimerSeconds) stageTimerSeconds.innerHTML = `<span style="font-size:12.5px;color:#d97706;font-weight:800;"><i class="fa-solid fa-pause"></i> في انتظار بدء الفقرة</span>`;
   } else {
-    if (stageQuestionCard && (!document.getElementById("teamRoundBannerOverlay") || document.getElementById("teamRoundBannerOverlay").classList.contains("hidden"))) {
-      stageQuestionCard.classList.remove("hidden");
+    // إظهار بطاقة السؤال فقط إذا لم تكن البطاقة الدوارة قيد العمل وكان هناك متسابق محدد
+    if (stageQuestionCard && !isTeamRollingCardActive && (!document.getElementById("teamRoundBannerOverlay") || document.getElementById("teamRoundBannerOverlay").classList.contains("hidden"))) {
+      if (currentActiveTeamSolver) {
+        stageQuestionCard.classList.remove("hidden");
+      }
     }
   }
 
@@ -15432,6 +15498,7 @@ function syncTeamStageRealtime(room) {
       // في حالة رد الفعل، لا حاجة لإعادة تدوير بطاقة السحب، يتم عرض لافتة رد الفعل والانتقال المباشر للسؤال
       renderTeamQuestion(targetQuestion, globalQIdx, room.teamActiveSolver.qIndex);
     } else {
+      if (stageQuestionCard) stageQuestionCard.classList.add("hidden");
       showTeamRollingStudentCard(targetTeam, room.teamActiveSolver.studentName, () => {
         renderTeamQuestion(targetQuestion, globalQIdx, room.teamActiveSolver.qIndex);
       });
