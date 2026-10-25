@@ -1569,15 +1569,15 @@
 
           <div class="input-group">
             <label class="input-label">السيكريبت / وصف الاختبار المطلوب بالتفصيل <span class="required-star">*</span></label>
-            <textarea id="aiPromptScriptInput" class="form-control" rows="4" placeholder="اكتب هنا طلبك أو السيكريبت الذي تريده بالتفصيل، مثال: أنشئ لي اختباراً مكوناً من 3 أقسام يركز على أحكام النون الساكنة والتنوين (الإظهار والإدغام والإقلاب والإخفاء)، ويحتوي على أسئلة شفهية وأسئلة خيارات متعددة وأسئلة ترتيب كلمات..."></textarea>
+            <textarea id="aiPromptScriptInput" class="form-control" rows="4" placeholder="اكتب هنا طلبك أو مواصفات الاختبار المطلوب بالتفصيل في أي مادة أو موضوع، مثال: أنشئ لي اختباراً مكوناً من 3 أقسام يحتوي على أسئلة خيارات متعددة وأسئلة شفهية وتوصيل وترتيب..."></textarea>
           </div>
 
           <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
             <button type="button" id="btnCopyAIEngineeredPrompt" class="btn-duo-blue" style="padding: 12px 22px;">
-              <i class="fa-solid fa-copy"></i> إنشاء ونسخ البرومبت الهندسي للذكاء الاصطناعي
+              <i class="fa-solid fa-copy"></i> إنشاء ونسخ البرومبت وصيغة JSON للذكاء الاصطناعي
             </button>
             <span id="promptCopyFeedback" style="font-size: 13px; font-weight: 800; color: var(--duo-green); display: none;">
-              <i class="fa-solid fa-circle-check"></i> تم نسخ البرومبت بنجاح! الصقه في ChatGPT أو Gemini
+              <i class="fa-solid fa-circle-check"></i> تم نسخ صيغة البرومبت بنجاح! الصقه في ChatGPT أو Gemini
             </span>
           </div>
         </div>
@@ -1591,7 +1591,7 @@
             الصق كود الـ JSON الذي أنتجه لك الذكاء الاصطناعي بالأسفل (سيتكفل النظام بفرزه تلقائياً):
           </p>
 
-          <textarea id="aiJsonPasteInput" class="form-control" rows="5" placeholder='الصق كود الـ JSON هنا... مثال: { "title": "اختبار نور البيان", "sections": [...] }' style="font-family: monospace; font-size: 13px; direction: ltr; text-align: left;"></textarea>
+          <textarea id="aiJsonPasteInput" class="form-control" rows="5" placeholder='الصق كود الـ JSON هنا... مثال: { "title": "عنوان الاختبار", "sections": [...] }' style="font-family: monospace; font-size: 13px; direction: ltr; text-align: left;"></textarea>
 
           <div class="modal-actions-flex" style="margin-top: 14px;">
             <button type="button" id="btnImportPastedJsonQuiz" class="btn-duo-green" style="padding: 12px 24px;">

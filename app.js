@@ -5350,51 +5350,61 @@ btnOpenAIQuizModal?.addEventListener("click", async () => {
   aiQuizModal?.classList.remove("hidden");
 });
 
-// إنشاء ونسخ البرومبت الهندسي للذكاء الاصطناعي
+// إنشاء ونسخ البرومبت وصيغة الـ JSON للذكاء الاصطناعي
 btnCopyAIEngineeredPrompt?.addEventListener("click", () => {
   const userScript = (aiPromptScriptInput ? aiPromptScriptInput.value.trim() : "");
   const selectedGrade = (aiGradeSelect ? aiGradeSelect.value : "صف أول");
 
-  if (!userScript) {
-    showToast("يرجى كتابة سيكريبت ومواصفات الاختبار المطلوب أولاً!", "fa-triangle-exclamation");
-    aiPromptScriptInput?.focus();
-    return;
-  }
-
-  // بناء البرومبت الهندسي الشامل المتكامل
-  const engineeredPrompt = `أنت خبير تربوي ومحكم معتمد في مسابقة وتدريس "نور البيان" لتعليم القراءة وترتيل القرآن الكريم.
-المطلوب منك: إنشاء اختبار قرآني نموذجي متكامل للفئة المقررة: [${selectedGrade}] وفق متطلبات السيكريبت الآتية بالضبط وبالحرف:
+  const specPart = userScript
+    ? `المطلوب: إنشاء اختبار متكامل وفق المواصفات الآتية:
 """
 ${userScript}
 """
 
-القواعد الصارمة والواجب الالتزام بها:
-1. يجب كتابة جميع الكلمات والآيات القرآنية بالرسم العثماني المضبوط بالتشكيل القرآني التام (الفتحات، الكسرات، الضمات، السكون، الشدات، التنوين).
-2. [تنبيه صارم وحاسم]: احرص تماماً على توزيع الإجابات الصحيحة بشكل عشوائي تماماً (Randomized Correct Options) بين الخيارات (لا تضع الإجابة الصحيحة دائماً في الخيار الأول أو في أي نمط متكرر، بل نوع بين الخيار 1 و 2 و 3 و 4 بنسب متقاربة وعشوائية ذكية).
-3. نوع في صياغة الأسئلة ولا تجعل كل الأسئلة متشابهة أو بنمط رتيب، ونوع بين الأسئلة الشفهية (oral)، الخيارات المتعددة (mcq)، الترتيب (ordering)، والتوصيل (matching).
-4. الإخراج المطلوب: ملف JSON نقي وصالح فقط (Valid JSON Only) بدون أي شروحات أو مقدمات أو خاتمات خارج كود الـ JSON، وفق الهيكل الآتي تماماً:
+`
+    : `المطلوب: إنشاء اختبار متكامل وفق الموضوع والمواصفات المطلوبة.
+
+`;
+
+  // البرومبت الهندسي المباشر: صيغة ملف JSON فقط بدون أي حشو أو شرح مسبق
+  const engineeredPrompt = `${specPart}يجب أن يكون الناتج ملف JSON فقط بهذه الصيغة بدون أي شرح أو كلام إضافي:
 
 {
-  "title": "عنوان الاختبار المقترح هنا",
+  "title": "عنوان الاختبار المقترح",
   "targetGrade": "${selectedGrade}",
   "allowPractice": true,
   "sections": [
     {
-      "sectionName": "القسم الأول: الحروف والمدود",
+      "sectionName": "اسم القسم الأول",
       "questions": [
         {
-          "type": "oral",
-          "font": "quran",
-          "text": "اقرأ الكلمات الآتية مع ضبط حركة الفتح:",
-          "targetOral": "كَتَبَ - بَلَغَ - وَجَدَ",
+          "type": "mcq",
+          "font": "normal",
+          "text": "نص سؤال الاختيار من متعدد هنا",
+          "options": ["الخيار الأول", "الخيار الثاني", "الخيار الثالث", "الخيار الرابع"],
+          "correct": 0,
           "points": 5
         },
         {
-          "type": "mcq",
-          "font": "quran",
-          "text": "ما هي الحركة الصحيحة لحرف الميم في كلمة: عَمِلَ؟",
-          "options": ["فتحة (مَ)", "كسرة (مِ)", "ضمة (مُ)", "سكون (مْ)"],
-          "correct": 1,
+          "type": "oral",
+          "font": "normal",
+          "text": "نص أو تعليمات السؤال الشفهي",
+          "targetOral": "النص المطلوب قراءته",
+          "points": 5
+        },
+        {
+          "type": "matching",
+          "font": "normal",
+          "text": "صل كل عنصر بما يناسبه:",
+          "pairs": [["الطرف 1", "المقابل 1"], ["الطرف 2", "المقابل 2"]],
+          "points": 5
+        },
+        {
+          "type": "ordering",
+          "font": "normal",
+          "text": "رتب الكلمات/العناصر الآتية:",
+          "items": ["عنصر 1", "عنصر 2", "عنصر 3"],
+          "targetSentence": "عنصر 1 عنصر 2 عنصر 3",
           "points": 5
         }
       ]
@@ -5402,14 +5412,15 @@ ${userScript}
   ]
 }
 
-ملاحظات هامة:
-- قيمة "correct" في أسئلة mcq هي رقم الفهرس الذي يبدأ من 0 (الخيار الأول = 0، الثاني = 1، الثالث = 2، الرابع = 3).
-- في أسئلة "oral": حقل "text" هو عنوان السؤال/التعليمات فقط، وحقل "targetOral" هو الكلمات أو الآيات التي يجب على المتسابق قراءتها بالرسم العثماني مع التشكيل الكامل. لا تدمجهما في حقل واحد.
-أعطني الآن كود الـ JSON فقط:`;
+ملاحظات:
+- أعطني كود JSON فقط بدون أي شرح أو كلام خارج الكود (Valid JSON Only).
+- قيمة "correct" في أسئلة mcq هي رقم الفهرس الذي يبدأ من 0 (الخيار الأول = 0، الثاني = 1، ...).
+- حقل "font" يكون إما "normal" أو "quran".
+- نوع في أنواع الأسئلة (mcq, oral, matching, ordering) حسب المطلوب.`;
 
   navigator.clipboard.writeText(engineeredPrompt).then(() => {
     if (promptCopyFeedback) promptCopyFeedback.style.display = "inline-flex";
-    showToast("تم نسخ البرومبت الهندسي بنجاح! الصقه في ChatGPT أو Gemini أو Claude", "fa-clipboard-check");
+    showToast("تم نسخ صيغة البرومبت وقالب الـ JSON بنجاح! الصقه في ChatGPT أو Gemini", "fa-clipboard-check");
   }).catch(() => {
     showToast("تعذر النسخ التلقائي، يرجى نسخ النص يدوياً", "fa-triangle-exclamation");
   });
@@ -5442,7 +5453,7 @@ btnImportPastedJsonQuiz?.addEventListener("click", () => {
     // إعداد كائن الاختبار المعياري
     const importedQuiz = {
       id: "quiz_" + Date.now(),
-      title: parsed.title || `اختبار نور البيان - ${parsed.targetGrade || 'عام'}`,
+      title: parsed.title || `اختبار جديد - ${parsed.targetGrade || 'عام'}`,
       targetGrade: parsed.targetGrade || (aiGradeSelect?.value || "صف أول"),
       allowPractice: parsed.allowPractice !== undefined ? !!parsed.allowPractice : true,
       sections: parsed.sections.map((sec, sIdx) => ({
