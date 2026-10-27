@@ -17,11 +17,2809 @@
   <!-- مكتبة أيقونات FontAwesome -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" integrity="sha512-SnH5WK+bZxgPHs44uWIX+LLJAJ9/2PkPKZ5QiAj6Ta86w+fsb2TkcmfRyVX3pBnMFcV7oQPJkl9QevSCWr3W6A==" crossorigin="anonymous" referrerpolicy="no-referrer" />
   
+  <!-- خريطة الاستيراد لتمكين تشغيل التطبيق مباشرة على أي استضافة (Netlify, GitHub Pages, Vercel) بدون أي أدوات بناء -->
+  <script type="importmap">
+  {
+    "imports": {
+      "firebase/app": "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js",
+      "firebase/auth": "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js",
+      "firebase/firestore": "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js"
+    }
+  }
+  </script>
+
   <!-- ملف الأنماط بثيم دولينجو المبهج والتصميم التفاعلي -->
-  <link rel="stylesheet" href="./style.css">
+  <link rel="stylesheet" href="style.css">
 </head>
 <body class="duo-theme">
-  <div id="root"></div>
-  <script type="module" src="./src/main.tsx"></script>
+
+  <!-- قماش الخلفية التفاعلية الحية: مربعات ومثلثات ودوائر بثيم دولينجو -->
+  <canvas id="islamicInteractiveCanvas" class="interactive-canvas" aria-hidden="true"></canvas>
+
+  <!-- هالة النور التفاعلية المرافقة لحركة الفأرة واللمس -->
+  <div id="mouseGlow" class="mouse-glow-aura" aria-hidden="true"></div>
+
+  <!-- خلفية النقاط الخفيفة المبهجة -->
+  <div class="islamic-bg-ornament" aria-hidden="true"></div>
+  <div class="light-glow glow-top" aria-hidden="true"></div>
+  <div class="light-glow glow-bottom" aria-hidden="true"></div>
+
+  <!-- الهيدر بأسلوب دولينجو (أيقونة المصحف الشريف وبيانات المستخدم) -->
+  <header class="main-header">
+    <div class="header-container">
+      <div class="logo-box" id="headerHomeLogo" role="button" title="الرئيسية">
+        <div class="logo-icon" title="المصحف الشريف">
+          <i class="fa-solid fa-book-quran"></i>
+        </div>
+        <div class="logo-text">
+          <span class="logo-title">مسابقة نور البيان</span>
+          <span class="logo-subtitle">1448 - 1449 هـ</span>
+        </div>
+      </div>
+
+      <!-- أدوات التحكم وحالة المستخدم بالهيدر -->
+      <div class="header-tools">
+        <button type="button" id="btnHeaderCloudSync" class="btn-cloud-sync-header" title="مزامنة حقيقية وفورية مع قاعدة بيانات السحابة Firestore">
+          <span class="cloud-status-dot online"></span>
+          <i class="fa-solid fa-cloud-arrow-down"></i>
+          <span class="btn-sync-label">تحديث السحابة</span>
+        </button>
+        <button type="button" id="btnHeaderHonorBoard" class="btn-honor-header" title="عرض لوحة الشرف">
+          <i class="fa-solid fa-trophy"></i>
+          <span>لوحة الشرف</span>
+        </button>
+        <button type="button" id="btnHeaderPastTournaments" class="btn-honor-header" style="border-color: #10b981; color: #065f46; background: #ecfdf5;" title="عرض أرشيف المسابقات والبطولات السابقة">
+          <i class="fa-solid fa-box-archive"></i>
+          <span>مسابقات سابقة</span>
+        </button>
+        <div id="userQuickStatus" class="user-quick-status hidden">
+          <span class="quick-role-badge" id="quickRoleBadge">مشرف</span>
+          <span class="quick-user-name" id="quickUserName"></span>
+          <button type="button" id="quickLogoutBtn" class="btn-logout-small" title="تسجيل الخروج">
+            <i class="fa-solid fa-arrow-right-from-bracket"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- الحاوية الرئيسية للتطبيقات والواجهات -->
+  <main class="main-content">
+
+    <!-- ======================================================== -->
+    <!-- 1. الشاشة الترحيبية الأولى: ثيم دولينجو المبهج -->
+    <!-- ======================================================== -->
+    <section id="heroSection" class="view-section active">
+      <div class="duo-card hero-card">
+        
+        <div class="bismillah-wrapper">
+          <span class="bismillah">بِسْمِ اللَّـهِ الرَّحْمَـٰنِ الرَّحِيمِ</span>
+        </div>
+
+        <div class="hero-quran-badge">
+          <div class="badge-icon-circle">
+            <i class="fa-solid fa-book-quran"></i>
+          </div>
+        </div>
+
+        <h1 class="hero-main-title">مسابقة نور البيان</h1>
+        <div class="hero-years-badge">
+          <span>1448 - 1449</span>
+        </div>
+
+        <!-- الوصف البسيط المحدد تماماً من المستخدم -->
+        <p class="hero-desc">
+          مرحبا بكم في مسابقة نور البيان نسخة 1448 - 1449
+        </p>
+
+        <div class="features-grid">
+          <div class="feature-item">
+            <i class="fa-solid fa-award"></i>
+            <span>إتقان أحكام نور البيان</span>
+          </div>
+          <div class="feature-item">
+            <i class="fa-solid fa-tv"></i>
+            <span>شاشات عرض ومسابقات حية</span>
+          </div>
+          <div class="feature-item">
+            <i class="fa-solid fa-wand-magic-sparkles"></i>
+            <span>توليد ذكي للاختبارات</span>
+          </div>
+        </div>
+
+        <div class="hero-action">
+          <button id="btnStart" class="btn-duo-green" type="button" onclick="if(window.handleStartApp){window.handleStartApp();}else{document.getElementById('heroSection')?.classList.add('hidden');document.getElementById('loginSection')?.classList.remove('hidden');document.getElementById('fullNameInput')?.focus();}">
+            <span class="btn-text">أبدأ</span>
+            <span class="btn-icon"><i class="fa-solid fa-arrow-left"></i></span>
+          </button>
+        </div>
+
+        <div class="system-status">
+          <span class="status-indicator online"></span>
+          <span class="status-text">متصل مباشرة بقاعدة البيانات السحابية (Firebase)</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================================================== -->
+    <!-- 2. شاشة تسجيل الدخول وكتابة الاسم الرباعي واختيار المدرسة والفئة -->
+    <!-- ======================================================== -->
+    <!-- 2. شاشة الدخول والتسجيل التفاعلية متعددة المراحل بأسلوب دولينجو -->
+    <!-- ======================================================== -->
+    <section id="loginSection" class="view-section hidden">
+      <div class="duo-card login-card">
+
+        <!-- الخطوة 1: كتابة الاسم الرباعي فقط (للجميع: مشرف، معلم، عارض، طالب سابق أو جديد) -->
+        <div id="loginStepName" class="login-step-panel active">
+          <div class="card-header">
+            <div class="header-icon">
+              <i class="fa-solid fa-id-card"></i>
+            </div>
+            <h2 class="section-title">تسجيل الدخول للمسابقة</h2>
+            <p class="section-subtitle">
+              مسابقة نور البيان 1448 - 1449 هـ
+            </p>
+          </div>
+
+          <!-- شريط الإرشادات التفاعلي بأسلوب دولينجو -->
+          <div class="duo-instruction-box">
+            <div class="instruction-icon">
+              <i class="fa-solid fa-signature"></i>
+            </div>
+            <div class="instruction-text" id="loginInstructionText">
+              يرجى كتابة الاسم الرباعي كاملاً (4 أسماء على الأقل) للمتابعة.
+            </div>
+          </div>
+
+          <form id="loginForm" class="login-form" novalidate>
+            <!-- حقل الاسم الرباعي -->
+            <div class="input-group">
+              <label for="fullNameInput" class="input-label">
+                <i class="fa-solid fa-user-pen"></i> الاسم الكامل للمشارك <span class="required-star">* (إلزامي)</span>
+              </label>
+
+              <!-- شريط تقدم اكتمال الاسم بأسلوب دولينجو -->
+              <div class="name-progress-bar-container">
+                <div id="nameProgressBar" class="name-progress-bar"></div>
+              </div>
+
+              <div class="input-wrapper">
+                <input 
+                  type="text" 
+                  id="fullNameInput" 
+                  name="fullName"
+                  class="form-control" 
+                  placeholder="اكتب اسمك هنا (مثال: أحمد محمد عبدالله إبراهيم)" 
+                  autocomplete="name"
+                  required
+                >
+                <span class="input-badge" id="nameCountBadge">اكتب اسمك</span>
+              </div>
+              <p class="input-hint">
+                <i class="fa-solid fa-circle-info"></i> اكتب اسمك للدخول والمشاركة مباشرة في المسابقة (يُفضل الاسم الثلاثي أو الرباعي).
+              </p>
+            </div>
+
+            <div id="validationAlert" class="alert-box error hidden"></div>
+
+            <div class="form-actions">
+              <button type="submit" id="btnSubmitLogin" class="btn-duo-green btn-block">
+                <span class="btn-text">متابعة والدخول</span>
+                <span class="btn-icon"><i class="fa-solid fa-arrow-left"></i></span>
+              </button>
+              <button type="button" id="btnBackToHero" class="btn-duo-outline btn-block">
+                <i class="fa-solid fa-arrow-right"></i> العودة للرئيسية
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- الخطوة 2: اختيار المدرسة بشكل مبهج وجميل (تظهر فقط للطلاب الجدد) -->
+        <div id="loginStepSchool" class="login-step-panel hidden">
+          <div class="card-header">
+            <div class="header-icon" style="background: var(--duo-blue-subtle); color: var(--duo-blue-dark);">
+              <i class="fa-solid fa-school"></i>
+            </div>
+            <h2 class="section-title">اختر مدرستك أو مركزك</h2>
+            <p class="section-subtitle">
+              أهلاً بك يا <strong id="stepStudentNamePrompt" style="color: var(--duo-green-dark);">...</strong>! اختر جهتك التعليمية المعتمدة للمتابعة
+            </p>
+          </div>
+
+          <div class="step-instruction-bubble">
+            <i class="fa-solid fa-hand-pointer"></i> اضغط على بطاقة مدرستك للمتابعة لاختيار الصف
+          </div>
+
+          <!-- شريط البحث السريع عن المدارس للطالب الجديد -->
+          <div class="student-school-search-wrap" style="margin: 14px 0 16px 0; position: relative;">
+            <i class="fa-solid fa-magnifying-glass" style="position: absolute; right: 14px; top: 50%; transform: translateY(-50%); color: #94a3b8; font-size: 14px; pointer-events: none;"></i>
+            <input type="text" id="studentSchoolSearchInput" class="form-control" placeholder="ابحث عن اسم مدرستك أو مركزك هنا..." style="padding-right: 40px; border-radius: var(--radius-pill, 9999px); height: 44px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); font-size: 14px;">
+          </div>
+
+          <!-- شبكة بطاقات المدارس التفاعلية بأسلوب دولينجو -->
+          <div id="schoolsCardsGrid" class="selection-cards-grid">
+            <!-- يتم تعبئة بطاقات المدارس ديناميكياً من المدارس المعتمدة فقط -->
+          </div>
+
+          <div class="form-actions" style="margin-top: 25px;">
+            <button type="button" id="btnBackToNameStep" class="btn-duo-outline btn-block">
+              <i class="fa-solid fa-arrow-right"></i> رجوع لتعديل الاسم
+            </button>
+          </div>
+        </div>
+
+        <!-- الخطوة 3: اختيار الصف / الفئة بشكل مبهج وجميل (تظهر فقط للطلاب الجدد) -->
+        <div id="loginStepGrade" class="login-step-panel hidden">
+          <div class="card-header">
+            <div class="header-icon" style="background: var(--duo-yellow-subtle); color: #b78103;">
+              <i class="fa-solid fa-layer-group"></i>
+            </div>
+            <h2 class="section-title">اختر صفك الدراسي</h2>
+            <p class="section-subtitle">
+              المدرسة: <strong id="stepChosenSchoolName" style="color: var(--duo-blue-dark);">...</strong>
+            </p>
+          </div>
+
+          <div class="step-instruction-bubble">
+            <i class="fa-solid fa-circle-check"></i> اختر فئتك / صفك المقرر للدخول المباشر إلى المنصة
+          </div>
+
+          <!-- شبكة بطاقات الصفوف التفاعلية بأسلوب دولينجو -->
+          <div id="gradesCardsGrid" class="selection-cards-grid">
+            <!-- يتم تعبئة بطاقات الصفوف ديناميكياً من الصفوف المعتمدة فقط -->
+          </div>
+
+          <div class="form-actions" style="margin-top: 25px;">
+            <button type="button" id="btnBackToSchoolStep" class="btn-duo-outline btn-block">
+              <i class="fa-solid fa-arrow-right"></i> رجوع لاختيار المدرسة
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ======================================================== -->
+    <!-- 3. لوحة تحكم الإدارة (المشرف العام والمعلمون والعارضون) -->
+    <!-- ======================================================== -->
+    <section id="supervisorSection" class="view-section hidden">
+      <div class="dashboard-wrapper">
+        
+        <!-- بطاقة التحية الرسمية -->
+        <div class="welcome-banner supervisor-banner">
+          <div class="banner-badge-icon gold-crown">
+            <i class="fa-solid fa-crown" id="roleBannerIcon"></i>
+          </div>
+
+          <div class="banner-content">
+            <span class="role-pill supervisor-pill" id="bannerRolePill">
+              <i class="fa-solid fa-crown"></i> مشرف البرنامج
+            </span>
+            <h2 id="supervisorGreetingTitle" class="welcome-title">
+              <!-- أهلاً بك أيها المشرف أو مرحباً بعودتك -->
+            </h2>
+            <p class="supervisor-name-highlight">
+              المستخدم: <strong id="supervisorNameDisplay">محمد منتصر محمد يونس</strong>
+            </p>
+            <p class="welcome-text">
+              مسابقة نور البيان للعام الهجري 1448 - 1449 هـ. لوحة الإدارة المتكاملة لإدارة الحسابات، الأسئلة، والعروض الحية.
+            </p>
+          </div>
+
+          <div class="banner-action" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+            <button id="btnSupervisorRefreshCloud" class="btn-duo-outline" style="border-color: #22c55e; color: #16a34a; background: #f0fdf4;" title="تحديث وقراءة البيانات السحابية فوراً">
+              <i class="fa-solid fa-arrows-rotate"></i> تحديث السحابة
+            </button>
+            <button class="btn-duo-outline" data-action="logout" style="border-color: #ff4b4b; color: #ff4b4b;">
+              <i class="fa-solid fa-arrow-right-from-bracket"></i> تسجيل الخروج
+            </button>
+          </div>
+        </div>
+
+        <!-- شريط التبويبات الرئيسي للوحة القيادة -->
+        <nav class="dashboard-nav-tabs">
+          <button class="nav-tab active" data-tab="tabOverview">
+            <i class="fa-solid fa-chart-pie"></i> الرئيسية والإحصائيات
+          </button>
+          <button class="nav-tab" data-tab="tabAccounts">
+            <i class="fa-solid fa-users-gear"></i> إدارة الحسابات والمدارس
+          </button>
+          <button class="nav-tab" data-tab="tabQuizzes">
+            <i class="fa-solid fa-clipboard-question"></i> بنك الأسئلة والاختبارات
+          </button>
+          <button class="nav-tab" data-tab="tabLive">
+            <i class="fa-solid fa-display"></i> العروض والمسابقات الحية
+            <span id="tabLiveBadge" class="tab-live-badge hidden">0</span>
+          </button>
+          <button class="nav-tab" data-tab="tabHonorBoard">
+            <i class="fa-solid fa-trophy"></i> لوحة الشرف
+          </button>
+          <button class="nav-tab" data-tab="tabTeams">
+            <i class="fa-solid fa-users-rectangle"></i> إدارة الفرق
+          </button>
+          <button class="nav-tab" data-tab="tabTacticalCards" id="navTabTacticalCards">
+            <i class="fa-solid fa-wand-magic-sparkles"></i> قسم البطاقات
+            <span class="badge" style="background: #8b5cf6; color: #fff; font-size: 11px; padding: 2px 7px; border-radius: 12px; margin-right: 5px;">40</span>
+          </button>
+          <button class="nav-tab" data-tab="tabPastTournaments" id="navTabPastTournaments">
+            <i class="fa-solid fa-box-archive"></i> مسابقات سابقة
+            <span id="badgePastTournamentsCount" class="badge" style="background: #059669; color: #fff; font-size: 11px; padding: 2px 7px; border-radius: 12px; margin-right: 5px;">0</span>
+          </button>
+        </nav>
+
+        <!-- التبويب 1: الرئيسية والإحصائيات -->
+        <div id="tabOverview" class="tab-content-panel active">
+
+          <!-- بطاقة التنبيه اللحظي للغرف الحية المفتوحة في الصفحة الرئيسية -->
+          <div id="overviewLiveRoomsAlert" class="overview-live-rooms-alert hidden">
+            <div class="live-alert-header">
+              <span class="room-pulse-dot" title="بث مباشر"></span>
+              <h4><i class="fa-solid fa-tower-broadcast fa-fade" style="color: #ef4444;"></i> توجد غرف مسابقات حية جارية الآن على الهواء</h4>
+            </div>
+            <div id="overviewLiveRoomsContent" class="overview-live-rooms-list">
+              <!-- تُملأ تلقائياً عند فتح أي معلم أو عارض أو مشرف لغرفة مسابقة -->
+            </div>
+          </div>
+
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-icon emerald">
+                <i class="fa-solid fa-users"></i>
+              </div>
+              <div class="stat-info">
+                <span class="stat-label">إجمالي الطلاب</span>
+                <span class="stat-value" id="statTotalStudents">0</span>
+              </div>
+            </div>
+
+            <div class="stat-card">
+              <div class="stat-icon gold">
+                <i class="fa-solid fa-user-plus"></i>
+              </div>
+              <div class="stat-info">
+                <span class="stat-label">الطلاب الجدد</span>
+                <span class="stat-value" id="statNewStudents">0</span>
+              </div>
+            </div>
+
+            <div class="stat-card">
+              <div class="stat-icon blue">
+                <i class="fa-solid fa-calendar-check"></i>
+              </div>
+              <div class="stat-info">
+                <span class="stat-label">دخول الطلاب اليوم</span>
+                <span class="stat-value" id="statTodayLogins">0</span>
+              </div>
+            </div>
+
+            <div class="stat-card">
+              <div class="stat-icon purple">
+                <i class="fa-solid fa-book-bookmark"></i>
+              </div>
+              <div class="stat-info">
+                <span class="stat-label">الاختبارات النشطة</span>
+                <span class="stat-value" id="statActiveQuizzes">0</span>
+              </div>
+            </div>
+
+            <div class="stat-card" style="border-color: #fca5a5;">
+              <div class="stat-icon red">
+                <i class="fa-solid fa-tower-broadcast"></i>
+              </div>
+              <div class="stat-info">
+                <span class="stat-label">الغرف الحية المفتوحة</span>
+                <span class="stat-value" id="statActiveRooms" style="color: #dc2626;">0</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- اختصارات العمل السريعة بأسلوب دولينجو الجذاب -->
+          <!-- اختصارات العمل السريعة بأسلوب دولينجو الموحد -->
+          <div class="quick-actions-bar">
+            <h3><i class="fa-solid fa-bolt"></i> إجراءات سريعة</h3>
+            <div class="quick-btns-flex">
+              <button type="button" id="btnQuickNewRoom" class="btn-duo-yellow">
+                <i class="fa-solid fa-display"></i> فتح عرض حي ومسابقة
+              </button>
+              <button type="button" id="btnQuickManageSchools" class="btn-duo-purple">
+                <i class="fa-solid fa-school-flag"></i> إدارة المدارس والصفوف
+              </button>
+              <button type="button" id="btnQuickCreateQuiz" class="btn-duo-green">
+                <i class="fa-solid fa-plus-circle"></i> إنشاء اختبار جديد
+              </button>
+              <button type="button" id="btnQuickCreateQuizAI" class="btn-duo-blue">
+                <i class="fa-solid fa-wand-magic-sparkles"></i> توليد بالذكاء الاصطناعي
+              </button>
+              <button type="button" id="btnQuickAddAccount" class="btn-duo-outline">
+                <i class="fa-solid fa-user-plus"></i> إضافة حساب جديد
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- التبويب 2: قسم الحسابات والمدارس -->
+        <div id="tabAccounts" class="tab-content-panel">
+          <div class="data-table-card">
+            
+            <div class="table-header-flex">
+              <div class="table-title-group">
+                <h3 class="table-title">
+                  <i class="fa-solid fa-users-viewfinder"></i> إدارة الحسابات والترقيات والروابط المباشرة
+                </h3>
+                <span class="table-subtitle">يمكنك ترقية الحسابات (معلم، مشرف، عارض، طالب)، نسخ رابط الدخول المباشر، وتصنيف المدارس والفئات</span>
+              </div>
+
+              <div class="table-actions">
+                <button type="button" id="btnOpenAddAccountModal" class="btn-duo-green">
+                  <i class="fa-solid fa-user-plus"></i> إضافة حساب جديد
+                </button>
+                <button type="button" id="btnManageSchoolsGrades" class="btn-duo-purple">
+                  <i class="fa-solid fa-school-flag"></i> إدارة المدارس والصفوف
+                </button>
+              </div>
+            </div>
+
+            <!-- شريط الفلاتر والبحث -->
+            <div class="filter-controls-row">
+              <div class="search-box">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" id="accountsSearchInput" placeholder="بحث بالاسم أو المدرسة...">
+              </div>
+
+              <div class="filters-group">
+                <select id="roleFilterSelect" class="form-control form-select filter-select">
+                  <option value="all">كل الأدوار</option>
+                  <option value="student">طلاب</option>
+                  <option value="teacher">معلمون</option>
+                  <option value="supervisor">مشرفون</option>
+                  <option value="presenter">عارضون</option>
+                </select>
+
+                <select id="gradeFilterSelect" class="form-control form-select filter-select">
+                  <option value="all">كل الفئات / الصفوف</option>
+                  <option value="صف أول">صف أول</option>
+                  <option value="صف ثاني">صف ثاني</option>
+                  <option value="صف ثالث">صف ثالث</option>
+                </select>
+
+                <button id="btnRefreshAccounts" class="btn-duo-outline" style="padding: 9px 15px;" title="تحديث القائمة">
+                  <i class="fa-solid fa-arrows-rotate"></i>
+                </button>
+              </div>
+            </div>
+
+            <div class="table-responsive">
+              <table class="islamic-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>الاسم الرباعي</th>
+                    <th>الدور / الصفة</th>
+                    <th>المدرسة</th>
+                    <th>الفئة / الصف</th>
+                    <th>آخر ظهور</th>
+                    <th>معاينة وفتح الحساب</th>
+                    <th>الإجراءات والترقية</th>
+                  </tr>
+                </thead>
+                <tbody id="accountsTableBody">
+                  <tr>
+                    <td colspan="8" class="empty-state">
+                      <i class="fa-solid fa-spinner fa-spin"></i> جاري تحميل سجل الحسابات...
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- التبويب 3: قسم الأسئلة والاختبارات -->
+        <div id="tabQuizzes" class="tab-content-panel">
+          <div class="quizzes-manager-container">
+            
+            <div class="quizzes-header-flex">
+              <div>
+                <h3 class="section-heading-duo"><i class="fa-solid fa-book-open-reader"></i> بنك الأسئلة والاختبارات</h3>
+                <p class="section-subheading-duo">إنشاء وإدارة الاختبارات الموزعة على أقسام مع إمكانية التوليد الذكي بالذكاء الاصطناعي</p>
+              </div>
+              <div class="header-action-buttons">
+                <button id="btnHeaderImportTemplates" class="btn-duo-outline" style="border-color: #6366f1; color: #6366f1;">
+                  <i class="fa-solid fa-cloud-arrow-up"></i> استيراد نماذج نور البيان
+                </button>
+                <button id="btnOpenManualQuizModal" class="btn-duo-green">
+                  <i class="fa-solid fa-pen-to-square"></i> إنشاء اختبار يدوي
+                </button>
+                <button id="btnOpenAIQuizModal" class="btn-duo-blue">
+                  <i class="fa-solid fa-wand-magic-sparkles"></i> توليد بالذكاء الاصطناعي
+                </button>
+              </div>
+            </div>
+
+            <!-- قائمة الاختبارات الجاهزة -->
+            <div id="quizzesListGrid" class="quizzes-grid">
+              <!-- يتم ملء بطاقات الاختبارات عبر الجافاسكربت -->
+            </div>
+
+          </div>
+        </div>
+
+        <!-- التبويب 4: العروض والمسابقات الحية -->
+        <div id="tabLive" class="tab-content-panel">
+          <div class="live-rooms-manager">
+            
+            <div class="live-header-flex">
+              <div>
+                <h3 class="section-heading-duo"><i class="fa-solid fa-display"></i> غرف المسابقات الحية وشاشات العرض</h3>
+                <p class="section-subheading-duo">يمكن للعارض إنشاء شاشة عرض مخصصة، وينضم المعلمون والمشرف لتقييم المتسابقين وإدارة القرعة والبطاقات</p>
+              </div>
+              <div>
+                <button id="btnOpenCreateRoomModal" class="btn-duo-yellow">
+                  <i class="fa-solid fa-plus-circle"></i> إنشاء غرفة مسابقة جديدة
+                </button>
+              </div>
+            </div>
+
+            <!-- قائمة الغرف المتاحة -->
+            <div class="rooms-container" id="roomsListContainer">
+              <!-- قائمة الغرف المفتوحة -->
+            </div>
+
+          </div>
+        </div>
+
+        <!-- التبويب 5: لوحة الشرف الدائمة -->
+        <div id="tabHonorBoard" class="tab-content-panel">
+          <div class="honor-board-tab-wrapper">
+            <div class="honor-board-tab-header">
+              <h3 class="section-heading-duo">
+                <i class="fa-solid fa-trophy" style="color:#eab308;"></i> لوحة الشرف — ترتيب المتسابقين
+              </h3>
+              <p class="section-subheading-duo">تُحدَّث تلقائياً بعد كل مسابقة · النقاط تراكمية عبر جميع الجلسات</p>
+              <button id="btnResetHonorBoard" class="btn-duo-red btn-sm" style="margin-top:8px;">
+                <i class="fa-solid fa-rotate-left"></i> إعادة تعيين لوحة الشرف
+              </button>
+            </div>
+
+            <!-- شريط تصفية وفلترة لوحة الشرف الذكي للمشرف (مدرسة، صف، فترة زمنية) -->
+            <div class="honor-filters-panel" style="background: #f8fafc; border: 2px solid var(--border-duo, #e2e8f0); border-radius: 16px; padding: 16px 20px; margin-bottom: 20px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+                <span style="font-size: 14.5px; font-weight: 800; color: #1e293b; display: flex; align-items: center; gap: 8px;">
+                  <i class="fa-solid fa-filter" style="color: var(--duo-blue, #3b82f6);"></i> تصفية وفرز المتصدرين:
+                </span>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                  <span id="honorFilteredCountBadge" style="font-size: 12.5px; font-weight: 800; color: #475569; background: #e2e8f0; padding: 4px 12px; border-radius: var(--radius-pill, 9999px);">
+                    جاري الفرز...
+                  </span>
+                  <button type="button" id="btnResetHonorFilters" class="btn-duo-outline btn-sm" style="font-size: 12px; padding: 4px 12px;" title="إعادة تعيين الفلاتر">
+                    <i class="fa-solid fa-rotate-left"></i> تفريغ الفلاتر
+                  </button>
+                </div>
+              </div>
+
+              <div class="honor-filters-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
+                <!-- 1. فلترة حسب المدرسة -->
+                <div class="filter-group">
+                  <label class="input-label" style="font-size: 12.5px; margin-bottom: 4px; color: #475569;">
+                    <i class="fa-solid fa-school" style="color: var(--duo-green, #22c55e);"></i> المدرسة / المركز
+                  </label>
+                  <select id="honorSchoolFilterSelect" class="form-control form-select" style="height: 40px; font-size: 13px;">
+                    <option value="all">جميع المدارس والمراكز</option>
+                  </select>
+                </div>
+
+                <!-- 2. فلترة حسب الصف الدراسي -->
+                <div class="filter-group">
+                  <label class="input-label" style="font-size: 12.5px; margin-bottom: 4px; color: #475569;">
+                    <i class="fa-solid fa-layer-group" style="color: #ca8a04;"></i> الصف / الفئة الدراسية
+                  </label>
+                  <select id="honorGradeFilterSelect" class="form-control form-select" style="height: 40px; font-size: 13px;">
+                    <option value="all">جميع الصفوف والفئات</option>
+                  </select>
+                </div>
+
+                <!-- 3. فلترة حسب الفترة الزمنية (يوم، أسبوع، شهر) -->
+                <div class="filter-group">
+                  <label class="input-label" style="font-size: 12.5px; margin-bottom: 4px; color: #475569;">
+                    <i class="fa-solid fa-calendar-days" style="color: var(--duo-purple, #8b5cf6);"></i> الفترة الزمنية
+                  </label>
+                  <select id="honorTimePeriodSelect" class="form-control form-select" style="height: 40px; font-size: 13px;">
+                    <option value="all">كل الأوقات (المجموع التراكمي)</option>
+                    <option value="day">اليوم (آخر 24 ساعة)</option>
+                    <option value="week">هذا الأسبوع (آخر 7 أيام)</option>
+                    <option value="month">هذا الشهر (آخر 30 يوماً)</option>
+                  </select>
+                </div>
+
+                <!-- 4. بحث سريع بالاسم -->
+                <div class="filter-group">
+                  <label class="input-label" style="font-size: 12.5px; margin-bottom: 4px; color: #475569;">
+                    <i class="fa-solid fa-magnifying-glass" style="color: #64748b;"></i> بحث بالاسم
+                  </label>
+                  <input type="text" id="honorSearchInput" class="form-control" placeholder="اسم المتسابق..." style="height: 40px; font-size: 13px;">
+                </div>
+              </div>
+            </div>
+
+            <div id="honorBoardTabList" class="honor-board-tab-list">
+              <!-- تُملأ تلقائياً -->
+            </div>
+          </div>
+        </div>
+
+        <!-- التبويب: إدارة الفرق التنافسية -->
+        <div id="tabTeams" class="tab-content-panel">
+          <div class="data-table-card">
+            <div class="table-header-flex">
+              <div class="table-title-group">
+                <h3 class="table-title">
+                  <i class="fa-solid fa-users-rectangle"></i> إدارة وتجهيز الفرق التنافسية
+                </h3>
+                <span class="table-subtitle">إنشاء وتعديل وتصنيف الفرق الملونة مع إدارة أعضائها وحذفها لتنعكس فوراً على جميع المشاركين</span>
+              </div>
+              <div class="table-actions">
+                <button type="button" id="btnOpenCreateTeamModalTab" class="btn-duo-green">
+                  <i class="fa-solid fa-users-gear"></i> إنشاء فريق جديد
+                </button>
+              </div>
+            </div>
+
+            <!-- شبكة كروت الفرق الملونة -->
+            <div id="supervisorTeamsGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin-top: 20px;">
+              <!-- تُملأ ديناميكياً -->
+            </div>
+          </div>
+        </div>
+
+        <!-- التبويب 6: قسم البطاقات التكتيكية الكامل (40 بطاقة وماذا تفعل) -->
+        <div id="tabTacticalCards" class="tab-content-panel">
+          <div class="cards-catalog-tab-wrapper">
+            
+            <!-- ترويسة قسم البطاقات -->
+            <div class="cards-catalog-header-card">
+              <div class="catalog-header-badge">
+                <i class="fa-solid fa-wand-magic-sparkles"></i>
+              </div>
+              <div class="catalog-header-info">
+                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                  <span class="role-pill" style="background: #ede9fe; color: #6d28d9; border: 1.5px solid #c4b5fd; font-weight: 800;">
+                    <i class="fa-solid fa-bolt"></i> دليل المشرف والمعلم التكتيكي
+                  </span>
+                  <span class="role-pill" style="background: #fef08a; color: #854d0e; border: 1.5px solid #fde047; font-weight: 800;">
+                    <i class="fa-solid fa-layer-group"></i> 40 بطاقة استراتيجية
+                  </span>
+                  <span class="role-pill" style="background: #dcfce7; color: #166534; border: 1.5px solid #86efac; font-weight: 800;">
+                    <i class="fa-solid fa-wallet"></i> نظام المحفظة الذكية
+                  </span>
+                </div>
+                <h2 style="font-size: 24px; font-weight: 900; color: #1e1b4b; margin: 8px 0 4px;">
+                  🃏 قسم البطاقات التكتيكية (دليل الـ 40 بطاقة وماذا تفعل)
+                </h2>
+                <p style="color: #475569; font-size: 14px; line-height: 1.6; margin: 0;">
+                  تظهر 3 بطاقات عشوائية تلقائياً كل 4 أسئلة في المسابقة الحية (أو يدوياً بزر المشرف)، وعند اختيار الطالب لبطاقة يتم حفظها في <strong>محفظة بطاقاته</strong> على اليمين ليختار تفعيلها واستخدامها في أي سؤال يشاء بتزامن كامل عند الجميع!
+                </p>
+              </div>
+            </div>
+
+            <!-- شريط البحث والفلترة -->
+            <div class="catalog-toolbar-box">
+              <div class="catalog-search-wrap">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" id="catalogCardSearchInput" placeholder="ابحث باسم البطاقة أو ما تفعله أو تصنيفها..." class="form-control" />
+              </div>
+
+              <div class="catalog-filters-row">
+                <button class="filter-pill-btn active" data-filter="all"><i class="fa-solid fa-layer-group"></i> الكل (40)</button>
+                <button class="filter-pill-btn" data-filter="buff"><i class="fa-solid fa-star"></i> مزايا إيجابية (30)</button>
+                <button class="filter-pill-btn" data-filter="risk"><i class="fa-solid fa-bolt"></i> مخاطرات ذكية (10)</button>
+                <button class="filter-pill-btn" data-filter="instant"><i class="fa-solid fa-stopwatch"></i> فورية لسؤال</button>
+                <button class="filter-pill-btn" data-filter="cycle"><i class="fa-solid fa-arrows-rotate"></i> مستمرة للدورة</button>
+                <button class="filter-pill-btn" data-filter="timer"><i class="fa-solid fa-clock"></i> الوقت والمؤقت</button>
+                <button class="filter-pill-btn" data-filter="score"><i class="fa-solid fa-award"></i> النقاط والمكافآت</button>
+                <button class="filter-pill-btn" data-filter="help"><i class="fa-solid fa-handshake-angle"></i> المساعدة والتيسير</button>
+              </div>
+            </div>
+
+            <!-- لوحة متابعة وإدارة البطاقات الفعالة حالياً في المسابقة الحية -->
+            <div id="supervisorActiveEffectsPanel" class="supervisor-active-effects-box hidden">
+              <div class="supervisor-active-effects-header">
+                <h4><i class="fa-solid fa-wand-magic-sparkles" style="color:#9333ea;"></i> البطاقات التكتيكية الفعالة حالياً في الغرفة:</h4>
+                <span id="activeEffectsCountBadge" style="background:#7e22ce; color:#ffffff; padding:3px 10px; border-radius:12px; font-size:12px; font-weight:800;">0 بطاقات نشطة</span>
+              </div>
+              <div id="supervisorActiveEffectsList" class="supervisor-active-effects-list">
+                <!-- تُبنى ديناميكياً -->
+              </div>
+            </div>
+
+            <!-- شبكة عرض البطاقات الـ 40 -->
+            <div id="cardsCatalogGrid" class="cards-catalog-grid">
+              <!-- تُبنى ديناميكياً بواسطة جافاسكربت -->
+            </div>
+
+          </div>
+        </div>
+
+        <!-- التبويب 8: مسابقات سابقة والبطولات التصفوية المحفوظة -->
+        <div id="tabPastTournaments" class="tab-content-panel">
+          <div class="tab-header-banner" style="background: linear-gradient(135deg, #065f46 0%, #059669 50%, #10b981 100%); border: 2.5px solid #34d399; border-bottom: 5.5px solid #047857; border-radius: 24px; padding: 22px 26px; box-shadow: 0 12px 30px rgba(5, 150, 105, 0.22); display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap; margin-bottom: 20px;">
+            <div class="banner-title-group" style="display: flex; align-items: center; gap: 18px; flex-wrap: wrap;">
+              <div class="banner-icon-circle" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); border: 2.5px solid #fde68a; border-bottom: 4.5px solid #b45309; color: #ffffff; width: 66px; height: 66px; border-radius: 20px; display: flex; align-items: center; justify-content: center; font-size: 28px; box-shadow: 0 6px 18px rgba(217, 119, 6, 0.35); flex-shrink: 0;">
+                <i class="fa-solid fa-trophy"></i>
+              </div>
+              <div>
+                <h2 style="font-size: 24px; font-weight: 900; color: #ffffff; margin: 0 0 5px; text-shadow: 0 2px 4px rgba(0,0,0,0.18); display: flex; align-items: center; gap: 10px;">
+                  أرشيف المسابقات والبطولات السابقة
+                </h2>
+                <p style="font-size: 14.5px; color: #d1fae5; margin: 0; font-weight: 700; line-height: 1.6; text-shadow: 0 1px 2px rgba(0,0,0,0.1);">
+                  سجل البطولات المكتملة ونتائج منصات التتويج والمراكز الرسمية لجميع الفرق المشاركة
+                </p>
+              </div>
+            </div>
+            <div class="banner-actions" style="display: flex; align-items: center; gap: 10px;">
+              <button type="button" id="btnRefreshPastTournaments" class="btn-duo-yellow btn-sm" style="font-size: 14px; padding: 10px 20px; font-weight: 800; border-radius: 14px; box-shadow: 0 4px 14px rgba(234, 179, 8, 0.3);">
+                <i class="fa-solid fa-arrows-rotate"></i> تحديث الأرشيف
+              </button>
+            </div>
+          </div>
+
+          <div class="tournament-archive-toolbar">
+            <div class="search-input-duo" style="flex: 1; max-width: 450px;">
+              <i class="fa-solid fa-magnifying-glass"></i>
+              <input type="text" id="searchPastTournamentsInput" placeholder="ابحث باسم المسابقة أو الفريق البطل أو المشرف..." class="form-control">
+            </div>
+            <div class="archive-count-summary" id="archiveCountSummary">
+              إجمالي البطولات المحفوظة: <strong id="totalPastTournamentsCount">0</strong> بطولة
+            </div>
+          </div>
+
+          <div id="pastTournamentsListGrid" class="past-tournaments-cards-grid">
+            <!-- تُبنى ديناميكياً بواسطة جافاسكربت -->
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ======================================================== -->
+    <!-- 4. شاشة المسابقة الحية وغرفة الانتظار (Live Competition Stage) -->
+    <!-- ======================================================== -->
+    <section id="liveArenaSection" class="view-section hidden">
+      <div class="live-arena-wrapper">
+        
+        <!-- هيدر غرفة المسابقة -->
+        <div class="arena-top-bar">
+          <div class="room-info-pill">
+            <span class="room-dot online"></span>
+            <span class="room-name-text" id="arenaRoomTitle">غرفة مسابقة نور البيان</span>
+            <span class="room-code-tag" id="arenaRoomCode">#ROOM-1</span>
+          </div>
+
+          <div class="arena-role-status">
+            <div class="arena-connected-counter-badge" id="arenaConnectedBadge" title="المتواجدون حالياً في الغرفة">
+              <i class="fa-solid fa-users" style="color: var(--duo-blue);"></i>
+              <span>المتواجدون: <strong id="arenaConnectedCount">1</strong></span>
+            </div>
+            <span class="role-pill-live" id="arenaUserRolePill">مشرف الغرفة</span>
+            <button id="btnReturnToTeamSelect" class="btn-duo-outline btn-sm hidden" style="border-color: var(--duo-blue); color: var(--duo-blue); font-weight:800;" title="العودة لاختيار الفرق وتغييرها">
+              <i class="fa-solid fa-arrow-right"></i> العودة لاختيار الفرق
+            </button>
+            <button id="btnOpenRoomSettingsModal" class="btn-duo-yellow btn-sm" title="إعدادات الغرفة وصلاحيات الحل">
+              <i class="fa-solid fa-sliders"></i> إعدادات المسابقة
+            </button>
+            <button id="btnExitArena" class="btn-duo-outline btn-sm" style="border-color: #ff4b4b; color: #ff4b4b;">
+              <i class="fa-solid fa-person-walking-arrow-right"></i> مغادرة الغرفة
+            </button>
+          </div>
+        </div>
+
+        <!-- شريط تحذير انقطاع الإنترنت (مؤقت 10 ثوانٍ) -->
+        <div id="arenaOfflineWarningBanner" class="arena-offline-banner hidden">
+          <div class="offline-banner-content">
+            <div class="offline-icon-pulse">
+              <i class="fa-solid fa-wifi"></i>
+            </div>
+            <div class="offline-text-group">
+              <h3 class="offline-title">انقطع اتصال الإنترنت!</h3>
+              <p class="offline-desc">جاري محاولة استعادة الاتصال تلقائياً.. ستغلق المسابقة خلال <strong id="offlineSecondsCountdown">10</strong> ثوانٍ إذا لم يعد الاتصال.</p>
+            </div>
+            <div class="offline-counter-badge">
+              <span id="offlineCounterNum">10</span>ث
+            </div>
+          </div>
+        </div>
+
+        <!-- وضع الانتظار (Lobby) -->
+        <div id="arenaLobby" class="arena-lobby-card">
+          <div class="lobby-header">
+            <div class="lobby-icon"><i class="fa-solid fa-users-line"></i></div>
+            <h2>غرفة انتظار المتسابقين والمعلمين</h2>
+            <p>في انتظار اكتمال انضمام المعلمين والعارض لبدء المسابقة الحية</p>
+          </div>
+
+          <div class="lobby-leadership-box">
+            <div class="leader-badge">
+              <i class="fa-solid fa-crown"></i> مشرف الغرفة المعتمد:
+            </div>
+            <strong id="arenaCurrentLeaderName">جاري التحديد...</strong>
+            <span class="leader-rule-hint">(أول معلم ينضم يكون مشرفاً، وتنتقل القيادة فوراً للمشرف العام محمد منتصر محمد يونس عند دخوله)</span>
+          </div>
+
+          <div class="lobby-users-header">
+            <h4><i class="fa-solid fa-users"></i> المتواجدون حالياً في الغرفة (<span id="arenaLobbyUsersCount">1</span>):</h4>
+            <span class="live-realtime-indicator"><span class="pulse-dot-green"></span> تحديث فوري مباشر</span>
+          </div>
+
+          <div class="connected-users-grid" id="arenaConnectedUsersList">
+            <!-- قائمة المعلمين والطلاب المتصلين -->
+          </div>
+
+          <div class="lobby-action-box">
+            <button id="btnStartLiveContest" class="btn-duo-green btn-lg">
+              <i class="fa-solid fa-play"></i> بدء المسابقة الآن
+            </button>
+            <div id="arenaLobbyWaitingForLeader" class="lobby-waiting-box hidden">
+              <i class="fa-solid fa-hourglass-half fa-spin" style="color: #ca8a04;"></i>
+              <span>في انتظار بدء المسابقة من مشرف الغرفة (<strong id="arenaWaitingLeaderName">...</strong>)</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ═══ المرحلة أ: اختيار المتسابق ═══ -->
+        <div id="arenaPhaseStudentSelect" class="arena-phase-card hidden">
+          <!-- ما يراه المشرف -->
+          <div id="supervisorStudentSelectView">
+            <div class="phase-header">
+              <div class="phase-icon"><i class="fa-solid fa-user-check"></i></div>
+              <h2>اختيار المتسابق</h2>
+              <p>اختر الطالب الذي سيؤدي المسابقة الآن</p>
+            </div>
+
+            <!-- بحث -->
+            <div class="phase-search-row">
+              <div class="search-input-duo" style="flex:1;">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" id="phaseStudentSearch" placeholder="ابحث باسم الطالب..." class="form-control">
+              </div>
+              <button id="btnShowAddStudentForm" class="btn-duo-blue btn-sm">
+                <i class="fa-solid fa-user-plus"></i> إضافة طالب جديد
+              </button>
+            </div>
+
+            <!-- نموذج إضافة طالب سريع (مخفي افتراضياً) -->
+            <div id="quickAddStudentForm" class="quick-add-student-form hidden">
+              <div class="qas-title"><i class="fa-solid fa-user-plus"></i> بيانات الطالب الجديد</div>
+              <div class="qas-grid">
+                <input type="text" id="qasNameInput" class="form-control" placeholder="الاسم الرباعي الكامل">
+                <select id="qasSchoolSelect" class="form-control form-select">
+                  <option value="">اختر المدرسة...</option>
+                </select>
+                <select id="qasGradeSelect" class="form-control form-select">
+                  <option value="">اختر الصف...</option>
+                </select>
+              </div>
+              <div class="qas-actions">
+                <button id="btnQuickAddStudent" class="btn-duo-green">
+                  <i class="fa-solid fa-user-plus"></i> إضافة واختيار
+                </button>
+                <button id="btnCancelAddStudent" class="btn-duo-outline">إلغاء</button>
+              </div>
+            </div>
+
+            <!-- قائمة الطلاب -->
+            <div id="phaseStudentList" class="student-select-list">
+              <!-- تُملأ ديناميكياً -->
+            </div>
+          </div>
+
+          <!-- ما يراه المعلمون والعارض -->
+          <div id="teacherStudentWaitView" class="hidden">
+            <div class="phase-header">
+              <div class="phase-icon spin-icon"><i class="fa-solid fa-spinner"></i></div>
+              <h2>جاري اختيار المتسابق...</h2>
+              <p>المشرف يختار المتسابق التالي، يرجى الانتظار</p>
+            </div>
+            <div id="selectedStudentReveal" class="selected-student-reveal hidden">
+              <div class="reveal-label">تم اختيار المتسابق:</div>
+              <div class="reveal-name" id="revealStudentName">--</div>
+              <div class="reveal-meta" id="revealStudentMeta">--</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ═══ المرحلة ب: سحب الأسئلة ═══ -->
+        <div id="arenaPhaseQuestionDraw" class="arena-phase-card hidden">
+          <div class="phase-header">
+            <div class="phase-icon"><i class="fa-solid fa-shuffle"></i></div>
+            <h2>سحب أسئلة المتسابق</h2>
+            <p id="drawPhaseStudentLabel">المتسابق: --</p>
+          </div>
+
+          <!-- أقسام الاختبار مع العدادات -->
+          <div id="drawSectionsList" class="draw-sections-list">
+            <!-- تُملأ ديناميكياً -->
+          </div>
+
+          <!-- أزرار السحب -->
+          <div id="drawActionsRow" class="draw-actions-row">
+            <button id="btnDrawQuestions" class="btn-duo-yellow btn-lg">
+              <i class="fa-solid fa-dice"></i> اختيار عشوائي من كل قسم
+            </button>
+          </div>
+          <div id="drawResultActions" class="draw-actions-row hidden">
+            <button id="btnRedrawQuestions" class="btn-duo-outline">
+              <i class="fa-solid fa-rotate"></i> إعادة السحب
+            </button>
+            <button id="btnStartAfterDraw" class="btn-duo-green btn-lg">
+              <i class="fa-solid fa-play"></i> ابدأ المسابقة
+            </button>
+          </div>
+          <div id="drawObserverStatusRow" class="draw-actions-row hidden">
+            <div id="drawObserverStatusMsg" class="lobby-waiting-box" style="margin: 0 auto; width: 100%; max-width: 500px;">
+              <i class="fa-solid fa-hourglass-half fa-spin" style="color: #ca8a04;"></i>
+              <span id="drawObserverStatusText">في انتظار سحب الأسئلة من مشرف الجولة...</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- مسرح المسابقة الحي (Active Contest Screen) -->
+        <div id="arenaStage" class="arena-stage-card hidden">
+
+          <!-- بطاقة المتسابق الحالي المعروضة للجميع -->
+          <div class="current-contestant-banner">
+            <div class="contestant-avatar">
+              <i class="fa-solid fa-user-graduate"></i>
+            </div>
+            <div class="contestant-details">
+              <span class="badge-active-contestant">المتسابق الحالي</span>
+              <h2 id="stageStudentName">يرجى اختيار متسابق</h2>
+              <div class="contestant-meta">
+                <span id="stageStudentSchool"><i class="fa-solid fa-school"></i> --</span>
+                <span id="stageStudentGrade"><i class="fa-solid fa-layer-group"></i> --</span>
+              </div>
+            </div>
+
+            <div class="contestant-banner-hud">
+              <!-- نقاط المتسابق في الجلسة -->
+              <div class="contestant-score-box">
+                <span class="score-label">مجموع الدرجات</span>
+                <span class="score-number" id="stageStudentScore">0</span>
+                <span class="score-sub">نقطة</span>
+              </div>
+
+              <!-- خانة محفظة البطاقات التكتيكية داخل البنر - موقع رئيسي لا يمكن أن يغطي على السؤال أبداً -->
+              <div id="contestantCardsWalletTrigger" class="contestant-cards-wallet-trigger" title="محفظة البطاقات التكتيكية للمتسابق — انقر لفتحها واستعراضها بتزامن كامل">
+                <div class="wallet-badge-red" id="walletBadgeCount">0</div>
+                <div class="wallet-card-inner">
+                  <div class="wallet-card-icon">
+                    <i class="fa-solid fa-layer-group"></i>
+                  </div>
+                  <div class="wallet-card-texts">
+                    <div class="wallet-card-text">محفظة البطاقات</div>
+                    <div class="wallet-card-hint"><i class="fa-solid fa-layer-group"></i> انقر للاستخدام</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- أدوات التحكم الخاصة بمشرف الغرفة -->
+          <div class="supervisor-controls-panel" id="supervisorControlBar">
+            <div class="ctrl-group">
+              <button id="btnNextStudentCycle" class="btn-duo-green btn-sm">
+                <i class="fa-solid fa-forward-step"></i> إنهاء والانتقال لمتسابق آخر
+              </button>
+              <button id="btnTriggerTacticalCards" class="btn-duo-purple btn-sm" title="فتح البطاقات التكتيكية الـ 40 الآن للمتسابق">
+                <i class="fa-solid fa-bolt"></i> البطاقات التكتيكية
+              </button>
+              <button id="btnOpenWalletFromBar" class="btn-duo-yellow btn-sm" title="استعراض وفتح محفظة بطاقات المتسابق بتزامن كامل">
+                <i class="fa-solid fa-layer-group"></i> محفظة البطاقات (<span id="walletBarCount">0</span>)
+              </button>
+              <button id="btnOpenRoomSettingsModal" class="btn-duo-yellow btn-sm" title="إعدادات الغرفة وصلاحيات الحل">
+                <i class="fa-solid fa-gear"></i> إعدادات المسابقة
+              </button>
+              <div class="quick-solver-setting-pill" style="display:inline-flex;align-items:center;gap:8px;background:#ffffff;border:1.5px solid var(--border-duo);padding:4px 12px;border-radius:var(--radius-pill);font-size:12.5px;font-weight:800;color:#334155;box-shadow:0 2px 6px rgba(0,0,0,0.04);">
+                <i class="fa-solid fa-sliders" style="color:var(--duo-blue);"></i>
+                <span>صلاحية الحل:</span>
+                <select id="stageSolverRoleQuickSelect" style="border:none;background:transparent;font-weight:800;color:#1e293b;cursor:pointer;outline:none;font-size:12.5px;">
+                  <option value="contestant_and_lead" selected>المتسابق والمشرف معاً</option>
+                  <option value="contestant_only">المتسابق فقط</option>
+                  <option value="supervisor_only">المشرف فقط</option>
+                  <option value="teacher_and_supervisor">المعلم والمشرف معاً</option>
+                  <option value="presenter">العارض وشاشة المسرح والمشرف</option>
+                  <option value="all">الجميع (المتسابق، المعلم، العارض، المشرف)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- منطقة عرض السؤال الحالي والخط القرآني -->
+          <div class="stage-question-card" id="stageQuestionCardMain">
+            <!-- شريط البطاقات التكتيكية النشطة باللون البنفسجي الأنيق المعتمد -->
+            <div id="stagePurpleActiveCardsBar" class="purple-active-cards-bar hidden"></div>
+
+            <!-- غطاء أنيميشن النتيجة الكبير مع إبراز الصح والخطأ بدون صورة الأسد -->
+            <div id="stageQuestionResultOverlay" class="question-result-overlay hidden">
+              <div class="result-badge-anim-wrap">
+                <div class="result-badge-icon" id="resultOverlayIcon">
+                  <i class="fa-solid fa-circle-check"></i>
+                </div>
+                <div class="result-badge-title" id="resultOverlayTitle">إجابة صحيحة ومتقنة!</div>
+                <div class="result-badge-points" id="resultOverlayPoints">+5 نقاط</div>
+              </div>
+            </div>
+
+            <div class="question-header-bar">
+              <span class="question-index-tag" id="stageQuestionNumber">السؤال 1 من 10</span>
+              <span class="question-section-name" id="stageSectionName">القسم: التجويد والتهجي</span>
+              <div class="stage-timer-wrapper" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                <div class="stage-timer-pill" id="stageTimerPill">
+                  <i class="fa-solid fa-stopwatch"></i>
+                  <span id="stageTimerSeconds">30</span> ثانية
+                </div>
+                <!-- أدوات تحكم المشرف الفورية في مؤقت المسابقة (رئيس المؤقت بالتزامن التام) -->
+                <div id="stageSupervisorTimerControls" class="supervisor-timer-controls hidden" style="display: inline-flex; align-items: center; gap: 4px;">
+                  <button type="button" id="btnSupPauseResumeTimer" class="btn-timer-ctrl" title="إيقاف / استئناف التايمر للجميع بالتزامن" style="background: #ffffff; border: 1.5px solid #cbd5e1; border-radius: 20px; padding: 4px 10px; font-size: 12px; font-weight: 800; color: #475569; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); transition: all 0.2s;">
+                    <i class="fa-solid fa-pause" style="color: #f59e0b;"></i>
+                    <span id="btnSupPauseResumeTimerText">إيقاف</span>
+                  </button>
+                  <button type="button" id="btnSupAdd15s" class="btn-timer-ctrl" title="إضافة +15 ثانية للوقت لجميع الحضور" style="background: #ffffff; border: 1.5px solid #cbd5e1; border-radius: 20px; padding: 4px 10px; font-size: 12px; font-weight: 800; color: #16a34a; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); transition: all 0.2s;">
+                    <i class="fa-solid fa-plus"></i> 15ث
+                  </button>
+                  <button type="button" id="btnSupResetTimer" class="btn-timer-ctrl" title="إعادة ضبط وقت السؤال بالكامل بالتزامن" style="background: #ffffff; border: 1.5px solid #cbd5e1; border-radius: 20px; padding: 4px 8px; font-size: 12px; font-weight: 800; color: #6366f1; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); transition: all 0.2s;">
+                    <i class="fa-solid fa-rotate-left"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- روليت الأرقام العشوائي المتحرك 3 ثواني -->
+            <div id="rouletteOverlay" class="roulette-box hidden">
+              <div class="roulette-title"><i class="fa-solid fa-dice"></i> جاري القرعة العشوائية لاختيار السؤال...</div>
+              <div class="roulette-slot" id="rouletteSlotNumber">1</div>
+            </div>
+
+            <!-- نص السؤال بالخط المحدد -->
+            <div class="question-body">
+              <div id="stageQuestionText" class="question-text-content font-quran">
+                اقرأ قوله تعالى بضبط أحكام النون الساكنة والتنوين
+              </div>
+
+              <!-- حاوية الخيارات التفاعلية للأسئلة العادية (MCQ / Ordering / Matching) -->
+              <div id="stageInteractiveArea" class="interactive-question-area">
+                <!-- يتم تعبئة الخيارات ديناميكياً -->
+              </div>
+
+
+            </div>
+
+            <!-- شريط تقييم المعلمين الشفهي المباشر ونسبة الإنجاز والتقريب للربع -->
+            <div class="live-eval-box" id="liveOralEvaluationBar">
+              <div class="eval-header-flex">
+                <span><i class="fa-solid fa-star-half-stroke"></i> تقييم لجنة المعلمين الشفهي (مقرب لأقرب ربع درجة):</span>
+                <span class="eval-current-average" id="evalCurrentScoreDisplay">5.0 / 5</span>
+              </div>
+              
+              <div class="eval-progress-container">
+                <div class="eval-progress-fill" id="evalProgressFill" style="width: 100%;"></div>
+              </div>
+
+              <!-- أزرار أو شريط التقييم للمعلمين المتصلين -->
+              <div class="teacher-voting-row" id="teacherVotingRow">
+                <span class="vote-prompt">قيّم أداء المتسابق (من 1 إلى 5):</span>
+                <div class="rating-buttons-group">
+                  <button class="btn-rate-score" data-score="1">1</button>
+                  <button class="btn-rate-score" data-score="2">2</button>
+                  <button class="btn-rate-score" data-score="3">3</button>
+                  <button class="btn-rate-score" data-score="4">4</button>
+                  <button class="btn-rate-score active" data-score="5">5</button>
+                </div>
+              </div>
+
+              <!-- رسالة حالة التقييم للمشاهدين والطلاب -->
+              <div class="oral-observer-status-msg hidden" id="oralObserverStatusMsg">
+                <i class="fa-solid fa-microphone-lines fa-fade" style="color: #6366f1;"></i>
+                <span>جاري استماع وتقييم لجنة المعلمين المعتمدة لتلاوة المتسابق...</span>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ======================================================== -->
+    <!-- 5. بوابة الطالب المشارك (مسار دولينجو والتدريب الذاتي) -->
+    <!-- ======================================================== -->
+    <section id="studentSection" class="view-section hidden">
+      <div class="student-wrapper">
+        
+        <!-- بطاقة تحية الطالب دولينجو -->
+        <div class="welcome-banner student-banner">
+          <div class="banner-badge-icon student-cap">
+            <i class="fa-solid fa-graduation-cap"></i>
+          </div>
+
+          <div class="banner-content">
+            <span class="role-pill student-pill">
+              <i class="fa-solid fa-graduation-cap"></i> طالب مشارك
+            </span>
+            <h2 id="studentGreetingTitle" class="welcome-title">
+              <!-- أهلاً بك أيها الطالب أو مرحباً بعودتك -->
+            </h2>
+            <p class="student-name-highlight">
+              اسم المتسابق: <strong id="studentNameDisplay">...</strong>
+            </p>
+            <p class="welcome-text">
+              مسابقة نور البيان للعام 1448 - 1449 هـ. نسأل الله لك التوفيق والتميز ونيل أعلى المراتب في كتاب الله.
+            </p>
+          </div>
+
+          <div class="banner-action">
+            <button class="btn-duo-outline" data-action="logout" style="border-color: #ff4b4b; color: #ff4b4b;">
+              <i class="fa-solid fa-arrow-right-from-bracket"></i> تسجيل الخروج
+            </button>
+          </div>
+        </div>
+
+        <!-- بطاقة تفاصيل تسجيل المتسابق -->
+        <div class="student-status-card">
+          <div class="card-title-flex">
+            <h3><i class="fa-solid fa-certificate"></i> بطاقة المشاركة المعتمدة</h3>
+            <span class="badge-active"><i class="fa-solid fa-circle-check"></i> مسجل ومعتمد</span>
+          </div>
+          <div class="info-grid">
+            <div class="info-block">
+              <span class="info-label">المدرسة / المركز:</span>
+              <span class="info-val" id="studentSchoolDisplay">--</span>
+            </div>
+            <div class="info-block">
+              <span class="info-label">الصف / الفئة:</span>
+              <span class="info-val" id="studentGradeDisplay">--</span>
+            </div>
+            <div class="info-block" style="background:#fefce8;border:1.5px solid #fde047;border-radius:10px;padding:8px 12px;">
+              <span class="info-label" style="color:#854d0e;"><i class="fa-solid fa-trophy" style="color:#eab308;"></i> نقاط المسابقة الرسمية:</span>
+              <span class="info-val" id="studentTotalScoreDisplay" style="font-weight:900;color:#ca8a04;font-size:18px;">0 نقطة</span>
+            </div>
+            <div class="info-block">
+              <span class="info-label">تاريخ التسجيل:</span>
+              <span class="info-val" id="studentRegDate">--</span>
+            </div>
+            <div class="info-block">
+              <span class="info-label">آخر ظهور:</span>
+              <span class="info-val" id="studentLastActive">اليوم</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- قسم المسابقات الحية الجارية للطالب -->
+        <div id="studentLiveRoomsSection" class="student-live-rooms-section hidden">
+          <div class="student-live-card">
+            <div class="student-live-header">
+              <span class="room-pulse-dot" title="بث حي"></span>
+              <h4><i class="fa-solid fa-tv" style="color: #ca8a04;"></i> توجد مسابقة حية جارية الآن في المسرح الحي!</h4>
+            </div>
+            <div id="studentLiveRoomsList" class="student-live-rooms-list">
+              <!-- تُملأ عند وجود غرف نشطة -->
+            </div>
+            <!-- دخول مباشر برمز الغرفة -->
+            <div class="student-quick-join-bar" style="margin-top: 15px; padding-top: 15px; border-top: 1.5px dashed #fde047; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+              <span style="font-weight: 700; font-size: 13.5px; color: #713f12;"><i class="fa-solid fa-hashtag"></i> أو أدخل رمز الغرفة مباشرة:</span>
+              <input type="text" id="inputStudentRoomCode" placeholder="مثال: 123456" class="input-room-code-clean" maxlength="20" autocomplete="off" spellcheck="false" style="color: #0f172a !important; background: #ffffff !important; font-size: 20px !important; font-weight: 900 !important; text-align: center !important; direction: ltr !important; min-width: 180px;">
+              <button id="btnStudentJoinByCode" class="btn-duo-green btn-sm"><i class="fa-solid fa-arrow-right-to-bracket"></i> دخول الغرفة</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- قسم التدريب الذاتي المتاح للطلاب -->
+        <div class="practice-tests-section">
+          <div class="section-title-with-badge">
+            <h3><i class="fa-solid fa-dumbbell"></i> التدريب الذاتي والتمرين على الأسئلة</h3>
+            <span class="practice-badge">متاح مجاناً لا يؤثر على درجات المسابقة الرسمية</span>
+          </div>
+          <p class="section-hint-text">
+            هذه الاختبارات المخصصة لفئتك مصرح بها للتدريب الذاتي لتثبيت الحفظ ومراجعة أحكام نور البيان.
+          </p>
+
+          <div id="studentPracticeQuizzesList" class="practice-quizzes-grid">
+            <!-- اختبارات التدريب الذاتي تظهر هنا -->
+          </div>
+        </div>
+
+        <!-- قسم لوحة الشرف المباشرة للطالب -->
+        <div class="student-honor-board-section" style="margin-top: 30px;">
+          <div class="section-title-with-badge">
+            <h3><i class="fa-solid fa-trophy" style="color: #eab308;"></i> لوحة الشرف — ترتيب المتسابقين</h3>
+            <span class="practice-badge" style="background:#fef08a;color:#854d0e;border-color:#ca8a04;">نقاط معتمدة ومحفوظة</span>
+          </div>
+          <p class="section-hint-text">
+            يتم تحديث الترتيب والنقاط تلقائياً ومباشرة مع كل مسابقة تجريها.
+          </p>
+          <div id="studentHonorBoardList" class="honor-board-tab-list">
+            <!-- تُملأ تلقائياً -->
+          </div>
+        </div>
+
+        <!-- قسم أرشيف المسابقات السابقة للطلاب -->
+        <div class="student-past-tournaments-section" style="margin-top: 30px;">
+          <div class="section-title-with-badge">
+            <h3><i class="fa-solid fa-box-archive" style="color: #2563eb;"></i> أرشيف المسابقات والبطولات السابقة</h3>
+            <span class="practice-badge" style="background:#dbeafe;color:#1e40af;border-color:#93c5fd;">تاريخ الأبطال</span>
+          </div>
+          <p class="section-hint-text">
+            سجل البطولات ومراكز الفرق المتوجة في مسابقات نور البيان السابقة.
+          </p>
+          <div id="studentPastTournamentsList" class="past-tournaments-cards-grid">
+            <!-- تُملأ تلقائياً -->
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ======================================================== -->
+  <!-- المودالات والنوافذ المنبثقة التفاعلية -->
+  <!-- ======================================================== -->
+
+  <!-- 1. مودال إضافة / تعديل حساب من قبل المشرف -->
+  <div id="accountModal" class="modal-overlay hidden">
+    <div class="duo-modal-box">
+      <div class="modal-header">
+        <h3 id="accountModalTitle"><i class="fa-solid fa-user-plus"></i> إضافة حساب جديد</h3>
+        <button class="btn-modal-close" data-close-modal="accountModal">&times;</button>
+      </div>
+      <form id="accountModalForm" class="modal-body-form">
+        <input type="hidden" id="editAccountId">
+        
+        <div class="input-group" id="accountModeSelectorGroup" style="margin-bottom: 14px;">
+          <label class="input-label" style="font-weight: 800; color: #1e293b; margin-bottom: 6px;">طريقة إضافة الحسابات</label>
+          <div style="display: flex; gap: 10px;">
+            <label style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px; background: #f0fdf4; border: 2px solid #22c55e; border-radius: 12px; cursor: pointer; font-weight: 800; color: #166534;">
+              <input type="radio" name="accountAddMode" value="single" checked style="accent-color: #22c55e;"> فردي
+            </label>
+            <label style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px; background: #eff6ff; border: 2px solid #3b82f6; border-radius: 12px; cursor: pointer; font-weight: 800; color: #1e40af;">
+              <input type="radio" name="accountAddMode" value="batch" style="accent-color: #3b82f6;"> جماعي (دفعة أسماء)
+            </label>
+          </div>
+        </div>
+
+        <div class="input-group" id="singleAccountNameGroup">
+          <label class="input-label">الاسم الرباعي <span class="required-star">*</span></label>
+          <input type="text" id="modalAccountName" class="form-control" placeholder="الاسم الرباعي كاملاً">
+        </div>
+
+        <div class="input-group hidden" id="batchAccountNamesGroup">
+          <label class="input-label">الأسماء الرباعية (اسم واحد في كل سطر) <span class="required-star">*</span></label>
+          <textarea id="modalBatchNamesInput" class="form-control" rows="5" placeholder="اكتب أو الصق الأسماء هنا... كل اسم في سطر مستقل"></textarea>
+          <span style="font-size: 11.5px; color: #64748b; margin-top: 4px; display: block;">سيتم إنشاء حسابات مستقلة لجميع الأسماء المدخلة بنفس الدور والمدرسة والصف المحدد</span>
+        </div>
+
+        <div class="input-group">
+          <label class="input-label">الصفة / الدور <span class="required-star">*</span></label>
+          <select id="modalAccountRole" class="form-control form-select">
+            <option value="student">طالب</option>
+            <option value="teacher">معلم</option>
+            <option value="supervisor">مشرف</option>
+            <option value="presenter">عارض (شاشة العرض)</option>
+          </select>
+        </div>
+
+        <div class="input-group">
+          <label class="input-label">المدرسة / المركز</label>
+          <div style="position: relative; margin-bottom: 6px;">
+            <i class="fa-solid fa-magnifying-glass" style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: #94a3b8; font-size: 13px; pointer-events: none;"></i>
+            <input type="text" id="modalAccountSchoolFilter" class="form-control" placeholder="بحث سريع في المدارس..." style="padding-right: 34px; height: 38px; font-size: 13px; border-radius: 8px;">
+          </div>
+          <select id="modalAccountSchool" class="form-control form-select"></select>
+        </div>
+
+        <div class="input-group">
+          <label class="input-label">الفئة / الصف</label>
+          <select id="modalAccountGrade" class="form-control form-select"></select>
+        </div>
+
+        <div class="modal-actions-flex">
+          <button type="submit" class="btn-duo-green"><i class="fa-solid fa-check"></i> حفظ الحساب</button>
+          <button type="button" class="btn-duo-outline" data-close-modal="accountModal">إلغاء</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 2. مودال إدارة المدارس والصفوف للمشرف العام -->
+  <div id="schoolsGradesModal" class="modal-overlay hidden">
+    <div class="duo-modal-box modal-wide">
+      <div class="modal-header">
+        <div class="modal-title-with-icon">
+          <div class="modal-icon-bubble purple">
+            <i class="fa-solid fa-school-flag"></i>
+          </div>
+          <div>
+            <h3>إدارة المدارس والصفوف المعتمدة</h3>
+            <span class="modal-subtitle">تخصيص الصروح التعليمية والفئات المعتمدة مع الحفظ السحابي المباشر</span>
+          </div>
+        </div>
+        <button class="btn-modal-close" data-close-modal="schoolsGradesModal" title="إغلاق">&times;</button>
+      </div>
+
+      <!-- تنبيه إرشادي سريع -->
+      <div class="sg-info-banner">
+        <i class="fa-solid fa-cloud-bolt"></i>
+        <span>أي مدرسة أو صف يتم إضافته أو حذفه يتحدث فورياً داخل المنصة ويُحفظ في قاعدة البيانات السحابية مباشرة.</span>
+      </div>
+
+      <div class="sg-modal-grid">
+        
+        <!-- قسم المدارس والمراكز القرآنية (ثيم أخضر دولينجو) -->
+        <div class="sg-panel-card schools-theme">
+          <div class="sg-panel-header">
+            <div class="sg-title-group">
+              <span class="sg-header-icon green"><i class="fa-solid fa-mosque"></i></span>
+              <h4>المدارس والمراكز القرآنية</h4>
+            </div>
+            <span class="sg-count-badge green-badge" id="schoolsCountBadge">0 مدارس</span>
+          </div>
+
+          <!-- نموذج إضافة مدرسة جديدة (فردي أو دفعات) -->
+          <form id="formAddNewSchool" style="margin-bottom: 12px;">
+            <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+              <input type="text" id="newSchoolInput" class="form-control" placeholder="اسم المدرسة الواحدة...">
+              <button type="submit" id="btnSubmitNewSchool" class="btn-duo-green" style="padding: 10px 16px; white-space: nowrap;">
+                <i class="fa-solid fa-plus"></i> إضافة
+              </button>
+            </div>
+            <div>
+              <textarea id="newSchoolsBatchInput" class="form-control" rows="2" placeholder="أو أضف عدة مدارس دفعة واحدة (كل مدرسة في سطر)..." style="font-size: 12.5px;"></textarea>
+              <button type="button" id="btnSubmitBatchSchools" class="btn-duo-blue btn-sm" style="margin-top: 5px; width: 100%;">
+                <i class="fa-solid fa-cloud-arrow-up"></i> إضافة المدارس المكتوبة دفعة واحدة
+              </button>
+            </div>
+          </form>
+
+          <!-- شريط البحث والتصفية السريع للمدارس للمشرف -->
+          <div class="sg-search-box" style="margin-bottom: 10px; position: relative;">
+            <i class="fa-solid fa-magnifying-glass" style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: #94a3b8; font-size: 13px; pointer-events: none;"></i>
+            <input type="text" id="supervisorSchoolSearchInput" class="form-control" placeholder="بحث وتصفية في قائمة المدارس..." style="padding-right: 36px; font-size: 13px; height: 38px; border-radius: var(--radius-pill, 9999px);">
+          </div>
+
+          <!-- قائمة المدارس المعتمدة -->
+          <div id="schoolsTagsList" class="sg-items-list">
+            <!-- كروت المدارس تظهر هنا فورياً -->
+          </div>
+
+          <div class="sg-panel-footer">
+            <button type="button" id="btnRestoreDefaultSchools" class="btn-restore-link">
+              <i class="fa-solid fa-rotate-left"></i> استعادة المدارس الافتراضية
+            </button>
+          </div>
+        </div>
+
+        <!-- قسم الصفوف والفئات المقررة (ثيم أزرق دولينجو) -->
+        <div class="sg-panel-card grades-theme">
+          <div class="sg-panel-header">
+            <div class="sg-title-group">
+              <span class="sg-header-icon blue"><i class="fa-solid fa-layer-group"></i></span>
+              <h4>الصفوف والفئات المقررة</h4>
+            </div>
+            <span class="sg-count-badge blue-badge" id="gradesCountBadge">0 صفوف</span>
+          </div>
+
+          <!-- نموذج إضافة صف جديد -->
+          <form id="formAddNewGrade" class="sg-add-form">
+            <input type="text" id="newGradeInput" class="form-control" placeholder="اسم الصف أو الفئة الدراسية..." required>
+            <button type="submit" id="btnSubmitNewGrade" class="btn-duo-blue" style="padding: 10px 18px; white-space: nowrap;">
+              <i class="fa-solid fa-plus"></i> إضافة
+            </button>
+          </form>
+
+          <!-- قائمة الصفوف المقررة -->
+          <div id="gradesTagsList" class="sg-items-list">
+            <!-- كروت الصفوف تظهر هنا فورياً -->
+          </div>
+
+          <div class="sg-panel-footer">
+            <button type="button" id="btnRestoreDefaultGrades" class="btn-restore-link">
+              <i class="fa-solid fa-rotate-left"></i> استعادة الصفوف الافتراضية
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="modal-footer-box" style="margin-top: 18px; border-top: 2px solid #f1f5f9; padding-top: 15px; display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-size: 13px; color: #64748b; font-weight: 700;">
+          <i class="fa-solid fa-shield-halved" style="color: var(--duo-purple);"></i> مزامنة المشرف العام
+        </span>
+        <button type="button" class="btn-duo-outline" data-close-modal="schoolsGradesModal">إغلاق النافذة</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- مودال التأكيد التفاعلي داخل المنصة (بدون أي نوافذ منبثقة من المتصفح) -->
+  <div id="confirmDialogModal" class="modal-overlay hidden" style="z-index: 100005;">
+    <div class="duo-modal-box confirm-dialog-box">
+      <div class="confirm-dialog-icon danger" id="confirmDialogIcon">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+      </div>
+      <h3 class="confirm-dialog-title" id="confirmDialogTitle">تأكيد الإجراء</h3>
+      <p class="confirm-dialog-message" id="confirmDialogMessage">هل أنت متأكد من إتمام هذا الإجراء؟</p>
+      <div class="confirm-dialog-actions">
+        <button type="button" id="btnConfirmDialogYes" class="btn-duo-red">
+          <span id="confirmDialogYesText">نعم، تأكيد</span>
+        </button>
+        <button type="button" id="btnConfirmDialogNo" class="btn-duo-outline">
+          <span id="confirmDialogNoText">إلغاء وتراجع</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- مودال مراجعة وتعديل الاسم غير الرباعي في الإضافة الجماعية -->
+  <div id="editInvalidNameModal" class="modal-overlay hidden" style="z-index: 10006;">
+    <div class="duo-modal-box" style="max-width: 480px;">
+      <div class="modal-header">
+        <div class="modal-title-with-icon">
+          <div class="modal-icon-bubble amber">
+            <i class="fa-solid fa-user-pen"></i>
+          </div>
+          <div>
+            <h3>تعديل اسم غير رباعي</h3>
+            <span class="modal-subtitle">الاسم التالي غير مكتمل، يرجى كتابة الاسم الرباعي لإكمال الإضافة</span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-body-form" style="padding-top: 10px;">
+        <div class="notice-box-duo warning" id="invalidNameReasonNotice" style="margin-bottom: 12px; font-size: 13px; background: #fffbeb; border: 1.5px solid #fde68a; border-radius: 10px; padding: 10px; color: #92400e; font-weight: 700;">
+          <!-- سبب الخطأ -->
+        </div>
+        <div class="input-group">
+          <label class="input-label">تعديل الاسم الرباعي <span class="required-star">*</span></label>
+          <input type="text" id="correctionQuadrupleNameInput" class="form-control" placeholder="الاسم الرباعي كاملاً...">
+        </div>
+        <div class="modal-actions-flex" style="margin-top: 16px; display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap;">
+          <button type="button" id="btnCancelBatchProcess" class="btn-duo-outline" style="font-size: 13px; padding: 8px 14px;">إيقاف العملية</button>
+          <button type="button" id="btnSkipInvalidName" class="btn-duo-amber" style="font-size: 13px; padding: 8px 14px;">تخطي هذا الاسم</button>
+          <button type="button" id="btnConfirmCorrectedName" class="btn-duo-green" style="font-size: 13px; padding: 8px 16px;">
+            <i class="fa-solid fa-check"></i> اعتماد والمتابعة
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. مودال إنشاء وتعديل الاختبار اليدوي -->
+  <div id="quizEditorModal" class="modal-overlay hidden">
+    <div class="duo-modal-box modal-wide">
+      <div class="modal-header">
+        <div class="modal-title-with-icon">
+          <div class="modal-icon-bubble green">
+            <i class="fa-solid fa-pen-nib"></i>
+          </div>
+          <div>
+            <h3 id="quizEditorTitle">إنشاء وتعديل اختبار قرآني</h3>
+            <span class="modal-subtitle">حدد عنوان الاختبار، الفئة، وأضف الأقسام والأسئلة بدقة</span>
+          </div>
+        </div>
+        <button class="btn-modal-close" data-close-modal="quizEditorModal" title="إغلاق">&times;</button>
+      </div>
+
+      <form id="quizEditorForm" class="modal-body-form">
+        <input type="hidden" id="editQuizId">
+
+        <div class="two-cols-grid">
+          <div class="input-group">
+            <label class="input-label">عنوان الاختبار <span class="required-star">*</span></label>
+            <input type="text" id="quizTitleInput" class="form-control" placeholder="مثال: اختبار المدود وأحكام النون" required>
+          </div>
+
+          <div class="input-group">
+            <label class="input-label">الفئة المستهدفة <span class="required-star">*</span></label>
+            <select id="quizTargetGrade" class="form-control form-select">
+              <option value="صف أول">صف أول</option>
+              <option value="صف ثاني">صف ثاني</option>
+              <option value="صف ثالث">صف ثالث</option>
+              <option value="جميع الفئات">جميع الفئات</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="checkbox-row-styled">
+          <label>
+            <input type="checkbox" id="quizAllowPracticeToggle" checked>
+            <span>السماح بالتدريب الذاتي للطلاب في بوابتهم الخاصة</span>
+          </label>
+        </div>
+
+        <!-- إعدادات نقاط لوحة الشرف للاختبار -->
+        <div class="checkbox-row-styled" style="margin-top: 8px;">
+          <label>
+            <input type="checkbox" id="quizEnableHonorPointsToggle" checked>
+            <span>احتساب نقاط للوحة الشرف عند إكمال الاختبار التدريبي</span>
+          </label>
+        </div>
+
+        <div id="quizHonorPointsSettings" class="quiz-honor-points-box" style="margin-top: 10px; margin-bottom: 14px; padding: 14px 16px; background: #f0fdf4; border: 2px solid #86efac; border-radius: 14px;">
+          <label class="input-label" style="font-size: 13.5px; font-weight: 800; color: #166534; margin-bottom: 8px; display: block;">
+            <i class="fa-solid fa-trophy" style="color: #eab308; margin-left: 6px;"></i> نظام نقاط لوحة الشرف للاختبار:
+          </label>
+          <div style="display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 10px;">
+            <label style="font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 6px; cursor: pointer; color: #1e293b;">
+              <input type="radio" name="quizPointsModeRadio" id="quizPointsModeActual" value="actual" checked>
+              <span>احتساب الدرجات الفعلية للأسئلة</span>
+            </label>
+            <label style="font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 6px; cursor: pointer; color: #1e293b;">
+              <input type="radio" name="quizPointsModeRadio" id="quizPointsModeFixed" value="fixed">
+              <span>مكافأة نقاط محددة عند الإكمال</span>
+            </label>
+          </div>
+          <div id="quizFixedPointsContainer" class="hidden" style="align-items: center; gap: 10px; margin-top: 6px;">
+            <span style="font-size: 13px; font-weight: 700; color: #166534;">عدد نقاط المكافأة:</span>
+            <input type="number" id="quizHonorBonusPointsInput" class="form-control" value="20" min="1" max="500" style="width: 95px; padding: 6px 10px; font-weight: 800; text-align: center;">
+            <span style="font-size: 12.5px; color: #475569;">نقطة تضاف مباشرة للوحة الشرف</span>
+          </div>
+        </div>
+
+        <!-- أقسام الاختبار -->
+        <div class="sections-builder-wrapper">
+          <div class="sections-builder-header">
+            <h4><i class="fa-solid fa-list-check"></i> أقسام وأسئلة الاختبار</h4>
+            <button type="button" id="btnAddSectionBtn" class="btn-duo-blue btn-sm">
+              <i class="fa-solid fa-plus"></i> إضافة قسم جديد
+            </button>
+          </div>
+
+          <div id="quizSectionsContainer" class="sections-container-list">
+            <!-- يتم حقن الأقسام والأسئلة هنا -->
+          </div>
+        </div>
+
+        <div class="modal-actions-flex">
+          <button type="submit" id="btnSaveQuiz" class="btn-duo-green"><i class="fa-solid fa-cloud-arrow-up"></i> حفظ الاختبار في السحابة للجميع</button>
+          <button type="button" class="btn-duo-outline" data-close-modal="quizEditorModal">إلغاء</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 4. مودال الذكاء الاصطناعي: مهندس البرومبت واستيراد JSON -->
+  <div id="aiQuizModal" class="modal-overlay hidden">
+    <div class="duo-modal-box modal-wide">
+      <div class="modal-header">
+        <div class="modal-title-with-icon">
+          <div class="modal-icon-bubble blue">
+            <i class="fa-solid fa-wand-magic-sparkles"></i>
+          </div>
+          <div>
+            <h3>مساعد الذكاء الاصطناعي لإنشاء الاختبارات</h3>
+            <span class="modal-subtitle">اكتب متطلباتك، انسخ البرومبت الهندسي للذكاء الاصطناعي، ثم الصق كود JSON الناتج هنا</span>
+          </div>
+        </div>
+        <button class="btn-modal-close" data-close-modal="aiQuizModal" title="إغلاق">&times;</button>
+      </div>
+
+      <div class="modal-body-content">
+        
+        <!-- خطوات العمل الإرشادية بأسلوب دولينجو -->
+        <div class="ai-guide-steps">
+          <div class="guide-step-card">
+            <div class="step-num-badge">1</div>
+            <div>
+              <strong>اكتب مواصفات الاختبار</strong>
+              <p>حدد الفئة واكتب تفاصيل السيكريبت والدروس المطلوبة بدقة</p>
+            </div>
+          </div>
+          <div class="guide-step-card">
+            <div class="step-num-badge">2</div>
+            <div>
+              <strong>انسخ البرومبت وافتحه</strong>
+              <p>الصقه في ChatGPT أو Gemini أو Claude وارفع أي ملفات هناك</p>
+            </div>
+          </div>
+          <div class="guide-step-card">
+            <div class="step-num-badge">3</div>
+            <div>
+              <strong>الصق كود الـ JSON الناتج</strong>
+              <p>يُفتح الاختبار فوراً في المحرر لمراجعته وتعديله وحفظه</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- الخطوة 1: كتابة السيكريبت ونسخ البرومبت -->
+        <div class="ai-input-card" style="margin-top: 18px;">
+          <h4 style="font-size: 15.5px; font-weight: 800; color: #1e293b; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+            <i class="fa-solid fa-pen-ruler" style="color: var(--duo-blue);"></i> المرحلة الأولى: سيكريبت ومواصفات الاختبار
+          </h4>
+
+          <div class="input-group">
+            <label class="input-label">الفئة المقررة للاختبار</label>
+            <select id="aiGradeSelect" class="form-control form-select">
+              <option value="صف أول">صف أول</option>
+              <option value="صف ثاني">صف ثاني</option>
+              <option value="صف ثالث">صف ثالث</option>
+              <option value="جميع الفئات">جميع الفئات</option>
+            </select>
+          </div>
+
+          <div class="input-group">
+            <label class="input-label">السيكريبت / وصف الاختبار المطلوب بالتفصيل <span class="required-star">*</span></label>
+            <textarea id="aiPromptScriptInput" class="form-control" rows="4" placeholder="اكتب هنا طلبك أو مواصفات الاختبار المطلوب بالتفصيل في أي مادة أو موضوع، مثال: أنشئ لي اختباراً مكوناً من 3 أقسام يحتوي على أسئلة خيارات متعددة وأسئلة شفهية وتوصيل وترتيب..."></textarea>
+          </div>
+
+          <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+            <button type="button" id="btnCopyAIEngineeredPrompt" class="btn-duo-blue" style="padding: 12px 22px;">
+              <i class="fa-solid fa-copy"></i> إنشاء ونسخ البرومبت وصيغة JSON للذكاء الاصطناعي
+            </button>
+            <span id="promptCopyFeedback" style="font-size: 13px; font-weight: 800; color: var(--duo-green); display: none;">
+              <i class="fa-solid fa-circle-check"></i> تم نسخ صيغة البرومبت بنجاح! الصقه في ChatGPT أو Gemini
+            </span>
+          </div>
+        </div>
+
+        <!-- الخطوة 2: استيراد كود JSON الناتج -->
+        <div class="ai-input-card" style="margin-top: 18px; border-color: #e2e8f0;">
+          <h4 style="font-size: 15.5px; font-weight: 800; color: #1e293b; margin-bottom: 8px; display: flex; align-items: center; gap: 8px;">
+            <i class="fa-solid fa-file-code" style="color: var(--duo-green);"></i> المرحلة الثانية: استيراد ملف الـ JSON الناتج
+          </h4>
+          <p style="font-size: 13px; color: #64748b; margin-bottom: 12px;">
+            الصق كود الـ JSON الذي أنتجه لك الذكاء الاصطناعي بالأسفل (سيتكفل النظام بفرزه تلقائياً):
+          </p>
+
+          <textarea id="aiJsonPasteInput" class="form-control" rows="5" placeholder='الصق كود الـ JSON هنا... مثال: { "title": "عنوان الاختبار", "sections": [...] }' style="font-family: monospace; font-size: 13px; direction: ltr; text-align: left;"></textarea>
+
+          <div class="modal-actions-flex" style="margin-top: 14px;">
+            <button type="button" id="btnImportPastedJsonQuiz" class="btn-duo-green" style="padding: 12px 24px;">
+              <i class="fa-solid fa-file-import"></i> استيراد وفتح الاختبار في المحرر فوراً
+            </button>
+            <button type="button" class="btn-duo-outline" data-close-modal="aiQuizModal">إلغاء</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- مودال إدارة مغادرة قائد الغرفة (تسليم الإشراف أو إنهاء المسابقة) -->
+  <div id="leaderExitModal" class="modal-overlay hidden" style="z-index: 10006;">
+    <div class="duo-modal-box">
+      <div class="modal-header">
+        <div class="modal-title-with-icon">
+          <div class="modal-icon-bubble gold">
+            <i class="fa-solid fa-crown"></i>
+          </div>
+          <div>
+            <h3>إدارة مغادرة المسابقة</h3>
+            <span class="modal-subtitle">بصفتك قائد الغرفة، يمكنك تسليم الإشراف لعضو آخر أو إنهاء المسابقة</span>
+          </div>
+        </div>
+        <button class="btn-modal-close" data-close-modal="leaderExitModal" title="إغلاق">&times;</button>
+      </div>
+
+      <div class="modal-body-content">
+        <p style="font-size: 14px; color: #475569; margin-bottom: 18px; line-height: 1.6;">
+          أنت حالياً تدير هذه المسابقة. للمغادرة، اختر إما نقل الإشراف لعضو متواجد في الغرفة لاستمرار المسابقة، أو إنهاء المسابقة بالكامل لجميع الحاضرين:
+        </p>
+
+        <!-- الخيار 1: تسليم الإشراف -->
+        <div class="exit-choice-box" style="background: #f8fafc; border: 2px solid var(--border-duo); border-radius: var(--radius-md); padding: 16px; margin-bottom: 16px;">
+          <h4 style="font-size: 15px; font-weight: 800; color: var(--duo-blue-dark); margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
+            <i class="fa-solid fa-handshake"></i> الخيار الأول: تسليم الإشراف والمغادرة
+          </h4>
+          <p style="font-size: 13px; color: #64748b; margin-bottom: 12px;">
+            اختر أحد المتواجدين في الغرفة لتسليمه قيادة المسابقة، وستظل الغرفة نشطة ومستمرة:
+          </p>
+          <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+            <select id="selectNewLeaderCandidate" class="form-control form-select" style="flex: 1; min-width: 180px;">
+              <!-- قائمة الأعضاء المتواجدين -->
+            </select>
+            <button type="button" id="btnHandoverAndExit" class="btn-duo-blue" style="padding: 10px 18px; white-space: nowrap;">
+              <i class="fa-solid fa-user-check"></i> تسليم القيادة ومغادرة
+            </button>
+          </div>
+        </div>
+
+        <!-- الخيار 2: إنهاء المسابقة للجميع -->
+        <div class="exit-choice-box" style="background: #fef2f2; border: 2px solid #fecaca; border-radius: var(--radius-md); padding: 16px;">
+          <h4 style="font-size: 15px; font-weight: 800; color: #dc2626; margin-bottom: 8px; display: flex; align-items: center; gap: 8px;">
+            <i class="fa-solid fa-power-off"></i> الخيار الثاني: إنهاء وإغلاق المسابقة
+          </h4>
+          <p style="font-size: 13px; color: #7f1d1d; margin-bottom: 12px;">
+            إنهاء وإغلاق الغرفة فوراً لجميع المشاركين والمعلمين المتواجدين ومسحها من الغرف النشطة:
+          </p>
+          <button type="button" id="btnTerminateContestForAll" class="btn-duo-red" style="width: 100%; padding: 12px 20px;">
+            <i class="fa-solid fa-door-closed"></i> إنهاء وإغلاق المسابقة لجميع المشاركين
+          </button>
+        </div>
+
+        <div class="modal-actions-flex" style="margin-top: 16px; justify-content: flex-end;">
+          <button type="button" class="btn-duo-outline" data-close-modal="leaderExitModal">البقاء في المسابقة</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. مودال إنشاء غرفة مسابقة حية -->
+  <div id="createRoomModal" class="modal-overlay hidden">
+    <div class="duo-modal-box">
+      <div class="modal-header">
+        <div class="modal-title-with-icon">
+          <div class="modal-icon-bubble gold">
+            <i class="fa-solid fa-tower-broadcast"></i>
+          </div>
+          <div>
+            <h3>فتح غرفة مسابقة حية جديدة</h3>
+            <span class="modal-subtitle">إطلاق مسرح العرض الحي المباشر وربطه بالاختبار والبطاقات التكتيكية</span>
+          </div>
+        </div>
+        <button class="btn-modal-close" data-close-modal="createRoomModal" title="إغلاق">&times;</button>
+      </div>
+
+      <form id="createRoomForm" class="modal-body-form">
+        <!-- خيار تحديد نمط المسابقة: فردي أم فرق -->
+        <div class="competition-mode-switch-group">
+          <label class="competition-mode-card active" id="modeCardIndividual" data-comp-mode="individual">
+            <input type="radio" name="competitionMode" value="individual" checked>
+            <div class="mode-card-content">
+              <i class="fa-solid fa-user"></i>
+              <div>
+                <strong>نمط فردي</strong>
+                <span>متسابق فردي مع بطاقات تكتيكية ولوحة الشرف</span>
+              </div>
+            </div>
+          </label>
+          <label class="competition-mode-card" id="modeCardTeams" data-comp-mode="teams">
+            <input type="radio" name="competitionMode" value="teams">
+            <div class="mode-card-content">
+              <i class="fa-solid fa-users-rays"></i>
+              <div>
+                <strong>نمط الفرق التنافسي</strong>
+                <span>مواجهة بين فريقين، 4 فقرات وتتويج جماعي</span>
+              </div>
+            </div>
+          </label>
+        </div>
+
+        <div class="input-group">
+          <label class="input-label">اسم الغرفة / الفعالية <span class="required-star">*</span></label>
+          <input type="text" id="newRoomNameInput" class="form-control" placeholder="مثال: تصفيات نور البيان - صف أول" required>
+          <!-- شرائح مقترحات سريعة لاسم الغرفة -->
+          <div class="room-preset-chips" id="roomPresetChipsContainer">
+            <button type="button" class="preset-chip" data-preset="تصفيات نور البيان - صف أول"><i class="fa-solid fa-award"></i> صف أول</button>
+            <button type="button" class="preset-chip" data-preset="تصفيات نور البيان - صف ثاني"><i class="fa-solid fa-star"></i> صف ثاني</button>
+            <button type="button" class="preset-chip" data-preset="نهائيات مسابقة نور البيان"><i class="fa-solid fa-crown"></i> نهائيات المسابقة</button>
+            <button type="button" class="preset-chip" data-preset="تحدي الفرق الكبرى"><i class="fa-solid fa-shield-halved"></i> تحدي الفرق</button>
+          </div>
+        </div>
+
+        <!-- قسم اختيار الفرق التنافسية (يظهر فقط عند تفعيل نمط الفرق) -->
+        <div id="teamsSelectionContainer" class="teams-selection-wrapper hidden">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <label class="input-label" style="margin:0;font-weight:900;color:#1e293b;">
+              <i class="fa-solid fa-shield-cat" style="color:#2563eb;"></i> نظام مواجهات الفرق التنافسية
+            </label>
+            <button type="button" id="btnOpenCreateTeamModal" class="btn-open-create-team">
+              <i class="fa-solid fa-plus"></i> إنشاء فريق جديد
+            </button>
+          </div>
+          <div style="margin-top:8px;padding:12px;background:#f0fdf4;border:1.5px solid #86efac;border-radius:12px;font-size:13px;font-weight:700;color:#166534;display:flex;align-items:center;gap:10px;">
+            <i class="fa-solid fa-trophy" style="color:#16a34a;font-size:20px;"></i>
+            <span><strong>نظام بطولة التصفيات المفتوحة:</strong> حدد كافة الفرق التي تريد مشاركتها في البطولة (2، 4، 7، 8، 16، 32 أو أي عدد تختاره). ستخوض الفرق مواجهات إقصائية منظمة داخل المسرح وصولاً للنهائي والتتويج!</span>
+          </div>
+
+          <!-- شريط التحديد السريع وعداد الفرق المختارة -->
+          <div class="tournament-pick-toolbar" style="margin-top:10px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+              <span style="font-size:12.5px;font-weight:800;color:#475569;">تحديد سريع:</span>
+              <button type="button" id="btnSelectAllTournamentTeams" class="btn-duo-outline btn-xs" style="padding:4px 10px;font-size:12px;font-weight:800;">
+                <i class="fa-solid fa-check-double"></i> تحديد الكل
+              </button>
+              <button type="button" id="btnDeselectAllTournamentTeams" class="btn-duo-outline btn-xs" style="padding:4px 10px;font-size:12px;font-weight:800;color:#ef4444;border-color:#fca5a5;">
+                <i class="fa-solid fa-xmark"></i> إلغاء التحديد
+              </button>
+              <button type="button" class="btn-duo-outline btn-xs btn-pick-preset-count" data-count="2" style="padding:4px 8px;font-size:11.5px;">2</button>
+              <button type="button" class="btn-duo-outline btn-xs btn-pick-preset-count" data-count="4" style="padding:4px 8px;font-size:11.5px;">4</button>
+              <button type="button" class="btn-duo-outline btn-xs btn-pick-preset-count" data-count="8" style="padding:4px 8px;font-size:11.5px;">8</button>
+              <button type="button" class="btn-duo-outline btn-xs btn-pick-preset-count" data-count="16" style="padding:4px 8px;font-size:11.5px;">16</button>
+              <button type="button" class="btn-duo-outline btn-xs btn-pick-preset-count" data-count="32" style="padding:4px 8px;font-size:11.5px;">32</button>
+            </div>
+            <div class="tournament-selected-badge" style="background:#dbeafe;color:#1e40af;border:1.5px solid #93c5fd;border-radius:20px;padding:4px 12px;font-size:12.5px;font-weight:800;">
+              المختار للبطولة: <strong id="tournamentSelectedCountDisplay" style="color:#1d4ed8;font-size:14px;">0</strong> فرق
+            </div>
+          </div>
+
+          <!-- شبكة الفرق المتاحة للاختيار بالـ Checkbox -->
+          <div id="tournamentTeamsMultiSelectGrid" class="tournament-teams-multi-grid" style="margin-top:10px;max-height:220px;overflow-y:auto;border:1.5px solid var(--border-duo);border-radius:12px;padding:10px;background:#f8fafc;display:grid;grid-template-columns:repeat(auto-fill, minmax(210px, 1fr));gap:8px;">
+            <!-- تُملأ ديناميكياً ببطاقات الفرق مع checkboxes -->
+          </div>
+
+          <!-- حقول قديمة مخفية للتوافق الاحتياطي -->
+          <div style="display:none;">
+            <select id="selectTeamA"></select>
+            <select id="selectTeamB"></select>
+            <div id="previewTeamA"></div>
+            <div id="previewTeamB"></div>
+          </div>
+        </div>
+
+        <div class="input-group">
+          <label class="input-label">اختيار الاختبار المعتمد للغرفة <span class="required-star">*</span></label>
+          <select id="roomQuizSelect" class="form-control form-select" required></select>
+        </div>
+
+        <!-- معلومات الاختبار وعدد الأسئلة لكل طالب -->
+        <div id="quizInfoBox" class="quiz-info-preview hidden">
+          <div class="quiz-info-row">
+            <i class="fa-solid fa-circle-info" style="color:var(--duo-blue);"></i>
+            <span id="quizTotalQLabel">إجمالي الأسئلة في الاختبار: <strong id="quizTotalQCount">0</strong></span>
+          </div>
+          <div class="input-group" style="margin-top:10px;margin-bottom:0;">
+            <label class="input-label">
+              <i class="fa-solid fa-hashtag"></i> عدد الأسئلة لكل طالب / فقرة
+              <span style="font-size:11px;color:#94a3b8;font-weight:600;">(اتركه فارغاً لاستخدام كل أسئلة الاختبار)</span>
+            </label>
+            <input type="number" id="questionsPerStudentInput" class="form-control"
+              min="1" placeholder="مثال: 10 أو 15 ...">
+          </div>
+          <div class="input-group" style="margin-top:10px;margin-bottom:0;">
+            <label class="input-label">
+              <i class="fa-solid fa-stopwatch"></i> وقت كل سؤال (بالثواني)
+            </label>
+            <input type="number" id="questionTimerInput" class="form-control"
+              min="5" max="180" value="30" placeholder="الوقت الافتراضي: 30 ثانية">
+          </div>
+        </div>
+
+        <!-- خيارات البطاقات التكتيكية (تختفي في نمط الفرق) -->
+        <div id="tacticalCardsSettingsGroup">
+          <div class="tactical-cards-feature-card">
+            <div class="tactical-icon-box">
+              <i class="fa-solid fa-bolt"></i>
+            </div>
+            <div class="tactical-info-box">
+              <strong>نظام البطاقات التكتيكية (40 بطاقة)</strong>
+              <p>تفعيل ظهور البطاقات التكتيكية تلقائياً لدعم المتسابق وإشعال الحماس</p>
+            </div>
+            <label class="duo-checkbox-container">
+              <input type="checkbox" id="roomTacticalCardsToggle" checked>
+              <span class="duo-checkbox-checkmark"></span>
+            </label>
+          </div>
+
+          <div class="input-group" id="roomCardFrequencyGroup" style="margin-top: 10px; margin-bottom: 5px;">
+            <label class="input-label" style="font-weight: 800; color: #1e293b;">
+              <i class="fa-solid fa-repeat" style="color: #8b5cf6;"></i> تكرار ظهور البطاقات التكتيكية
+            </label>
+            <select id="roomCardFrequencySelect" class="form-control form-select" style="font-weight: 800;">
+              <option value="4" selected>كل 4 أسئلة (الافتراضي الموصى به)</option>
+              <option value="1">كل سؤال (بعد كل سؤال مباشرة)</option>
+              <option value="2">كل سؤالين (كل 2 أسئلة)</option>
+              <option value="3">كل 3 أسئلة</option>
+              <option value="5">كل 5 أسئلة</option>
+              <option value="quarter">كل ربع المسابقة</option>
+              <option value="off">تعطيل البطاقات التكتيكية</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="modal-actions-flex">
+          <button type="button" class="btn-duo-outline" data-close-modal="createRoomModal">إلغاء</button>
+          <button type="submit" id="btnSubmitCreateRoom" class="btn-duo-yellow">
+            <i class="fa-solid fa-play"></i> إطلاق الغرفة وبدء البث المباشر
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 6. مودال اختيار الطالب / المتسابق للغرفة -->
+  <div id="pickStudentModal" class="modal-overlay hidden">
+    <div class="duo-modal-box">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-user-check"></i> اختيار متسابق للمسرح الحي</h3>
+        <button class="btn-modal-close" data-close-modal="pickStudentModal">&times;</button>
+      </div>
+
+      <div class="modal-body-content">
+        <div class="search-box" style="margin-bottom: 12px;">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input type="text" id="studentPickerSearch" placeholder="بحث باسم الطالب...">
+        </div>
+
+        <div class="students-pick-list" id="studentsPickListContainer">
+          <!-- قائمة الطلاب للاختيار -->
+        </div>
+
+        <div class="modal-actions-flex" style="margin-top: 15px;">
+          <button type="button" class="btn-duo-outline" data-close-modal="pickStudentModal">إلغاء</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 7. مودال نظام البطاقات التكتيكية الثلاثي الأبعاد (3D Flip Animation) -->
+  <div id="tacticalCardsModal" class="modal-overlay cards-modal-bg hidden">
+    <div class="tactical-cards-container">
+      
+      <!-- عنوان البطاقات العائم 3D -->
+      <div class="cards-header-floating">
+        <h2 class="cards-float-title">بِـطَـاقَـات تَكْتِيكِيَّة</h2>
+        <div class="cards-countdown-circle" id="cardsCountdownTimer">15</div>
+        <p class="cards-sub-hint">اختر إحدى البطاقات الثلاث للاستفادة من ميزتها، أو اضغط تخطي (+15 ثانية للوقت)</p>
+      </div>
+
+      <!-- البطاقات الثلاث بتأثير 3D Drop and Flip -->
+      <div class="cards-3d-row" id="cards3DRow">
+        <!-- يتم توليد البطاقات الثلاث من بنك الـ 40 بطاقة عبر الجافاسكربت -->
+      </div>
+
+      <div class="cards-footer-actions">
+        <button id="btnSkipCards" class="btn-skip-cards">
+          <i class="fa-solid fa-forward"></i> تخطي البطاقات (+15 ثانية إضافية للمتسابق)
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- مودال تنبيه واستشارة المعلم (Teacher Consultation Modal) -->
+  <div id="teacherHelpModal" class="modal-overlay hidden" style="z-index: 10007;">
+    <div class="duo-modal-box" style="max-width: 580px; text-align: center; border: 3px solid #eab308;">
+      <div style="width: 70px; height: 70px; border-radius: 50%; background: #fef08a; color: #ca8a04; display: inline-flex; align-items: center; justify-content: center; font-size: 32px; margin-bottom: 12px;">
+        <i class="fa-solid fa-chalkboard-user"></i>
+      </div>
+      <h3 style="font-size: 21px; font-weight: 900; color: #854d0e; margin-bottom: 6px;"><i class="fa-solid fa-chalkboard-user"></i> نافذة استشارة المعلم</h3>
+      <p id="teacherHelpDescription" style="font-size: 14px; color: #475569; margin-bottom: 12px; line-height: 1.5;">
+        المؤقت متوقف حالياً. يتم اختيار أحد المعلمين أو المشرفين المؤهلين لتقديم توجيه وإرشاد للمتسابق.
+      </p>
+
+      <!-- المعلم المختار حالياً -->
+      <div style="background: #fefce8; border: 2px dashed #facc15; border-radius: 12px; padding: 12px; margin-bottom: 12px;">
+        <div style="font-size: 13px; font-weight: 700; color: #a16207;">المعلم المساعد المعتمد:</div>
+        <div id="teacherHelpChosenName" style="font-size: 20px; font-weight: 900; color: #854d0e; margin-top: 4px;">--</div>
+        <div id="teacherHelpContestantTarget" style="font-size: 13px; font-weight: 700; color: #166534; margin-top: 4px;"></div>
+      </div>
+
+      <!-- قائمة المعلمين المؤهلين في الغرفة (تدعم 10+ معلمين) -->
+      <div id="teacherConsultListSection" style="text-align: right; margin-bottom: 12px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
+          <span style="font-size: 13px; font-weight: 800; color: #334155;"><i class="fa-solid fa-users"></i> قائمة المعلمين المؤهلين المتصلين:</span>
+          <button type="button" id="btnTeacherHelpPickRandom" class="btn-duo-yellow btn-sm" style="padding: 4px 10px; font-size: 12px;">
+            <i class="fa-solid fa-dice"></i> اختيار عشوائي
+          </button>
+        </div>
+        <div id="teacherConsultTeachersList" class="teachers-consult-grid">
+          <!-- تُبنى ديناميكياً -->
+        </div>
+      </div>
+
+      <!-- حقل التلميح الموجه من المعلم أو المشرف -->
+      <div id="teacherHintContainer" style="margin-bottom: 12px; text-align: right;">
+        <label for="teacherHintInput" style="display:block; font-size: 13px; font-weight: 800; color: #334155; margin-bottom: 4px;">
+          <i class="fa-solid fa-comment-dots"></i> نص التوجيه والتلميح (يكتبه المعلم المختار أو المشرف):
+        </label>
+        <textarea id="teacherHintInput" class="form-control" rows="2" style="font-size: 14px; font-weight: 700; border-radius: 10px; width: 100%; box-sizing: border-box; resize: vertical;" placeholder="اكتب تلميحاً أو توجيهاً للطالب هنا..."></textarea>
+      </div>
+
+      <div style="background: #eff6ff; border: 1.5px solid #bfdbfe; border-radius: 10px; padding: 10px; font-size: 13.5px; color: #1e40af; font-weight: 700; margin-bottom: 16px;">
+        <i class="fa-solid fa-clock"></i> عند استئناف المسابقة، يُستأنف المؤقت من الوقت المتبقي السابق + <strong>15 ثانية إضافية</strong>!
+      </div>
+
+      <div style="display: flex; gap: 10px; justify-content: center;">
+        <button id="btnCancelTeacherHelpModal" class="btn-duo-gray btn-sm" style="flex: 1;">
+          <i class="fa-solid fa-xmark"></i> إلغاء الاستشارة
+        </button>
+        <button id="btnCloseTeacherHelpModal" class="btn-duo-green" style="flex: 2;">
+          <i class="fa-solid fa-check"></i> اعتماد التوجيه واستئناف المؤقت (+15ث)
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 8. مودال محفظة البطاقات التكتيكية للمتسابق (Card Wallet Modal) -->
+  <div id="contestantCardsWalletModal" class="modal-overlay hidden" style="z-index: 10010;">
+    <div class="duo-modal-box wallet-modal-box">
+      <div class="wallet-modal-header">
+        <div class="wallet-header-icon">
+          <i class="fa-solid fa-layer-group"></i>
+        </div>
+        <div>
+          <h3 class="wallet-modal-title">🃏 محفظة البطاقات التكتيكية</h3>
+          <p class="wallet-modal-subtitle" id="walletModalSubtitle">
+            البطاقات المتاحة للمتسابق الحالي — اختر أي بطاقة لتفعيلها في السؤال الحالي بتزامن كامل!
+          </p>
+        </div>
+        <button id="btnCloseWalletModal" class="modal-close-btn wallet-close-btn-red" title="إغلاق المحفظة">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <!-- بنر المزامنة المباشرة: يظهر للجميع من قام بفتح المحفظة -->
+      <div id="walletSyncLiveBanner" class="wallet-sync-live-banner hidden">
+        <span class="sync-live-pulse-dot"></span>
+        <i class="fa-solid fa-users-viewfinder" style="color: #0284c7;"></i>
+        <span id="walletSyncLiveText">مزامنة مباشرة: يتم استعراض المحفظة الآن</span>
+      </div>
+
+      <!-- قائمة البطاقات في المحفظة -->
+      <div id="walletCardsList" class="wallet-cards-grid">
+        <!-- يتم تعبئتها ديناميكياً بواسطة جافاسكربت -->
+      </div>
+
+      <div class="wallet-modal-footer">
+        <div class="wallet-footer-tip">
+          <i class="fa-solid fa-lightbulb" style="color: #f59e0b;"></i>
+          <span>البطاقات تُحفظ معك طوال جولة المتسابق، وعند اختيار أي بطاقة تظهر للجميع بأنيميشن لمدة ثانيتين ثم تتفعل!</span>
+        </div>
+        <button id="btnDismissWalletModal" class="btn-duo-outline btn-sm">
+          إغلاق المحفظة
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- غطاء وبنر أنيميشن تفعيل البطاقة المتزامن للجميع (Active Card Announcement Overlay) -->
+  <div id="activeCardAnnouncementOverlay" class="modal-overlay hidden" style="z-index: 10025; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(8px);">
+    <div class="card-announcement-card-box">
+      <div class="announcement-sparkles-wrap">
+        <div class="announcement-card-icon" id="announcementCardIcon">
+          <i class="fa-solid fa-bolt"></i>
+        </div>
+      </div>
+      <div class="announcement-card-tag" id="announcementCardTag"><i class="fa-solid fa-wand-magic-sparkles"></i> تم اختيار بطاقة تكتيكية!</div>
+      <h2 class="announcement-card-title" id="announcementCardTitle">اسم البطاقة</h2>
+      <div class="announcement-user-pill" id="announcementUserPill">
+        <i class="fa-solid fa-user-graduate"></i> <span id="announcementUserName">المتسابق</span> قام باختيار هذه البطاقة
+      </div>
+      <p class="announcement-card-desc" id="announcementCardDesc">
+        وصف وتأثير البطاقة...
+      </p>
+      <!-- شريط مؤقت الأنميشن لمدة ثانيتين بالضبط -->
+      <div class="card-activating-timer-container">
+        <div class="card-activating-timer-bar">
+          <div class="card-activating-timer-fill" id="cardActivatingTimerFill"></div>
+        </div>
+        <div class="card-activating-timer-label">
+          <i class="fa-solid fa-bolt fa-beat" style="color:#eab308;"></i> جاري تفعيل تأثيرات البطاقة على السؤال... (2 ثانية)
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- مودال إعدادات الغرفة وصلاحيات الحل المباشر -->
+  <div id="roomSettingsModal" class="modal-overlay hidden" style="z-index: 10008;">
+    <div class="duo-modal-box" style="max-width: 560px;">
+      <div class="modal-header">
+        <div class="modal-title-with-icon">
+          <div class="modal-icon-bubble gold">
+            <i class="fa-solid fa-sliders"></i>
+          </div>
+          <div>
+            <h3>إعدادات المسابقة وصلاحيات الحل</h3>
+            <span class="modal-subtitle">التحكم اللحظي بصلاحية الإجابة والبطاقات والمؤقت لجميع الحاضرين</span>
+          </div>
+        </div>
+        <button class="btn-modal-close" data-close-modal="roomSettingsModal" title="إغلاق">&times;</button>
+      </div>
+
+      <div class="modal-body-form" style="padding: 20px;">
+        <div class="input-group">
+          <label class="input-label" style="font-weight: 800; color: #1e293b; margin-bottom: 8px;">
+            <i class="fa-solid fa-hand-pointer" style="color: #eab308;"></i> من يمكنه الحل والإجابة في المسرح الحي؟
+          </label>
+          <div class="permission-options-grid" style="display: flex; flex-direction: column; gap: 8px;">
+            <label class="permission-option-card">
+              <input type="radio" name="roomAnsweringPermission" value="contestant_and_lead" checked>
+              <div class="perm-card-content">
+                <strong><i class="fa-solid fa-user-shield"></i> المتسابق والمشرف معاً (الأشمل والأنسب)</strong>
+                <p>يحل المتسابق بنفسه، ويمكن للمشرف أو قائد الغرفة المساعدة والحل بدلاً عنه والتزامن للجميع.</p>
+              </div>
+            </label>
+            <label class="permission-option-card">
+              <input type="radio" name="roomAnsweringPermission" value="contestant_only">
+              <div class="perm-card-content">
+                <strong><i class="fa-solid fa-user-check"></i> المتسابق المختار فقط</strong>
+                <p>الطلاب الآخرون يشاهدون كجمهور فقط ولا يمكنهم الضغط على أي خيار بتاتاً.</p>
+              </div>
+            </label>
+            <label class="permission-option-card">
+              <input type="radio" name="roomAnsweringPermission" value="supervisor_only">
+              <div class="perm-card-content">
+                <strong><i class="fa-solid fa-shield-halved"></i> مشرف الغرفة فقط</strong>
+                <p>فقط المشرف يقود الإجابات ويختار، والمتسابقون والجمهور للمشاهدة.</p>
+              </div>
+            </label>
+            <label class="permission-option-card">
+              <input type="radio" name="roomAnsweringPermission" value="teacher_and_supervisor">
+              <div class="perm-card-content">
+                <strong><i class="fa-solid fa-chalkboard-user"></i> المعلم والمشرف معاً</strong>
+                <p>يحق للمعلم والمشرف الضغط والإجابة والتحكم بالتزامن الكامل.</p>
+              </div>
+            </label>
+            <label class="permission-option-card">
+              <input type="radio" name="roomAnsweringPermission" value="presenter">
+              <div class="perm-card-content">
+                <strong><i class="fa-solid fa-display"></i> العارض وشاشة المسرح والمشرف</strong>
+                <p>مخصص لشاشات العرض الكبيرة والمسرح ليتحكم العارض والمشرف بالحل.</p>
+              </div>
+            </label>
+            <label class="permission-option-card">
+              <input type="radio" name="roomAnsweringPermission" value="all_participants">
+              <div class="perm-card-content">
+                <strong><i class="fa-solid fa-users"></i> المتسابق والعارض والمعلم والمشرف</strong>
+                <p>صلاحية تفاعلية مفتوحة لأي مشارك مصرح له بالحل فوراً.</p>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <div class="tactical-cards-feature-card" style="margin-top: 15px;">
+          <div class="tactical-icon-box">
+            <i class="fa-solid fa-bolt"></i>
+          </div>
+          <div class="tactical-info-box">
+            <strong>نظام البطاقات التكتيكية</strong>
+            <p>مزامنة كروت المساعدة المباشرة بين الجميع فورياً</p>
+          </div>
+          <label class="duo-checkbox-container">
+            <input type="checkbox" id="settingsTacticalCardsToggle" checked>
+            <span class="duo-checkbox-checkmark"></span>
+          </label>
+        </div>
+
+        <div class="input-group" id="settingsCardFrequencyGroup" style="margin-top: 10px;">
+          <label class="input-label" style="font-weight: 800; color: #1e293b;">
+            <i class="fa-solid fa-repeat" style="color: #8b5cf6;"></i> تكرار ظهور البطاقات التكتيكية
+          </label>
+          <select id="settingsCardFrequencySelect" class="form-control form-select" style="font-weight: 800;">
+            <option value="4" selected>كل 4 أسئلة (الافتراضي الموصى به)</option>
+            <option value="1">كل سؤال (بعد كل سؤال مباشرة)</option>
+            <option value="2">كل سؤالين (كل 2 أسئلة)</option>
+            <option value="3">كل 3 أسئلة</option>
+            <option value="5">كل 5 أسئلة</option>
+            <option value="quarter">كل ربع المسابقة</option>
+            <option value="off">تعطيل البطاقات التكتيكية</option>
+          </select>
+        </div>
+
+        <div class="input-group" style="margin-top: 15px;">
+          <label class="input-label"><i class="fa-solid fa-stopwatch"></i> وقت كل سؤال (بالثواني)</label>
+          <input type="number" id="settingsQuestionTimerInput" class="form-control" min="5" max="180" value="30" style="padding: 10px 14px; text-align: center; font-weight: 800;">
+        </div>
+
+        <div class="modal-actions-flex" style="margin-top: 20px;">
+          <button type="button" class="btn-duo-outline" data-close-modal="roomSettingsModal">إلغاء</button>
+          <button type="button" id="btnSaveRoomSettings" class="btn-duo-green">
+            <i class="fa-solid fa-cloud-arrow-up"></i> حفظ وتطبيق عند الجميع لحظياً
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- مودال بطاقة التخطي المسبق لسؤال قادم -->
+  <div id="modalPreSkipQuestion" class="modal-overlay hidden" style="z-index: 10009;">
+    <div class="duo-modal-box" style="max-width: 620px;">
+      <div class="modal-header">
+        <div class="modal-title-with-icon">
+          <div class="modal-icon-bubble gold">
+            <i class="fa-solid fa-forward-fast"></i>
+          </div>
+          <div>
+            <h3>بطاقة التخطي الذكي لسؤال قادم</h3>
+            <span class="modal-subtitle">اختر سؤالاً قادماً لم نصل إليه بعد لتخطيه مسبقاً والحصول على 3 نقاط بدلاً منه!</span>
+          </div>
+        </div>
+        <button class="btn-modal-close" data-close-modal="modalPreSkipQuestion" title="إغلاق">&times;</button>
+      </div>
+      <div class="modal-body-form" style="padding: 20px;">
+        <p style="font-size: 13.5px; color: #64748b; font-weight: 700; margin-bottom: 12px;">
+          الأسئلة الباقية في المسابقة التي لم نصل إليها بعد:
+        </p>
+        <div id="preSkipQuestionsList" style="display: flex; flex-direction: column; gap: 10px; max-height: 340px; overflow-y: auto;">
+          <!-- قائمة الأسئلة القادمة -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 8. مودال لوحة الشرف (Honor Board - 3 ثواني) -->
+  <div id="honorBoardModal" class="modal-overlay hidden">
+    <div class="duo-modal-box honor-box">
+      <div class="modal-header honor-header">
+        <h3><i class="fa-solid fa-crown gold-crown"></i> لَوْحَةُ الشَّرَفِ وَالمُتَصَدِّرِينَ</h3>
+        <button class="btn-modal-close" data-close-modal="honorBoardModal">&times;</button>
+      </div>
+
+      <div class="honor-podium-preview" id="honorPodiumList">
+        <!-- قائمة الترتيب المباشر -->
+      </div>
+
+      <div class="honor-footer">
+        <span class="honor-timer-note">تغلق تلقائياً خلال <strong id="honorCountdownSec">3</strong> ثوانٍ</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- مودال أرشيف المسابقات والبطولات السابقة (متاح للجميع من الهيدر وأي مكان) -->
+  <div id="pastTournamentsModal" class="modal-overlay hidden" style="z-index: 10012;">
+    <div class="duo-modal-box modal-wide" style="max-width: 900px; max-height: 90vh; display: flex; flex-direction: column;">
+      <div class="modal-header">
+        <div class="modal-title-with-icon">
+          <div class="modal-icon-bubble gold">
+            <i class="fa-solid fa-box-archive"></i>
+          </div>
+          <div>
+            <h3>أرشيف المسابقات والبطولات السابقة</h3>
+            <span class="modal-subtitle">سجل البطولات المكتملة ونتائج منصات التتويج والمراكز الرسمية</span>
+          </div>
+        </div>
+        <button class="btn-modal-close" data-close-modal="pastTournamentsModal" title="إغلاق">&times;</button>
+      </div>
+      <div class="modal-body-content" style="flex: 1; overflow-y: auto; padding: 16px;">
+        <div class="tournament-archive-toolbar" style="margin-top: 0;">
+          <div class="search-input-duo" style="flex: 1; max-width: 450px;">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input type="text" id="modalSearchPastTournamentsInput" placeholder="ابحث باسم المسابقة أو الفريق البطل أو المشرف..." class="form-control">
+          </div>
+          <div class="archive-count-summary">
+            إجمالي البطولات المحفوظة: <strong id="modalTotalPastTournamentsCount">0</strong> بطولة
+          </div>
+        </div>
+        <div id="modalPastTournamentsListGrid" class="past-tournaments-cards-grid">
+          <!-- تُبنى ديناميكياً -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- مودال تفاصيل وشجرة مراكز البطولة المحفوظة -->
+  <div id="tournamentDetailsModal" class="modal-overlay hidden" style="z-index: 10014;">
+    <div class="duo-modal-box" style="max-width: 650px; max-height: 90vh; overflow-y: auto;">
+      <div class="modal-header">
+        <div class="modal-title-with-icon">
+          <div class="modal-icon-bubble gold">
+            <i class="fa-solid fa-trophy"></i>
+          </div>
+          <div>
+            <h3 id="detailsModalTournamentTitle">تفاصيل البطولة</h3>
+            <span class="modal-subtitle" id="detailsModalTournamentMeta">--</span>
+          </div>
+        </div>
+        <button class="btn-modal-close" data-close-modal="tournamentDetailsModal" title="إغلاق">&times;</button>
+      </div>
+      <div class="modal-body-content" id="tournamentDetailsContent" style="padding: 16px;">
+        <!-- تُبنى ديناميكياً -->
+      </div>
+    </div>
+  </div>
+
+  <!-- 9. مودال الانتقال بين الأقسام (تهنئة 5 ث + عداد دائري 3 ث) -->
+  <div id="sectionTransitionModal" class="modal-overlay hidden">
+    <div class="duo-modal-box transition-modal-box">
+      <div class="transition-stars"><i class="fa-solid fa-star"></i> <i class="fa-solid fa-award"></i> <i class="fa-solid fa-star"></i></div>
+      <h2 class="transition-title">مُبَارَكٌ إِنْهَاءُ القِسْم!</h2>
+      <p class="transition-desc" id="transitionMsgText">أحسنت صنعاً في إتمام هذا القسم بنجاح وتميز!</p>
+
+      <div class="transition-countdown-circle">
+        <span id="transitionCountText">3</span>
+      </div>
+      <p class="transition-footer-hint">جاري الانتقال التلقائي للقسم التالي...</p>
+    </div>
+  </div>
+
+  <!-- 10. شاشة تشغيل الاختبار للطالب (Practice Mode Runner) -->
+  <div id="practiceRunnerModal" class="modal-overlay hidden">
+    <div class="duo-modal-box modal-wide practice-runner-box">
+      <div class="modal-header">
+        <h3 id="practiceQuizTitle"><i class="fa-solid fa-pen-nib"></i> تدريب ذاتي</h3>
+        <button class="btn-modal-close" data-close-modal="practiceRunnerModal">&times;</button>
+      </div>
+
+      <div class="practice-body" id="practiceRunnerContent">
+        <!-- محتوى الأسئلة التفاعلية -->
+      </div>
+    </div>
+  </div>
+
+  <!-- شاشة التحميل الاحترافية الذكية (Professional App Global Loader) -->
+  <div id="appGlobalLoader" class="app-global-loader hidden" role="status" aria-live="polite">
+    <div class="app-loader-card">
+      <div class="app-loader-glow-ring">
+        <div class="loader-spinner-circle"></div>
+        <div class="loader-center-icon">
+          <i class="fa-solid fa-book-quran"></i>
+        </div>
+      </div>
+      <h4 id="appLoaderTitle" class="app-loader-title">جاري التحقق من قاعدة البيانات...</h4>
+      <p id="appLoaderSubtitle" class="app-loader-subtitle">يرجى الانتظار لحظات، يتم جلب البيانات السحابية فورياً</p>
+      <div class="loader-pulse-dots">
+        <span></span><span></span><span></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- شريط تنبيه البث المباشر الفوري عند بدء غرفة مسابقة جديدة في أي وقت -->
+  <div id="liveRoomBroadcastBanner" class="live-broadcast-banner hidden" role="alert">
+    <div class="live-broadcast-content">
+      <div class="live-broadcast-badge">
+        <span class="live-pulse-dot"></span>
+        <span>بث مباشر حي</span>
+      </div>
+      <div class="live-broadcast-text">
+        <strong id="broadcastRoomTitle">بدأت غرفة مسابقة جديدة الآن!</strong>
+        <span id="broadcastRoomMeta">المشرف يقود المسابقة مباشرة</span>
+      </div>
+      <div class="live-broadcast-actions">
+        <button type="button" id="btnJoinBroadcastRoom" class="btn-duo-yellow btn-sm">
+          <i class="fa-solid fa-arrow-right-to-bracket"></i> دخول المسرح الحي الآن
+        </button>
+        <button type="button" id="btnCloseBroadcastBanner" class="btn-close-broadcast" title="إغلاق التنبيه">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================== -->
+  <!-- عناصر وشاشات نظام مسابقات الفرق التنافسي (Teams Mode) -->
+  <!-- ======================================================== -->
+
+  <!-- مودال إنشاء وحفظ فريق جديد -->
+  <div id="createTeamModal" class="modal-overlay hidden">
+    <div class="duo-modal-box" style="max-width: 580px;">
+      <div class="modal-header">
+        <div class="modal-title-with-icon">
+          <div class="modal-icon-bubble blue">
+            <i class="fa-solid fa-users-gear"></i>
+          </div>
+          <div>
+            <h3 id="createTeamModalTitle">إنشاء وتجهيز فريق جديد</h3>
+            <span class="modal-subtitle">تسمية الفريق واختيار لونه وتحديد طلابه مع إمكانية إضافة طلاب جدد</span>
+          </div>
+        </div>
+        <button class="btn-modal-close" data-close-modal="createTeamModal" title="إغلاق">&times;</button>
+      </div>
+
+      <form id="createTeamForm" class="modal-body-form" novalidate>
+        <input type="hidden" id="editTeamId" value="">
+        <div class="input-group">
+          <label class="input-label">اسم الفريق <span class="required-star">*</span></label>
+          <input type="text" id="newTeamNameInput" class="form-control" placeholder="مثال: فرسان القرآن، أشبال الهدى..." required>
+        </div>
+
+        <div class="input-group">
+          <label class="input-label">لون وهوية الفريق</label>
+          <select id="newTeamColorSelect" class="form-control form-select">
+            <option value="blue" selected>🔵 أزرق ملكي (Royal Blue)</option>
+            <option value="red">🔴 أحمر ياقوتي (Crimson Red)</option>
+            <option value="emerald">🟢 أخضر زمردي (Emerald Green)</option>
+            <option value="gold">🟡 ذهبي لامع (Bright Gold)</option>
+            <option value="purple">🟣 بنفسجي ملكي (Imperial Purple)</option>
+            <option value="amber">🟠 برتقالي ناري (Fiery Amber)</option>
+          </select>
+        </div>
+
+        <div class="input-group">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+            <label class="input-label" style="margin:0;">
+              <i class="fa-solid fa-user-group"></i> اختيار طلاب الفريق
+            </label>
+            <span id="selectedTeamMembersCountBadge" style="font-size:12px;font-weight:800;color:#2563eb;">0 طلاب محددين</span>
+          </div>
+
+          <div style="position:relative;margin-bottom:8px;">
+            <input type="text" id="searchTeamStudentsInput" class="form-control form-control-sm" placeholder="بحث سريع في قائمة الطلاب..." style="padding-right:32px;">
+            <i class="fa-solid fa-magnifying-glass" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);color:#94a3b8;font-size:13px;"></i>
+          </div>
+
+          <div id="teamStudentsChecklistContainer" style="max-height:180px;overflow-y:auto;border:1.5px solid var(--border-duo);border-radius:12px;padding:8px;background:#f8fafc;display:flex;flex-direction:column;gap:6px;">
+            <!-- يتم تعبئة قائمة الطلاب هنا ديناميكياً -->
+          </div>
+        </div>
+
+        <!-- إضافة طالب غير موجود سلفاً وحفظه فورياً في النظام -->
+        <div style="background:#f0fdf4;border:1.5px dashed #86efac;border-radius:12px;padding:12px;margin-bottom:14px;">
+          <div style="font-size:13px;font-weight:900;color:#166534;margin-bottom:6px;display:flex;align-items:center;gap:6px;">
+            <i class="fa-solid fa-user-plus"></i> إضافة طالب جديد غير مسجل وإدراجه بالفريق:
+          </div>
+          <div style="display:grid;grid-template-columns:1fr auto;gap:8px;">
+            <input type="text" id="inlineStudentNameInput" class="form-control form-control-sm" placeholder="الاسم الرباعي للطالب الجديد...">
+            <button type="button" id="btnInlineAddStudentToTeam" class="btn-duo-green btn-sm" style="white-space:nowrap;">
+              <i class="fa-solid fa-plus"></i> حفظ وإضافة للفريق
+            </button>
+          </div>
+        </div>
+
+        <div class="modal-actions-flex">
+          <button type="button" class="btn-duo-outline" data-close-modal="createTeamModal">إلغاء</button>
+          <button type="submit" id="btnSubmitSaveTeam" class="btn-duo-blue">
+            <i class="fa-solid fa-floppy-disk"></i> حفظ الفريق واعتماده سحابياً
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- نافذة اختيار وتحديد الفريقين من داخل المسرح بثيم دولينجو (In-Arena Team Picker Overlay) -->
+  <div id="arenaTeamSelectionOverlay" class="arena-team-selection-overlay hidden">
+    <div class="arena-team-picker-card">
+      <div class="team-picker-header">
+        <div class="team-picker-badge">
+          <i class="fa-solid fa-crown" style="color: #facc15;"></i>
+          <span id="arenaTeamPickerRoleBadge">غرفة مسابقة الفرق الكبرى</span>
+        </div>
+        <h2 class="team-picker-title" id="arenaTeamPickerTitle">اختيار فريقي المواجهة التنافسية</h2>
+        <p class="team-picker-subtitle" id="arenaTeamPickerSubtitle">
+          حدد الفريق الأول ثم حدد الفريق الثاني لبدء التحدي والعرض السينمائي فورياً.
+        </p>
+      </div>
+
+      <!-- محتوى المشرف لاختيار الفريقين -->
+      <div id="supervisorTeamPickerBody" class="team-picker-body">
+        <!-- لافتة الدور الحالي من التصفيات وزر القرعة التلقائية -->
+        <div class="tournament-round-stage-bar" style="background:#f1f5f9;border:2px solid #cbd5e1;border-radius:14px;padding:10px 16px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+          <div style="display:flex;align-items:center;gap:12px;">
+            <div style="width:40px;height:40px;border-radius:10px;background:#fef08a;color:#ca8a04;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:900;">
+              <i class="fa-solid fa-trophy"></i>
+            </div>
+            <div>
+              <div style="font-size:11.5px;color:#64748b;font-weight:800;">مرحلة التصفيات الحالية:</div>
+              <strong style="font-size:16px;color:#0f172a;" id="arenaCurrentRoundTitle">المواجهة المباشرة</strong>
+            </div>
+            <span class="round-status-badge" id="arenaRoundMatchesStatus" style="background:#e0f2fe;color:#0369a1;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:800;">باقي مواجهات في هذا الدور</span>
+          </div>
+
+          <div style="display:flex;gap:8px;">
+            <button type="button" id="btnAutoDrawTeams" class="btn-duo-yellow btn-sm" style="font-size:13px;padding:8px 14px;font-weight:800;" title="سحب عشوائي بالقرعة لفريقين مؤهلين لم يتنافسا بعد في هذا الدور">
+              <i class="fa-solid fa-dice"></i> سحب بالقرعة تلقائياً
+            </button>
+          </div>
+        </div>
+
+        <!-- ألسنة وفلاتر تصنيف الفرق (الكل، في الانتظار، متأهل، تم إقصاؤه) -->
+        <div class="tournament-teams-filter-bar" style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+          <button type="button" class="team-filter-pill active" data-filter="all">
+            <i class="fa-solid fa-layer-group"></i> جميع الفرق (<span id="countAllFilter">0</span>)
+          </button>
+          <button type="button" class="team-filter-pill pending" data-filter="pending">
+            <i class="fa-solid fa-hourglass-half"></i> في الانتظار (لم تنافس بعد) (<span id="countPendingFilter">0</span>)
+          </button>
+          <button type="button" class="team-filter-pill qualified" data-filter="qualified">
+            <i class="fa-solid fa-bolt"></i> المتأهلون للدور القادم (<span id="countQualifiedFilter">0</span>)
+          </button>
+          <button type="button" class="team-filter-pill eliminated" data-filter="eliminated">
+            <i class="fa-solid fa-xmark"></i> تم إقصاؤهم (<span id="countEliminatedFilter">0</span>)
+          </button>
+        </div>
+
+        <!-- شريط تحديد الخطوة (الفريق الأول / الفريق الثاني) -->
+        <div class="team-picker-steps-row">
+          <div class="picker-step-box active" id="pickerStepA">
+            <span class="step-num">1</span>
+            <div class="step-details">
+              <span class="step-label">الفريق الأول (اليمين):</span>
+              <strong class="step-val" id="selectedTeamANameDisplay">انقر على فريق لتحديده</strong>
+            </div>
+            <i class="fa-solid fa-circle-check step-check hidden" id="stepACheck"></i>
+          </div>
+
+          <div class="picker-vs-symbol">VS</div>
+
+          <div class="picker-step-box" id="pickerStepB">
+            <span class="step-num">2</span>
+            <div class="step-details">
+              <span class="step-label">الفريق الثاني (الخصم):</span>
+              <strong class="step-val" id="selectedTeamBNameDisplay">انقر على فريق لتحديده</strong>
+            </div>
+            <i class="fa-solid fa-circle-check step-check hidden" id="stepBCheck"></i>
+          </div>
+        </div>
+
+        <!-- شبكة بطاقات الفرق للاختيار بثيم دولينجو -->
+        <div class="arena-teams-grid" id="arenaTeamsCardsGrid">
+          <!-- تُملأ ديناميكياً ببطاقات الفرق ثلاثية الأبعاد والشارات الملونة -->
+        </div>
+
+        <!-- أزرار الإجراء للمشرف -->
+        <div class="team-picker-actions">
+          <button type="button" id="btnConfirmTeamSelection" class="btn-duo-green" disabled style="opacity: 0.5; font-size: 18px; padding: 14px 36px; box-shadow: 0 6px 20px rgba(34, 197, 94, 0.4);">
+            <i class="fa-solid fa-play"></i> اعتماد الفريقين وبدء المواجهة والعرض!
+          </button>
+          <button type="button" id="btnResetSelectedTeams" class="btn-duo-outline btn-sm" style="color: #64748b; border-color: #cbd5e1;">
+            <i class="fa-solid fa-rotate-left"></i> إعادة التحديد
+          </button>
+        </div>
+      </div>
+
+      <!-- محتوى الانتظار للمتسابقين والمشاهدين -->
+      <div id="observerTeamPickerBody" class="observer-team-picker-body hidden">
+        <div class="observer-waiting-animation">
+          <div class="waiting-shield-icon">
+            <i class="fa-solid fa-shield-halved"></i>
+          </div>
+        </div>
+        <div class="observer-round-tag" id="observerRoundTag" style="display:inline-block;background:#fef08a;color:#854d0e;border:1.5px solid #facc15;border-radius:20px;padding:4px 14px;font-size:13px;font-weight:900;margin-bottom:8px;">
+          المرحلة الحالية: التصفيات
+        </div>
+        <h3 class="observer-waiting-title">جاري اختيار وتجهيز الفريقين للمواجهة</h3>
+        <p class="observer-waiting-desc" id="observerWaitingDesc">
+          يقوم المشرف العام الآن بتحديد فريقي المواجهة من بين الفرق المشاركة، استعدوا للمواجهة الحماسية وتشجيع أبطالكم!
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- العرض التقديمي السينمائي للفرق (Cinematic Team Entrance Overlay) -->
+  <div id="teamEntranceOverlay" class="team-entrance-overlay hidden">
+    <!-- زر العودة لاختيار الفرق بالأعلى في حال اختيار فريق بالخطأ -->
+    <div class="team-entrance-top-bar" style="position: absolute; top: 18px; right: 24px; z-index: 50;">
+      <button type="button" id="btnEntranceReturnToTeamSelect" class="btn-duo-outline btn-sm" style="background: rgba(15, 23, 42, 0.75); color: #ffffff; border: 2px solid rgba(255, 255, 255, 0.35); backdrop-filter: blur(8px); font-size: 14px; font-weight: 800; padding: 8px 18px; border-radius: 12px; cursor: pointer; transition: all 0.2s ease;">
+        <i class="fa-solid fa-arrow-right"></i> العودة لاختيار الفرق
+      </button>
+    </div>
+
+    <div class="team-entrance-header">
+      <div class="team-entrance-badge">
+        <i class="fa-solid fa-crown"></i>
+        <span>مواجهة الفرق التنافسية الكبرى</span>
+      </div>
+      <h2 class="team-entrance-title">انطلاق تحدي الأبطال</h2>
+    </div>
+
+    <div class="team-entrance-arena">
+      <!-- بطاقة الفريق الأول (اليمين) -->
+      <div id="introCardTeamA" class="team-intro-card team-right">
+        <div class="team-intro-card-header">
+          <div class="team-intro-card-icon" id="introTeamAIcon">
+            <i class="fa-solid fa-shield-halved"></i>
+          </div>
+          <div>
+            <h3 class="team-intro-card-title" id="introTeamAName">الفريق الأول</h3>
+            <span style="font-size:13px;opacity:0.85;" id="introTeamACount">0 أعضاء</span>
+          </div>
+        </div>
+        <div class="team-intro-card-members" id="introTeamAMembers">
+          <!-- قائمة الطلاب مع أنيميشن تسليط الضوء -->
+        </div>
+      </div>
+
+      <!-- دائرة المواجهة VS -->
+      <div class="team-vs-divider">
+        <div class="vs-circle">VS</div>
+        <span style="color:#facc15;font-weight:900;font-size:14px;letter-spacing:1px;">تحدي الفرق</span>
+      </div>
+
+      <!-- بطاقة الفريق الثاني (اليسار) -->
+      <div id="introCardTeamB" class="team-intro-card team-left">
+        <div class="team-intro-card-header">
+          <div class="team-intro-card-icon" id="introTeamBIcon">
+            <i class="fa-solid fa-shield-halved"></i>
+          </div>
+          <div>
+            <h3 class="team-intro-card-title" id="introTeamBName">الفريق الثاني</h3>
+            <span style="font-size:13px;opacity:0.85;" id="introTeamBCount">0 أعضاء</span>
+          </div>
+        </div>
+        <div class="team-intro-card-members" id="introTeamBMembers">
+          <!-- قائمة الطلاب مع أنيميشن تسليط الضوء -->
+        </div>
+      </div>
+    </div>
+
+    <!-- عداد 3 ثواني الدائري التنازلي -->
+    <div id="teamStartCountdownWrapper" class="team-start-countdown-wrapper hidden">
+      <div class="team-countdown-circle" id="teamCountdownSecCircle">3</div>
+      <div class="team-countdown-label">ستبدأ المسابقة الحماسية!</div>
+    </div>
+
+    <!-- زر تحكم المشرف: انطلاق المسابقة -->
+    <div id="teamEntranceControls" style="z-index:20;margin-top:10px;">
+      <button type="button" id="btnLaunchTeamContest" class="btn-duo-yellow" style="font-size:18px;padding:14px 36px;box-shadow:0 8px 30px rgba(250,204,21,0.5);">
+        <i class="fa-solid fa-play"></i> انطلاق المسابقة الآن!
+      </button>
+      <div id="teamEntranceObserverNote" class="hidden" style="color:#cbd5e1;font-size:14px;font-weight:800;display:flex;align-items:center;gap:8px;">
+        <i class="fa-solid fa-hourglass-half fa-spin" style="color:#facc15;"></i> في انتظار إطلاق المشرف للجولة...
+      </div>
+    </div>
+  </div>
+
+  <!-- لافتة إعلان الفقرة الحالية مع زر التالي للمشرف لبدء الفقرة يدوياً (Round Intro Banner Modal) -->
+  <div id="teamRoundBannerOverlay" class="team-round-banner-overlay hidden">
+    <div class="team-round-banner-box">
+      <span class="round-banner-tag" id="teamRoundBannerTag">الفقرة الأولى</span>
+      <h3 class="round-banner-title" id="teamRoundBannerTitle">فقرة رد الفعل</h3>
+      <p class="round-banner-rule" id="teamRoundBannerRule">
+        إذا أجاب فريقك خطأ، تُمنح الفرصة فوراً للفريق الخصم للإجابة وخطف النقاط!
+      </p>
+
+      <!-- زر تحكم المشرف: التالي لبدء الفقرة / إشعار انتظار للطلاب -->
+      <div id="roundBannerActionBox" class="round-banner-action-box" style="margin-top: 24px; display: flex; flex-direction: column; align-items: center; gap: 12px;">
+        <button type="button" id="btnStartTeamRoundNow" class="btn-duo-green" style="font-size: 18px; font-weight: 900; padding: 13px 36px; box-shadow: 0 8px 25px rgba(34, 197, 94, 0.5); cursor: pointer; border-radius: 14px;">
+          <i class="fa-solid fa-play" style="margin-left: 8px;"></i> <span id="btnStartTeamRoundText">التالي: بدء الفقرة الآن</span>
+        </button>
+        <div id="roundBannerWaitingNotice" class="hidden" style="color: #f8fafc; font-size: 15px; font-weight: 800; display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,0.35); padding: 9px 20px; border-radius: 30px; border: 1px solid rgba(255,255,255,0.2);">
+          <i class="fa-solid fa-hourglass-half fa-spin" style="color: #facc15;"></i> في انتظار إشارة المشرف لبدء الفقرة...
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- البطاقة السينمائية التفاعلية ثلاثية الأبعاد (انتقال الدور / إجابة خاطئة) لمدة 3 ثوانٍ بأنيميشن سلس -->
+  <div id="teamCinematicPopupCard" class="team-cinematic-popup-card hidden">
+    <div class="cinematic-popup-wrapper" id="cinematicPopupWrapper">
+      <div class="cinematic-popup-glow" id="cinematicPopupGlow"></div>
+      
+      <div class="cinematic-popup-body" id="cinematicPopupBody">
+        <div class="cinematic-popup-icon-container" id="cinematicPopupIconContainer">
+          <div class="cinematic-popup-icon-ring" id="cinematicPopupIconRing">
+            <i id="cinematicPopupIcon" class="fa-solid fa-bolt-lightning"></i>
+          </div>
+        </div>
+
+        <div class="cinematic-popup-info">
+          <div class="cinematic-popup-badge-row">
+            <span class="cinematic-popup-type-tag" id="cinematicPopupTag">⚡ فرصة رد الفعل!</span>
+            <span class="cinematic-popup-team-pill" id="cinematicPopupTeamPill">
+              <i class="fa-solid fa-shield"></i> <span id="cinematicPopupTeamName">فرسان القرآن</span>
+            </span>
+          </div>
+
+          <div class="cinematic-popup-headline" id="cinematicPopupHeadline">السؤال يتحول الآن إلى البطل:</div>
+          <div class="cinematic-popup-student-name" id="cinematicPopupStudentName">أحمد محمد عبدالله إبراهيم</div>
+          <div class="cinematic-popup-subtext" id="cinematicPopupSubtext">استعد للإجابة وخطف النقاط لفريقك!</div>
+        </div>
+      </div>
+
+      <!-- شريط مؤقت الـ 3 ثواني الانسيابي في أسفل البطاقة -->
+      <div class="cinematic-popup-progress-track">
+        <div class="cinematic-popup-progress-fill" id="cinematicPopupProgressFill"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- البطاقة الدوارة لاختيار الفريق والطالب (Rolling Flipping Card) -->
+  <div id="teamFlippingModalWrapper" class="team-flipping-modal-wrapper hidden">
+    <div id="teamRollingCard" class="team-rolling-card">
+      <!-- مرحلة 1: ظهور الفريق الموجه إليه السؤال أولاً -->
+      <div id="rollingCardPhaseTeam" class="rolling-card-phase-view">
+        <div class="rolling-card-icon-halo">
+          <i id="rollingTeamHeaderIcon" class="fa-solid fa-shield-halved"></i>
+        </div>
+        <div class="rolling-card-subhead">السؤال موجه إلى فريق</div>
+        <div class="rolling-card-main-title" id="rollingCardTeamNameBig">فرسان القرآن</div>
+      </div>
+
+      <!-- مرحلة 2: تلاشي الفريق وظهور روليت اختيار الطالب بالأنيميشن -->
+      <div id="rollingCardPhaseStudent" class="rolling-card-phase-view hidden">
+        <div class="rolling-card-team-badge" id="rollingCardTeamBadge">فرسان القرآن</div>
+        <div class="rolling-card-subhead" id="rollingStudentSubhead">جاري سحب المتسابق...</div>
+        <div class="rolling-roulette-box" id="rollingRouletteBox">
+          <div class="rolling-card-target-student" id="rollingCardTargetStudent">...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- بطاقات الفرق الجانبية المتحركة لعرض النقاط وتكبيرها عند الفوز -->
+  <div id="teamScoreFlyersContainer" class="team-score-flyers-container">
+    <div id="flyerTeamA" class="team-side-flyer flyer-right">
+      <div class="side-flyer-header">
+        <span class="side-flyer-name" id="flyerTeamAName">الفريق الأول</span>
+        <i class="fa-solid fa-shield" style="color:#facc15;"></i>
+      </div>
+      <div class="side-flyer-score" id="flyerTeamAScore">0</div>
+      <div style="font-size:11.5px;opacity:0.85;font-weight:700;">درجة متراكمة</div>
+    </div>
+
+    <div id="flyerTeamB" class="team-side-flyer flyer-left">
+      <div class="side-flyer-header">
+        <span class="side-flyer-name" id="flyerTeamBName">الفريق الثاني</span>
+        <i class="fa-solid fa-shield" style="color:#facc15;"></i>
+      </div>
+      <div class="side-flyer-score" id="flyerTeamBScore">0</div>
+      <div style="font-size:11.5px;opacity:0.85;font-weight:700;">درجة متراكمة</div>
+    </div>
+  </div>
+
+  <!-- إشعار فرصة رد الفعل للفريق الخصم عند الخطأ -->
+  <div id="reboundBannerOverlay" class="rebound-banner-overlay hidden">
+    <div class="rebound-icon-box">
+      <i class="fa-solid fa-bolt-lightning"></i>
+    </div>
+    <div>
+      <div style="font-size:13px;color:#facc15;font-weight:900;">⚡ فرصة رد الفعل التكتيكية!</div>
+      <div style="font-size:15px;font-weight:900;" id="reboundBannerText">السؤال ينتقل الآن إلى الفريق الخصم لخطف النقاط!</div>
+    </div>
+  </div>
+
+  <!-- منصة التتويج النهائي للفرق الفائزة (Grand Finale Podium) -->
+  <div id="teamGrandFinaleOverlay" class="team-grand-finale-overlay hidden">
+    <div class="team-grand-finale-box">
+      <div class="grand-trophy-icon">
+        <i class="fa-solid fa-trophy"></i>
+      </div>
+      <h2 style="font-size:36px;font-weight:900;color:#facc15;margin:0;">مبروك للفريق البطل! 🏆</h2>
+      <p style="font-size:16px;color:#cbd5e1;margin:0;">اكتملت جميع الفقرات الأربع بجدارة وإتقان وتألق كبير</p>
+
+      <div class="winning-team-card" id="winningTeamCardDisplay">
+        <div style="font-size:16px;font-weight:900;color:#facc15;">الفريق الفائز بالمركز الأول:</div>
+        <h3 id="winningTeamName" style="font-size:32px;font-weight:900;margin:0;">--</h3>
+        <div id="winningTeamScore" style="font-size:36px;font-weight:900;color:#facc15;">0 نقطة</div>
+        <div id="winningTeamMembersList" style="font-size:14px;color:#e2e8f0;font-weight:800;margin-top:4px;"></div>
+      </div>
+
+      <div class="mvp-student-card" id="mvpStudentCardDisplay">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="width:48px;height:48px;border-radius:50%;background:#facc15;color:#0f172a;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:900;">
+            <i class="fa-solid fa-star"></i>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:12px;color:#fef08a;font-weight:800;">⭐ نجم المسابقة وهداف البطولة (MVP):</div>
+            <div id="mvpStudentName" style="font-size:18px;font-weight:900;color:#ffffff;">--</div>
+          </div>
+        </div>
+        <div id="mvpStudentScore" style="font-size:20px;font-weight:900;color:#facc15;">0 نقطة</div>
+      </div>
+
+      <!-- جدول الترتيب النهائي للبطولة من المركز الأول للأخير -->
+      <div class="tournament-full-standings-box" id="tournamentFullStandingsBox" style="margin-top:14px;background:rgba(15,23,42,0.6);border:2px solid rgba(250,204,21,0.3);border-radius:16px;padding:14px;max-height:220px;overflow-y:auto;">
+        <h4 style="font-size:16px;font-weight:900;color:#facc15;margin:0 0 10px;display:flex;align-items:center;justify-content:center;gap:8px;">
+          <i class="fa-solid fa-ranking-star"></i> جدول الترتيب النهائي لفرق البطولة
+        </h4>
+        <div class="tournament-standings-grid" id="tournamentStandingsGrid" style="display:flex;flex-direction:column;gap:6px;">
+          <!-- يتم ملؤها ديناميكياً من 1 إلى الأخير -->
+        </div>
+      </div>
+
+      <!-- إشعار إنهاء المسابقة وإغلاق الغرفة للجميع -->
+      <div id="finaleTournamentClosedNotice" class="hidden" style="background: rgba(34, 197, 94, 0.2); border: 2px solid #22c55e; border-radius: 14px; padding: 12px 20px; color: #86efac; font-size: 15px; font-weight: 800; display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%;">
+        <i class="fa-solid fa-circle-check" style="color:#4ade80;font-size:18px;"></i>
+        <span>تم إنهاء المسابقة وإغلاق الغرفة بنجاح وتوثيق النتائج والمراكز في الأرشيف!</span>
+      </div>
+
+      <div class="grand-finale-actions-row" id="grandFinaleActionsRow" style="display:flex;gap:12px;margin-top:16px;justify-content:center;flex-wrap:wrap;width:100%;">
+        <button type="button" id="btnRestartTeamContest" class="btn-duo-yellow" style="font-size:15px;padding:10px 22px;font-weight:800;">
+          <i class="fa-solid fa-rotate-right"></i> أعد البطولة
+        </button>
+        <button type="button" id="btnEndAndSaveTeamContest" class="btn-duo-green" style="font-size:15px;padding:10px 24px;font-weight:800;box-shadow:0 4px 14px rgba(34,197,94,0.4);">
+          <i class="fa-solid fa-floppy-disk"></i> إنهاء وحفظ المسابقة
+        </button>
+        <button type="button" id="btnCloseTeamContest" class="btn-duo-slate" style="font-size:15px;padding:10px 26px;font-weight:900;">
+          <i class="fa-solid fa-house"></i> خروج للمنصة
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- شريط مؤشر المزامنة السحابية اللحظي غير المزعج -->
+  <div id="realtimeSyncPill" class="realtime-sync-pill hidden" aria-live="polite">
+    <i class="fa-solid fa-arrows-rotate fa-spin"></i>
+    <span id="realtimeSyncText">تم استلام تحديث جديد من السحابة وتحديث البيانات فورياً</span>
+  </div>
+
+  <!-- عنصر التوست للإشعارات السريعة (نسخ الرابط المباشر، الحفظ) -->
+  <div id="toastNotification" class="duo-toast hidden">
+    <i class="fa-solid fa-circle-check" id="toastIcon"></i>
+    <span id="toastMessage">تم بنجاح!</span>
+  </div>
+
+  <!-- الفوتر بأسلوب دولينجو -->
+  <footer class="main-footer">
+    <div class="footer-container">
+      <div class="footer-quote">
+        «خَيْرُكُمْ مَنْ تَعَلَّمَ الْقُرْآنَ وَعَلَّمَهُ»
+      </div>
+      <p class="footer-copy">
+        جميع الحقوق محفوظة &copy; مسابقة نور البيان 1448 - 1449 هـ | المشرف العام: <strong>محمد منتصر محمد يونس</strong>
+      </p>
+    </div>
+  </footer>
+
+  <!-- مكتبات وبرمجة النظام -->
+  <script type="module" src="interactive-bg.js"></script>
+  <script type="module" src="app.js"></script>
 </body>
 </html>
