@@ -865,6 +865,89 @@
           </div>
         </div>
 
+        <!-- وضع الانتظار التفاعلي المباشر (Interactive Online Waiting Lobby) -->
+        <div id="arenaInteractiveLobby" class="arena-interactive-lobby-card hidden">
+          <div class="interactive-lobby-banner">
+            <div class="interactive-lobby-badge">
+              <span class="live-pulse-dot"></span>
+              <span>غرفة انتظار المسابقة التفاعلية المباشرة</span>
+            </div>
+            <h2 id="interactiveLobbyRoomTitle">مسابقة نور البيان التفاعلية</h2>
+            <p class="interactive-lobby-subtitle">يتنافس الطلاب معاً عن بُعد عبر أجهزتهم لحظياً، شارك الرابط مع الطلاب للانضمام لغرفة الانتظار الآن!</p>
+
+            <!-- شريط نسخ الرابط ومشاركة كود الغرفة -->
+            <div class="interactive-share-bar">
+              <button type="button" id="btnCopyInteractiveRoomLink" class="btn-copy-interactive-link" title="انقر لنسخ رابط المسابقة ومشاركته مع الطلاب">
+                <i class="fa-solid fa-link"></i>
+                <span>انسخ الرابط لمشاركته مع الطلاب</span>
+                <span class="copy-success-tooltip hidden" id="copySuccessTooltip">تم نسخ الرابط! ✔</span>
+              </button>
+              <div class="interactive-room-code-badge" id="interactiveRoomCodeBadge" title="انقر لنسخ رمز الغرفة">
+                <span>رمز الغرفة:</span>
+                <strong id="interactiveRoomCodeText">#ROOM-0000</strong>
+              </div>
+            </div>
+          </div>
+
+          <!-- شريط إحصائيات الغرفة السريعة -->
+          <div class="interactive-lobby-stats-row">
+            <div class="interactive-stat-card">
+              <i class="fa-solid fa-crown" style="color:#eab308;"></i>
+              <div>
+                <span class="stat-label">مشرف المسابقة:</span>
+                <strong id="interactiveLeaderName">جاري التحديد...</strong>
+              </div>
+            </div>
+            <div class="interactive-stat-card">
+              <i class="fa-solid fa-users" style="color:#3b82f6;"></i>
+              <div>
+                <span class="stat-label">الطلاب المنضمون حالياً:</span>
+                <strong id="interactiveStudentsCountDisplay">0 طلاب</strong>
+              </div>
+            </div>
+            <div class="interactive-stat-card">
+              <i class="fa-solid fa-bolt" style="color:#10b981;"></i>
+              <div>
+                <span class="stat-label">نظام السرعة والبونص:</span>
+                <strong>+5 نقاط عند الحل السريع</strong>
+              </div>
+            </div>
+          </div>
+
+          <!-- شبكة الطلاب على هيئة جدول دوري مبهج ومبتكر -->
+          <div class="interactive-students-section">
+            <div class="interactive-students-header">
+              <h4>
+                <i class="fa-solid fa-graduation-cap" style="color:#8b5cf6;"></i>
+                <span>أبطال المسابقة المتواجدون بالانتظار</span>
+                (<span id="interactiveStudentsListCount">0</span>)
+              </h4>
+              <span class="live-realtime-indicator"><span class="pulse-dot-green"></span> تحديث فوري مباشر بدون تحديث الصفحة</span>
+            </div>
+
+            <!-- شبكة كروت الطلاب التفاعلية (جدول دوري) -->
+            <div id="interactiveStudentsPeriodicGrid" class="interactive-periodic-grid">
+              <!-- تُملأ ديناميكياً ببطاقات الطلاب بأنيميشن ظهور وخروج أنيق -->
+            </div>
+          </div>
+
+          <!-- أدوات إطلاق المسابقة -->
+          <div class="interactive-lobby-footer-actions">
+            <button type="button" id="btnStartInteractiveContest" class="btn-duo-green btn-xl hidden">
+              <i class="fa-solid fa-rocket"></i> ابدأ المسابقة الآن
+            </button>
+            <div id="interactiveWaitingForLeaderBox" class="interactive-waiting-box hidden">
+              <div class="interactive-waiting-spinner">
+                <i class="fa-solid fa-hourglass-half fa-spin"></i>
+              </div>
+              <div>
+                <strong style="font-size:16px;display:block;color:#1e293b;">أهلاً بك يا بطل! أنت الآن في غرفة الانتظار</strong>
+                <span style="font-size:13.5px;color:#64748b;">في انتظار إطلاق المسابقة من قبل المشرف (<strong id="interactiveStudentWaitingLeader" style="color:#2563eb;">المشرف</strong>)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- ═══ المرحلة أ: اختيار المتسابق ═══ -->
         <div id="arenaPhaseStudentSelect" class="arena-phase-card hidden">
           <!-- ما يراه المشرف -->
@@ -1758,8 +1841,36 @@
       </div>
 
       <form id="createRoomForm" class="modal-body-form">
-        <!-- خيار تحديد نمط المسابقة: فردي أم فرق -->
-        <div class="competition-mode-switch-group">
+        <!-- تقسيم نوع الغرفة الرئيسي: حضوري أم تفاعلي -->
+        <div class="room-main-type-tabs" style="display:flex;gap:10px;margin-bottom:16px;">
+          <button type="button" class="room-main-tab-btn active" id="tabTypeInPerson" data-room-type="in_person" style="flex:1;padding:12px 14px;border-radius:14px;border:2.5px solid #22c55e;background:#f0fdf4;color:#15803d;font-weight:900;font-size:14.5px;display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;transition:all 0.2s;">
+            <i class="fa-solid fa-users-viewfinder"></i>
+            <span>حضوري (المسرح الحي)</span>
+          </button>
+          <button type="button" class="room-main-tab-btn" id="tabTypeInteractive" data-room-type="interactive" style="flex:1;padding:12px 14px;border-radius:14px;border:2px solid #cbd5e1;background:#f8fafc;color:#64748b;font-weight:900;font-size:14.5px;display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;transition:all 0.2s;">
+            <i class="fa-solid fa-network-wired"></i>
+            <span>تفاعلي (أونلاين مباشر)</span>
+          </button>
+        </div>
+
+        <!-- لافتة التوضيح للغرفة التفاعلية -->
+        <div id="interactiveModeNoticeBanner" class="interactive-notice-banner hidden" style="margin-bottom:14px;padding:14px 16px;background:linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);border:2px solid #c4b5fd;border-radius:14px;color:#5b21b6;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+            <div style="width:36px;height:36px;border-radius:10px;background:#7c3aed;color:#fff;display:flex;align-items:center;justify-content:center;font-size:18px;">
+              <i class="fa-solid fa-bolt"></i>
+            </div>
+            <div>
+              <strong style="font-size:15px;display:block;color:#4c1d95;">نمط فردي تفاعلي مباشر للطلاب (أونلاين)</strong>
+              <span style="font-size:12.5px;color:#6d28d9;font-weight:700;">يتسابق الطلاب معاً عن بُعد عبر أجهزتهم برابط مباشر في نفس اللحظة!</span>
+            </div>
+          </div>
+          <p style="font-size:12.5px;margin:0;line-height:1.6;color:#5b21b6;font-weight:600;">
+            ✨ الإعدادات سهلة ومباشرة: اكتب اسم المسابقة واختر الاختبار واضغط دخول. ستفتح لك غرفة انتظار أنيقة برابط لمشاركته مع طلابك، مع تحدي سرعة وبونص 5 نقاط ولوحة صدارة تتحدث لحظياً بدون تحديث الصفحة!
+          </p>
+        </div>
+
+        <!-- خيار تحديد نمط المسابقة الحضورية: فردي أم فرق -->
+        <div id="inPersonModeSwitchGroup" class="competition-mode-switch-group">
           <label class="competition-mode-card active" id="modeCardIndividual" data-comp-mode="individual">
             <input type="radio" name="competitionMode" value="individual" checked>
             <div class="mode-card-content">
@@ -1776,7 +1887,7 @@
               <i class="fa-solid fa-users-rays"></i>
               <div>
                 <strong>نمط الفرق التنافسي</strong>
-                <span>مواجهة بين فريقين، 4 فقرات وتتويج جماعي</span>
+                <span>مواجهة بين فريقين، 3 فقرات وتتويج جماعي</span>
               </div>
             </div>
           </label>
@@ -2320,6 +2431,88 @@
 
       <div class="practice-body" id="practiceRunnerContent">
         <!-- محتوى الأسئلة التفاعلية -->
+      </div>
+    </div>
+  </div>
+
+  <!-- مودال انضمام الطالب للمسابقة التفاعلية (طلب الاسم الثلاثي) -->
+  <div id="interactiveJoinNameModal" class="modal-overlay hidden" style="z-index: 10025;">
+    <div class="duo-modal-box" style="max-width: 480px; text-align: center; border: 3px solid #7c3aed; box-shadow: 0 15px 40px rgba(124, 58, 237, 0.25);">
+      <div style="width: 72px; height: 72px; border-radius: 50%; background: linear-gradient(135deg, #7c3aed 0%, #4c1d95 100%); color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 32px; margin: 0 auto 14px; box-shadow: 0 6px 18px rgba(124, 58, 237, 0.35);">
+        <i class="fa-solid fa-bolt"></i>
+      </div>
+      <h3 style="font-size: 22px; font-weight: 900; color: #1e293b; margin: 0 0 8px;">الانضمام للمسابقة التفاعلية</h3>
+      <p style="font-size: 14px; color: #64748b; font-weight: 700; margin-bottom: 20px; line-height: 1.6;">
+        مرحباً بك في مسابقة نور البيان التفاعلية المباشرة! اكتب اسمك الثلاثي للانضمام إلى غرفة الانتظار والمنافسة مع زملائك:
+      </p>
+      <form id="interactiveJoinNameForm">
+        <div class="input-group" style="text-align: right; margin-bottom: 16px;">
+          <label class="input-label" style="font-weight: 800; color: #334155;">الاسم الثلاثي للطالب <span class="required-star">*</span></label>
+          <input type="text" id="interactiveStudentTripleNameInput" class="form-control" placeholder="مثال: أحمد محمد علي" required style="font-size: 16px; font-weight: 800; text-align: center; height: 48px; border-radius: 14px;">
+        </div>
+        <button type="submit" id="btnSubmitInteractiveJoin" class="btn-duo-green" style="width: 100%; padding: 13px; font-size: 16px; font-weight: 900; border-radius: 14px; box-shadow: 0 5px 16px rgba(34, 197, 94, 0.35);">
+          <i class="fa-solid fa-arrow-right-to-bracket"></i> دخول غرفة الانتظار الآن
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- غطاء العد التنازلي المتزامن للبدء (Synchronized 3-2-1 Countdown) -->
+  <div id="interactiveCountdownOverlay" class="interactive-countdown-overlay hidden" style="z-index: 10030;">
+    <div class="interactive-countdown-center-card">
+      <div class="countdown-bounce-bubble" id="interactiveCountdownBubble">
+        <span id="interactiveCountdownNumber">3</span>
+      </div>
+      <div class="countdown-announce-title" id="interactiveCountdownLabel">استعدوا للمنافسة...</div>
+      <p class="countdown-announce-sub" id="interactiveCountdownSub">سيبدأ التحدي المتزامن لجميع المتسابقين الآن!</p>
+    </div>
+  </div>
+
+  <!-- مودال لوحة الصدارة والشرف التفاعلية المتزامنة بعد كل سؤال -->
+  <div id="interactiveLeaderboardModal" class="modal-overlay hidden" style="z-index: 10022;">
+    <div class="duo-modal-box interactive-leaderboard-box" style="max-width: 680px; max-height: 90vh; display: flex; flex-direction: column;">
+      <div class="modal-header" style="background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%); color: #ffffff; border-radius: 20px 20px 0 0; padding: 16px 20px; border-bottom: 3px solid #5b21b6;">
+        <div class="modal-title-with-icon">
+          <div style="width: 44px; height: 44px; border-radius: 12px; background: rgba(255,255,255,0.2); display: flex; align-items: center; justify-content: center; font-size: 22px; color: #facc15;">
+            <i class="fa-solid fa-trophy"></i>
+          </div>
+          <div>
+            <h3 style="color:#ffffff; margin:0; font-size: 19px;">لَوْحَةُ الصَّدَارَةِ وَالشَّرَفِ التَّفَاعُلِيَّة</h3>
+            <span id="interactiveLeaderboardSubtitle" style="color: #ede9fe; font-size: 12.5px; font-weight: 700;">ترتيب المتسابقين وتحديث المراكز اللحظي</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-body-content" style="flex: 1; overflow-y: auto; padding: 16px;">
+        <!-- بنر الصعود البطولي للمركز الجديد أمام عين الطالب -->
+        <div id="interactiveRankClimbBanner" class="interactive-rank-climb-card hidden">
+          <div class="climb-icon-wrap">
+            <i class="fa-solid fa-rocket"></i>
+          </div>
+          <div>
+            <h4 id="climbBannerTitle">ما شاء الله! صعدت للمركز الأول 🏆</h4>
+            <p id="climbBannerSub">أحسنت صنعاً! تقدمت بمقدار مركزين بفضل سرعتك ودقتك</p>
+          </div>
+          <div class="climb-badge-pill" id="climbBadgePill">+2 مراكز</div>
+        </div>
+
+        <!-- منصة الترتيب المباشرة لجميع الطلاب -->
+        <div class="interactive-leaderboard-table-header" style="display: flex; justify-content: space-between; align-items: center; padding: 6px 12px; font-size: 12.5px; font-weight: 800; color: #64748b;">
+          <span>المتسابق والمركز</span>
+          <span>النقاط وسرعة الإجابة</span>
+        </div>
+        <div id="interactiveLeaderboardRowsList" class="interactive-leaderboard-rows-list">
+          <!-- تُبنى ديناميكياً بصفوف صعود ونزول ناعمة -->
+        </div>
+      </div>
+
+      <div class="modal-actions-flex" style="padding: 14px 20px; border-top: 2px solid #e2e8f0; background: #f8fafc; justify-content: space-between; align-items: center;">
+        <span id="interactiveNextTimerHint" style="font-size: 13px; font-weight: 700; color: #64748b;">
+          <i class="fa-solid fa-clock"></i> استعد للسؤال القادم...
+        </span>
+        <button type="button" id="btnInteractiveNextQuestion" class="btn-duo-yellow" style="font-size: 15px; font-weight: 900; padding: 10px 24px; border-radius: 14px;">
+          <span>السؤال التالي</span> <i class="fa-solid fa-forward-step" style="margin-right: 6px;"></i>
+        </button>
       </div>
     </div>
   </div>
