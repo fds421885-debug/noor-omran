@@ -13625,23 +13625,23 @@ function ensureTeamQuestionsPopulated(room) {
       });
     }
 
-    // ضمان وجود 4 أسئلة على الأقل لتغطية الفقرات الأربع بالتساوي دون انقطاع
-    if (allQ.length > 0 && allQ.length < 4) {
+    // ضمان وجود 3 أسئلة على الأقل لتغطية الفقرات الثلاث بالتساوي دون انقطاع
+    if (allQ.length > 0 && allQ.length < 3) {
       const origQ = [...allQ];
-      while (allQ.length < 4) {
-        allQ.push(...origQ.slice(0, 4 - allQ.length));
+      while (allQ.length < 3) {
+        allQ.push(...origQ.slice(0, 3 - allQ.length));
       }
     }
 
     allQ = allQ.sort(() => Math.random() - 0.5);
 
     const totalQ = allQ.length;
-    const baseCount = Math.floor(totalQ / 4);
-    const remainder = totalQ % 4;
+    const baseCount = Math.floor(totalQ / 3);
+    const remainder = totalQ % 3;
 
     const roundConfig = {};
     let currentStart = 0;
-    for (let r = 1; r <= 4; r++) {
+    for (let r = 1; r <= 3; r++) {
       const count = Math.max(1, baseCount + (r <= remainder ? 1 : 0));
       roundConfig[r] = {
         start: currentStart,
@@ -13871,7 +13871,7 @@ async function executeTeamContestLaunch() {
 }
 
 // --------------------------------------------------------
-// محرك الفقرات الأربع الحماسية (The 4 Rounds Engine)
+// محرك الفقرات الثلاث الحماسية (The 3 Rounds Engine)
 // --------------------------------------------------------
 const TEAM_ROUNDS_CONFIG = {
   1: {
@@ -13888,15 +13888,9 @@ const TEAM_ROUNDS_CONFIG = {
   },
   3: {
     name: "فقرة تحت الضغط",
-    tag: "الفقرة الثالثة",
-    rule: "بطل من كل فريق في تحدي أسئلة سريعة ومكثفة (7 ثوانٍ) ونقاط إضافية وبونص 10 درجات للفائز!",
+    tag: "الفقرة الثالثة والختامية",
+    rule: "بطل من كل فريق في تحدي أسئلة سريعة ومكثفة (7 ثوانٍ) ونقاط إضافية وبونص حاسم للفريق الفائز!",
     icon: "fa-fire-flame-curved"
-  },
-  4: {
-    name: "فقرة واحد لواحد",
-    tag: "الفقرة الرابعة",
-    rule: "مواجهات مباشرة بالرأس للرأس وأسرع إجابة تحصد درجات وبونص 25 نقطة كبرى للفريق الفائز!",
-    icon: "fa-swords"
   }
 };
 
@@ -14697,9 +14691,9 @@ function getTeamRoundQuestionCount(roundNum, room) {
     return cfg.count;
   }
   const totalQ = room?.roundQuestions?.length || 0;
-  if (totalQ >= 4) {
-    const base = Math.floor(totalQ / 4);
-    const rem = totalQ % 4;
+  if (totalQ >= 3) {
+    const base = Math.floor(totalQ / 3);
+    const rem = totalQ % 3;
     return Math.max(1, base + (roundNum <= rem ? 1 : 0));
   }
   return 1;
@@ -14712,10 +14706,10 @@ function getTeamQuestionGlobalIndex(roundNum, qIndexInRound, room) {
     return cfg.start + qIndexInRound;
   }
   const totalQ = room?.roundQuestions?.length || 0;
-  if (totalQ >= 4) {
+  if (totalQ >= 3) {
     let offset = 0;
-    const base = Math.floor(totalQ / 4);
-    const rem = totalQ % 4;
+    const base = Math.floor(totalQ / 3);
+    const rem = totalQ % 3;
     for (let r = 1; r < roundNum; r++) {
       offset += base + (r <= rem ? 1 : 0);
     }
@@ -14753,10 +14747,18 @@ function executeNextTeamQuestion(qIndex) {
 
   const isSup = currentUser && (currentUser.role === "supervisor" || isSupervisor(currentUser.name) || currentUser.name === currentLiveRoom?.leaderName);
 
+  // إخفاء وإلغاء أي سحب دوار حالي أو معلق لمنع أي ظهور غير مرغوب
+  isTeamRollingCardActive = false;
+  document.getElementById("teamFlippingModalWrapper")?.classList.add("hidden");
+
   // فحص الانتقال للفقرة التالية وفق عدد أسئلة الفقرة الموزعة
   const countInThisRound = getTeamRoundQuestionCount(currentActiveTeamRound, currentLiveRoom);
   if (qIndex >= countInThisRound) {
-    if (currentActiveTeamRound < 4) {
+    if (currentLiveRoom) {
+      currentLiveRoom.teamActiveSolver = null;
+    }
+
+    if (currentActiveTeamRound < 3) {
       const nextRound = currentActiveTeamRound + 1;
       currentActiveTeamRound = nextRound;
       if (isSup) {
@@ -14769,7 +14771,7 @@ function executeNextTeamQuestion(qIndex) {
       }
       launchTeamRound(nextRound);
     } else {
-      // انتهت الفقرات الأربع للمواجهة بين الفريقين! معالجة نتيجة المواجهة وشجرة البطولة
+      // انتهت الفقرات الثلاث للمواجهة بين الفريقين! معالجة نتيجة المواجهة وشجرة البطولة
       if (isSup) {
         handleTournamentMatchFinished();
       } else {
@@ -15127,13 +15129,26 @@ async function handleTeamQuestionResult(isCorrect, choiceIdx, earnedPoints) {
   const solverName = currentActiveTeamSolver.studentName;
   const isLead = currentUser && (currentUser.role === "supervisor" || isSupervisor(currentUser.name) || currentUser.name === currentLiveRoom.leaderName);
 
-  // تحديث درجات الفريقين محلياً
+  // تحديث درجات الفريقين واللاعبين محلياً
   currentLiveRoom.teamScores = currentLiveRoom.teamScores || {};
   currentLiveRoom.teamPlayerScores = currentLiveRoom.teamPlayerScores || {};
+  currentLiveRoom.teamPlayerStats = currentLiveRoom.teamPlayerStats || {};
+
+  if (!currentLiveRoom.teamPlayerStats[solverName]) {
+    currentLiveRoom.teamPlayerStats[solverName] = {
+      name: solverName,
+      score: 0,
+      correctCount: 0,
+      teamName: activeTeam.name,
+      teamId: activeTeam.id
+    };
+  }
 
   if (isCorrect) {
     currentLiveRoom.teamScores[activeTeam.id] = (currentLiveRoom.teamScores[activeTeam.id] || 0) + earnedPoints;
     currentLiveRoom.teamPlayerScores[solverName] = (currentLiveRoom.teamPlayerScores[solverName] || 0) + earnedPoints;
+    currentLiveRoom.teamPlayerStats[solverName].score += earnedPoints;
+    currentLiveRoom.teamPlayerStats[solverName].correctCount += 1;
   } else if (currentRound === 2) {
     // فقرة احذر: خصم كامل النقاط من رصيد الفريق
     const curScore = currentLiveRoom.teamScores[activeTeam.id] || 0;
@@ -15252,7 +15267,27 @@ async function handleTeamQuestionResult(isCorrect, choiceIdx, earnedPoints) {
     showToast("❌ لم يتم احتساب نقاط لهذا السؤال — استعدوا للسؤال القادم!", "fa-circle-xmark", 2200);
   }
 
-  // إذا كان المجيب هو المشرف / قائد الغرفة، يقود الانتقال للسؤال التالي (3.2 ثانية عند الخطأ لإتاحة اكتمال البطاقة، و 1.8 ثانية عند الصواب)
+  // فحص هل هذا هو السؤال الأخير في هذه الفقرة
+  const countInCurrentRound = getTeamRoundQuestionCount(currentRound, currentLiveRoom);
+  const isLastQuestionOfThisRound = (currentActiveTeamSolver.qIndex + 1 >= countInCurrentRound);
+
+  if (isLastQuestionOfThisRound) {
+    // إخفاء وإلغاء أي سحب دوار حالي تماماً لمنع ظهور قرعة لطلاب بدون وجود أسئلة في الفقرة
+    isTeamRollingCardActive = false;
+    document.getElementById("teamFlippingModalWrapper")?.classList.add("hidden");
+    if (currentLiveRoom) {
+      currentLiveRoom.teamActiveSolver = null;
+    }
+
+    if (currentRound < 3) {
+      const nextCfg = TEAM_ROUNDS_CONFIG[currentRound + 1];
+      showToast(`🏁 انتهت أسئلة ${TEAM_ROUNDS_CONFIG[currentRound]?.name || 'هذه الفقرة'}! الانتقال إلى ${nextCfg?.name || 'الفقرة التالية'}...`, "fa-flag-checkered", 2600);
+    } else {
+      showToast("🏁 اكتملت جميع فقرات المواجهة الثلاث! جاري تتويج الفائز وتحديث شجرة البطولة...", "fa-trophy", 2600);
+    }
+  }
+
+  // إذا كان المجيب هو المشرف / قائد الغرفة، يقود الانتقال للفقرة التالية أو السؤال التالي
   if (isLead) {
     const nextDelay = !isCorrect ? 3200 : 1800;
     setTimeout(() => {
@@ -15469,6 +15504,56 @@ async function handleTournamentMatchFinished() {
 }
 
 // --------------------------------------------------------
+// حساب هداف البطولة ونجم المسابقة (MVP) بدقة واحترافية
+// --------------------------------------------------------
+function calculateTournamentMvp(room) {
+  if (!room) return { name: "--", score: 0, correctCount: 0, teamName: "" };
+  if (room.mvpStudent && room.mvpStudent.name && room.mvpStudent.name !== "--") {
+    return room.mvpStudent;
+  }
+
+  const pScores = room.teamPlayerScores || {};
+  const pStats = room.teamPlayerStats || {};
+
+  let bestName = "--";
+  let maxScore = -1;
+  let maxCorrect = 0;
+  let teamName = "";
+
+  const allNames = new Set([...Object.keys(pScores), ...Object.keys(pStats)]);
+
+  allNames.forEach(name => {
+    const score = pStats[name]?.score ?? pScores[name] ?? 0;
+    const correct = pStats[name]?.correctCount ?? 0;
+    const tName = pStats[name]?.teamName ?? "";
+
+    if (score > maxScore || (score === maxScore && correct > maxCorrect)) {
+      maxScore = score;
+      maxCorrect = correct;
+      bestName = name;
+      teamName = tName;
+    }
+  });
+
+  if (bestName === "--" || maxScore <= 0) {
+    const winningTeam = room.championTeam || room.tournamentState?.championTeam || room.teams?.[0] || room.teamA;
+    if (winningTeam && Array.isArray(winningTeam.members) && winningTeam.members.length > 0) {
+      bestName = winningTeam.members[0].name || winningTeam.members[0];
+      const winTeamScore = room.teamScores?.[winningTeam.id] || 0;
+      maxScore = Math.max(0, Math.round(winTeamScore / (winningTeam.members.length || 1)));
+      teamName = winningTeam.name;
+    }
+  }
+
+  return {
+    name: bestName,
+    score: Math.max(0, maxScore),
+    correctCount: maxCorrect,
+    teamName: teamName
+  };
+}
+
+// --------------------------------------------------------
 // منصة التتويج النهائي للفرق الفائزة (Grand Finale Podium)
 // --------------------------------------------------------
 function showTeamGrandFinaleModal(roomOverride = null) {
@@ -15503,25 +15588,15 @@ function showTeamGrandFinaleModal(roomOverride = null) {
   const runnerUpTeam = room.runnerUpTeam || tState.runnerUpTeam || (scoreA >= scoreB ? teamB : teamA);
   const winningScore = Math.max(scoreA, scoreB);
 
-  // حساب أفضل طالب (MVP) من الفرق
-  let mvpName = "--";
-  let maxPScore = 0;
-  if (room.mvpStudent && room.mvpStudent.name) {
-    mvpName = room.mvpStudent.name;
-    maxPScore = room.mvpStudent.score || 0;
-  } else {
-    const pScores = room.teamPlayerScores || {};
-    Object.keys(pScores).forEach(name => {
-      if (pScores[name] > maxPScore) {
-        maxPScore = pScores[name];
-        mvpName = name;
-      }
-    });
+  // حساب أفضل طالب (MVP) وهداف البطولة بدقة تامة
+  const mvp = calculateTournamentMvp(room);
+  let mvpName = mvp.name;
+  let maxPScore = mvp.score;
 
-    if (mvpName === "--" && winningTeam.members?.length > 0) {
-      mvpName = winningTeam.members[0].name;
-      maxPScore = Math.round(winningScore / 2);
-    }
+  // توثيق هداف البطولة على كائن الغرفة لمطابقة البيانات
+  room.mvpStudent = mvp;
+  if (currentLiveRoom && currentLiveRoom.id === room.id) {
+    currentLiveRoom.mvpStudent = mvp;
   }
 
   const wNameEl = document.getElementById("winningTeamName");
@@ -15534,7 +15609,11 @@ function showTeamGrandFinaleModal(roomOverride = null) {
   const mvpNameEl = document.getElementById("mvpStudentName");
   const mvpScoreEl = document.getElementById("mvpStudentScore");
   if (mvpNameEl) mvpNameEl.textContent = mvpName;
-  if (mvpScoreEl) mvpScoreEl.textContent = `${maxPScore} نقطة مسجلة`;
+  if (mvpScoreEl) {
+    const correctText = mvp.correctCount > 0 ? ` (${mvp.correctCount} إجابات صحيحة)` : '';
+    const teamText = mvp.teamName ? ` • فريق ${mvp.teamName}` : '';
+    mvpScoreEl.textContent = `${maxPScore} نقطة مسجلة${correctText}${teamText}`;
+  }
 
   // ملء جدول الترتيب النهائي للبطولة من المركز الأول للأخير
   const standingsGrid = document.getElementById("tournamentStandingsGrid");
@@ -15621,12 +15700,13 @@ function showTeamGrandFinaleModal(roomOverride = null) {
   try { soundFX.celebrate(); } catch (e) {}
 }
 
-// إنهاء وحفظ البطولة في أرشيف المسابقات السابقة وإغلاق الغرفة للجميع
+// إنهاء وحفظ البطولة في أرشيف المسابقات السابقة وإغلاق وحذف الغرفة نهائياً للجميع
 async function saveCurrentTournamentToArchive() {
   if (!currentLiveRoom) return;
-  showGlobalLoader("جاري حفظ وتوثيق البطولة وإغلاق الغرفة...", "يتم حفظ نتائج المسابقة والمراكز في أرشيف المسابقات السابقة سحابياً وإغلاق الغرفة لجميع المشاركين");
+  showGlobalLoader("جاري توثيق البطولة وإغلاق الغرفة وحذفها...", "يتم حفظ نتائج المسابقة والمراكز في أرشيف المسابقات السابقة وحذف الغرفة نهائياً لجميع المشاركين");
 
   try {
+    const roomId = currentLiveRoom.id;
     const tState = currentLiveRoom.tournamentState || {};
     const teamA = currentLiveRoom.teams?.[0] || currentLiveRoom.teamA || { id: "a", name: "الفريق الأول" };
     const teamB = currentLiveRoom.teams?.[1] || currentLiveRoom.teamB || { id: "b", name: "الفريق الثاني" };
@@ -15635,19 +15715,8 @@ async function saveCurrentTournamentToArchive() {
     const winningTeam = tState.championTeam || (scoreA >= scoreB ? teamA : teamB);
     const runnerUpTeam = tState.runnerUpTeam || (scoreA >= scoreB ? teamB : teamA);
 
-    let mvpName = "--";
-    let maxPScore = 0;
-    const pScores = currentLiveRoom.teamPlayerScores || {};
-    Object.keys(pScores).forEach(name => {
-      if (pScores[name] > maxPScore) {
-        maxPScore = pScores[name];
-        mvpName = name;
-      }
-    });
-    if (mvpName === "--" && winningTeam.members?.length > 0) {
-      mvpName = winningTeam.members[0].name;
-      maxPScore = Math.round(Math.max(scoreA, scoreB) / 2);
-    }
+    // حساب هداف البطولة بدقة واحترافية
+    const mvp = calculateTournamentMvp(currentLiveRoom);
 
     const archiveId = "tourn_" + Date.now();
     const fullStandings = tState.fullStandings || [
@@ -15657,7 +15726,7 @@ async function saveCurrentTournamentToArchive() {
 
     const tournamentArchiveDoc = {
       id: archiveId,
-      roomId: currentLiveRoom.id,
+      roomId: roomId,
       title: currentLiveRoom.name,
       championTeam: winningTeam,
       runnerUpTeam: runnerUpTeam,
@@ -15668,7 +15737,7 @@ async function saveCurrentTournamentToArchive() {
       supervisorName: currentLiveRoom.leaderName || currentLiveRoom.creatorName || MASTER_SUPERVISOR_NAME,
       completedAt: new Date().toISOString(),
       formattedDate: new Date().toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' }),
-      mvpStudent: { name: mvpName, score: maxPScore },
+      mvpStudent: mvp,
       createdAt: serverTimestamp()
     };
 
@@ -15679,40 +15748,43 @@ async function saveCurrentTournamentToArchive() {
     pastTournamentsCache.unshift(tournamentArchiveDoc);
     localStorage.setItem("nour_past_tournaments", JSON.stringify(pastTournamentsCache));
 
-    // إغلاق الغرفة سحابياً في Firestore وتحديث حالتها بالكامل لجميع المشاركين المتصلين
-    const closedUpdate = {
-      isFinished: true,
-      isClosed: true,
-      status: "closed",
-      phase: "team_finale",
-      savedToArchive: true,
-      tournamentEnded: true,
-      tournamentEndedAt: new Date().toISOString(),
-      championTeam: winningTeam,
-      runnerUpTeam: runnerUpTeam,
-      finalStandings: fullStandings,
-      mvpStudent: { name: mvpName, score: maxPScore },
-      lastUpdated: serverTimestamp()
-    };
-
+    // حذف الغرفة نهائياً من Firestore لإغلاقها أمام الجميع وحذفها تماماً
     try {
-      await updateDoc(doc(db, "live_rooms", currentLiveRoom.id), closedUpdate);
+      await deleteDoc(doc(db, "live_rooms", roomId));
     } catch (e) {
-      console.warn("Update live_rooms closed state notice:", e);
+      console.warn("Delete live_rooms closed state notice:", e);
     }
 
-    // تطبيق الحالة المغلقة على الغرفة الحالية محلياً
-    Object.assign(currentLiveRoom, closedUpdate);
+    activeRooms = activeRooms.filter(r => r.id !== roomId);
+    localStorage.setItem("nour_rooms", JSON.stringify(activeRooms));
+    localStorage.removeItem("nour_live_rooms");
+    localStorage.removeItem("nour_saved_room_id");
 
-    // إظهار منصة التتويج والترتيب لجميع المشاركين مع زر الرجوع فقط
-    showTeamGrandFinaleModal(currentLiveRoom);
+    if (currentRoomUnsubscribe) {
+      try { currentRoomUnsubscribe(); } catch (e) {}
+      currentRoomUnsubscribe = null;
+    }
 
-    showToast("🏆 تم إنهاء المسابقة وتوثيق البطولة في الأرشيف وإغلاق الغرفة للجميع!", "fa-trophy", 4000);
+    clearInterval(liveTimerInterval);
+    clearInterval(cardsTimerInterval);
+    stopOfflineCountdown();
+
+    currentLiveRoom = null;
+    currentContestant = null;
+
+    document.getElementById("teamGrandFinaleOverlay")?.classList.add("hidden");
+
+    showToast("🏆 تم توثيق البطولة في الأرشيف وحذف وإغلاق غرفة المسابقة للجميع بنجاح!", "fa-circle-check", 4000);
+
+    // توجيه المشرف لتبويب الأرشيف وتحديث القوائم
+    showView("supervisor");
     renderPastTournamentsTab();
+    const tabPast = document.querySelector(".nav-tab[data-tab='tabPastTournaments']");
+    if (tabPast) tabPast.click();
     renderLiveRoomsList();
   } catch (err) {
     console.error("Error saving tournament archive:", err);
-    showToast("تعذر حفظ البطولة سحابياً: " + (err.message || "خطأ غير متوقع"), "fa-triangle-exclamation");
+    showToast("تعذر توثيق البطولة وإغلاق الغرفة: " + (err.message || "خطأ غير متوقع"), "fa-triangle-exclamation");
   } finally {
     hideGlobalLoader();
   }
@@ -15927,6 +15999,7 @@ async function deletePastTournament(id) {
     "حذف مسابقة من الأرشيف",
     "هل أنت متأكد من حذف هذه المسابقة وسجل تتويجها نهائياً من الأرشيف السحابي؟",
     async () => {
+      showGlobalLoader("جاري حذف المسابقة من الأرشيف...", "يتم إزالة بيانات المسابقة وسجلها نهائياً من قاعدة البيانات السحابية");
       try {
         await deleteDoc(doc(db, "tournament_archives", id));
         pastTournamentsCache = pastTournamentsCache.filter(t => t.id !== id);
@@ -15936,11 +16009,15 @@ async function deletePastTournament(id) {
       } catch (err) {
         console.error("Error deleting past tournament:", err);
         showToast("تعذر حذف المسابقة من السحابة: " + (err.message || "خطأ غير متوقع"), "fa-triangle-exclamation");
+      } finally {
+        hideGlobalLoader();
       }
     },
     null,
     "نعم، حذف نهائي",
-    "إلغاء"
+    "إلغاء",
+    "danger",
+    "fa-trash-can"
   );
 }
 
@@ -16036,15 +16113,15 @@ document.getElementById("btnEndAndSaveTeamContest")?.addEventListener("click", (
   }
 
   showConfirmDialog(
-    "إنهاء وحفظ المسابقة وإغلاق الغرفة",
-    "هل تريد إنهاء المسابقة وإغلاق الغرفة للجميع، وتوثيق النتائج وجدول المراكز في قسم «مسابقات سابقة»؟ سيظهر الترتيب النهائي للجميع مع زر الرجوع للصفحة الرئيسية.",
+    "إنهاء وتوثيق البطولة وإغلاق وحذف الغرفة",
+    "هل تريد توثيق نتائج البطولة وجدول المراكز في «مسابقات سابقة»، وإغلاق الغرفة وحذفها نهائياً لجميع المشاركين؟",
     async () => {
       await saveCurrentTournamentToArchive();
     },
     null,
-    "نعم، إنهاء وحفظ وإغلاق الغرفة",
+    "نعم، توثيق وحذف وإغلاق الغرفة",
     "تراجع",
-    "warning",
+    "danger",
     "fa-box-archive"
   );
 });
@@ -16180,8 +16257,14 @@ function syncTeamStageRealtime(room) {
 
   // مزامنة فورية ومطابقة تامة لاختيار السؤال والمتسابق الذي يظهر عند المشرف ليعرض عند الجميع فوراً
   if (room.teamActiveSolver && room.teamActiveSolver.startedAt && room.teamActiveSolver.startedAt !== window.lastHandledTeamSolverStartedAt) {
+    const activeRoundNum = room.teamActiveSolver.roundNum || currentActiveTeamRound;
+    const countInActiveRound = getTeamRoundQuestionCount(activeRoundNum, room);
+    if (typeof room.teamActiveSolver.qIndex === "number" && room.teamActiveSolver.qIndex >= countInActiveRound) {
+      // تجاوز أسئلة الفقرة: لا تقم بالسحب إطلاقاً
+      return;
+    }
     window.lastHandledTeamSolverStartedAt = room.teamActiveSolver.startedAt;
-    currentActiveTeamRound = room.teamActiveSolver.roundNum || currentActiveTeamRound;
+    currentActiveTeamRound = activeRoundNum;
     const targetTeam = room.teams?.find(t => t.id === room.teamActiveSolver.teamId) || room.teams?.[0] || { name: room.teamActiveSolver.teamName, color: room.teamActiveSolver.teamColor || "blue" };
     const oppTeam = room.teams?.find(t => t.id !== targetTeam.id) || room.teams?.[1];
 
