@@ -151,6 +151,7 @@ export interface LiveRoom {
   currentStudentIdxInTeam?: Record<string, number>;
   tournamentRound?: number;
   totalRounds?: number;
+  teamRoundStarted?: boolean;
   lastAnswerEvent?: any;
   lastLeaderNote?: string;
 }

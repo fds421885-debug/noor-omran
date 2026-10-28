@@ -697,6 +697,60 @@ function showConfirmDialog(title, message, onConfirm, onCancel = null, confirmTe
 window.showConfirmDialog = showConfirmDialog;
 
 // --------------------------------------------------------
+// تنظيف وإعادة ضبط ألوان وثيمات المسابقة والهالة البنفسجية عند مغادرة مسرح المسابقة
+function cleanupCompetitionThemeAndAura() {
+  if (window.stopInteractiveBackground) {
+    try { window.stopInteractiveBackground(); } catch (e) {}
+  }
+  document.body.classList.remove(
+    "interactive-theme-purple",
+    "interactive-theme-orange",
+    "interactive-theme-green",
+    "theme-purple",
+    "theme-orange",
+    "theme-green",
+    "is-interactive-mode"
+  );
+  document.body.style.removeProperty("background");
+  document.body.style.removeProperty("color");
+
+  const mainContent = document.querySelector(".main-content");
+  if (mainContent) {
+    mainContent.style.removeProperty("background");
+    mainContent.style.removeProperty("color");
+  }
+
+  const arenaSection = document.getElementById("liveArenaSection");
+  if (arenaSection) {
+    arenaSection.classList.remove(
+      "interactive-theme-purple",
+      "interactive-theme-orange",
+      "interactive-theme-green",
+      "theme-purple",
+      "theme-orange",
+      "theme-green",
+      "is-interactive-mode"
+    );
+    arenaSection.style.removeProperty("background");
+    arenaSection.style.removeProperty("color");
+  }
+
+  document.querySelectorAll(".card-purple-aura").forEach(el => {
+    el.classList.remove("card-purple-aura");
+  });
+
+  const questionCard = document.getElementById("stageQuestionCardMain");
+  if (questionCard) {
+    questionCard.classList.remove("theme-purple", "theme-orange", "theme-green", "card-purple-aura");
+  }
+
+  const canvas = document.getElementById("islamicInteractiveCanvas");
+  if (canvas) {
+    const ctx = canvas.getContext("2d");
+    if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+}
+
 // إدارة التنقل بين الشاشات والتبويبات
 // --------------------------------------------------------
 function showView(viewName) {
@@ -707,6 +761,11 @@ function showView(viewName) {
     } else {
       target = "hero";
     }
+  }
+
+  // تنظيف كامل لألوان وثيمات المسابقة والهالات عند الخروج من المسرح لأي شاشة أخرى
+  if (target !== "liveArena" && target !== "arena") {
+    cleanupCompetitionThemeAndAura();
   }
 
   let activated = false;
@@ -6821,10 +6880,12 @@ btnExitArena?.addEventListener("click", async () => {
       clearInterval(cardsTimerInterval);
       stopOfflineCountdown();
       currentLiveRoom = null;
-      currentContestant = null;
-      localStorage.removeItem("nour_saved_room_id");
-      localStorage.setItem("nour_saved_view", currentUser ? (currentUser.role === 'student' ? "student" : "supervisor") : "hero");
-      showView(currentUser ? (currentUser.role === 'student' ? "student" : "supervisor") : "hero");
+      if (currentUser && currentUser.role === "student") {
+        await cleanupGuestStudentAndExit();
+      } else {
+        localStorage.setItem("nour_saved_view", currentUser ? "supervisor" : "hero");
+        showView(currentUser ? "supervisor" : "hero");
+      }
     }
   }
 });
@@ -12770,8 +12831,8 @@ function startStudentPractice(quiz) {
             <i class="fa-solid fa-trophy" style="color: #eab308; margin-left: 6px;"></i>
             ${honorMessage}
           </div>
-          <button class="btn-duo-green" style="margin-top: 10px;" onclick="document.getElementById('practiceRunnerModal').classList.add('hidden')">
-            إنهاء ومتابعة
+          <button class="btn-duo-green" style="margin-top: 10px;" onclick="if(window.cleanupGuestStudentAndExit){window.cleanupGuestStudentAndExit();}else{document.getElementById('practiceRunnerModal').classList.add('hidden');}">
+            <i class="fa-solid fa-arrow-right-from-bracket"></i> إنهاء ومغادرة الموقع
           </button>
         </div>
       `;
@@ -17013,15 +17074,300 @@ function handleInteractiveCountdown(room, isLead) {
 }
 
 // --------------------------------------------------------
-// 3. شاشة السؤال التفاعلي المباشر مع جولات السرعة وبونص الـ 5 نقاط
+// وظيفة حذف حساب الطالب الزائر ومغادرة الموقع عند انتهاء الاختبار
+// --------------------------------------------------------
+async function cleanupGuestStudentAndExit() {
+  const studentName = currentUser?.name;
+  const isGuest = currentUser?.role === "student";
+
+  // إخفاء مودالات المسابقة فوراً
+  document.getElementById("studentRaceFinishModal")?.classList.add("hidden");
+  document.getElementById("practiceRunnerModal")?.classList.add("hidden");
+  document.getElementById("interactiveLeaderboardModal")?.classList.add("hidden");
+
+  if (isGuest && studentName) {
+    // 1. إزالة الطالب من الغرفة المباشرة النشطة
+    if (currentLiveRoom) {
+      try {
+        const roomRef = doc(db, "live_rooms", currentLiveRoom.id);
+        await updateDoc(roomRef, {
+          users: arrayRemove(studentName),
+          [`interactiveStudents.${studentName}`]: deleteField(),
+          lastUpdated: serverTimestamp()
+        });
+      } catch (err) {
+        console.warn("Notice while removing student from room:", err);
+      }
+    }
+
+    // 2. حذف حساب الطالب المؤقت من ذاكرة المشاركين والسحابة
+    const pIdx = participantsCache.findIndex(p => p.name === studentName || p.normalizedName === normalizeArabic(studentName));
+    if (pIdx !== -1) {
+      const pDoc = participantsCache[pIdx];
+      participantsCache.splice(pIdx, 1);
+      localStorage.setItem("nour_participants", JSON.stringify(participantsCache));
+      if (pDoc?.id) {
+        try {
+          await deleteDoc(doc(db, "participants", pDoc.id));
+        } catch (e) {
+          console.warn("Delete guest participant from firestore:", e);
+        }
+      }
+    }
+  }
+
+  // 3. مسح جميع بيانات الجلسة المحلية للطالب
+  localStorage.removeItem("active_quran_user");
+  localStorage.removeItem("nour_saved_user");
+  localStorage.removeItem("nour_saved_view");
+  localStorage.removeItem("nour_saved_tab");
+  localStorage.removeItem("nour_saved_room_id");
+  localStorage.removeItem("nour_user_role");
+  localStorage.removeItem("nour_user_name");
+  localStorage.removeItem("nour_user_id");
+
+  currentUser = null;
+  currentLiveRoom = null;
+  currentContestant = null;
+
+  // 4. إعادة ضبط كامل لألوان وثيمات الخلفية والهالة
+  cleanupCompetitionThemeAndAura();
+
+  // 5. التوجيه للشاشة الترحيبية الأولى وإظهار إشعار لطيف
+  showView("hero");
+  showToast("تم إنهاء الاختبار ومغادرة المسابقة بنجاح. شكراً لمشاركتك يا بطل!", "fa-arrow-right-from-bracket", 3500);
+}
+window.cleanupGuestStudentAndExit = cleanupGuestStudentAndExit;
+
+// --------------------------------------------------------
+// شاشة لوحة الصدارة ومتابعة السباق المباشر للمشرف (عريضة تملأ الشاشة)
+// --------------------------------------------------------
+window.prevRaceStudentRanks = window.prevRaceStudentRanks || {};
+window.prevRaceStudentScores = window.prevRaceStudentScores || {};
+
+function renderSupervisorLiveRaceMonitor(room) {
+  const container = document.getElementById("supervisorLiveRaceMonitor");
+  if (!container) return;
+
+  container.classList.remove("hidden");
+
+  // إخفاء بطاقة السؤال المخصصة للمتسابق حتى لا تشغل شاشة المشرف
+  if (stageQuestionCard) stageQuestionCard.classList.add("hidden");
+  const stage = document.getElementById("arenaStage");
+  if (stage) stage.classList.add("hidden");
+
+  const titleEl = document.getElementById("supervisorRaceRoomTitle");
+  if (titleEl) {
+    titleEl.textContent = `${room.name || "مسابقة نور البيان التفاعلية"} (رمز #${room.id})`;
+  }
+
+  const questions = (room.interactiveQuestions && room.interactiveQuestions.length > 0)
+    ? room.interactiveQuestions
+    : (quizzesCache[0]?.sections?.flatMap(s => s.questions || []).filter(q => !q.type?.includes("oral")) || []);
+  const totalQ = questions.length || 1;
+
+  const studentsMap = room.interactiveStudents || {};
+  const studentsList = Object.values(studentsMap);
+
+  const activeCountEl = document.getElementById("supervisorRaceActiveCount");
+  if (activeCountEl) activeCountEl.textContent = studentsList.length;
+
+  const completedCount = studentsList.filter(s => s.finished || (s.currentQIndex || 0) >= totalQ).length;
+  const completedCountEl = document.getElementById("supervisorRaceCompletedCount");
+  if (completedCountEl) completedCountEl.textContent = completedCount;
+
+  // ترتيب الطلاب اللحظي: الأعلى نقاطاً ثم الأكثر إنجازاً للأسئلة ثم الأسبق إجابة
+  studentsList.sort((a, b) => {
+    const scoreA = a.score || 0;
+    const scoreB = b.score || 0;
+    if (scoreB !== scoreA) return scoreB - scoreA;
+
+    const qA = a.currentQIndex || 0;
+    const qB = b.currentQIndex || 0;
+    if (qB !== qA) return qB - qA;
+
+    const timeA = a.lastAnswerTime || 0;
+    const timeB = b.lastAnswerTime || 0;
+    return timeA - timeB;
+  });
+
+  const cardsListEl = document.getElementById("supervisorLiveRaceCardsList");
+  if (!cardsListEl) return;
+
+  if (studentsList.length === 0) {
+    cardsListEl.innerHTML = `
+      <div style="text-align: center; padding: 45px 20px; background: #ffffff; border: 2.5px dashed #cbd5e1; border-radius: 20px; color: #64748b;">
+        <i class="fa-solid fa-users" style="font-size: 42px; color: #94a3b8; display: block; margin-bottom: 12px;"></i>
+        <h3 style="margin: 0 0 6px 0; color: #1e293b; font-size: 19px; font-weight: 900;">في انتظار انضمام الطلاب للسباق المباشر...</h3>
+        <p style="margin: 0; font-size: 14px; font-weight: 700;">شارك رمز الغرفة (#${room.id}) مع الطلاب لبدء التنافس التفاعلي فورياً!</p>
+      </div>
+    `;
+    return;
+  }
+
+  const newRanks = {};
+  const newScores = {};
+
+  const cardsHtml = studentsList.map((s, idx) => {
+    const rank = idx + 1;
+    newRanks[s.name] = rank;
+    newScores[s.name] = s.score || 0;
+
+    const prevRank = window.prevRaceStudentRanks[s.name];
+    const prevScore = window.prevRaceStudentScores[s.name];
+
+    let climbAnimClass = "";
+    if (prevRank && rank < prevRank) {
+      climbAnimClass = "rank-climb-up";
+    } else if (prevRank && rank > prevRank) {
+      climbAnimClass = "rank-drop-down";
+    }
+
+    const scoreChanged = prevScore !== undefined && (s.score || 0) > prevScore;
+
+    let rankBadge = `${rank}`;
+    let rankCardClass = "";
+    if (rank === 1) {
+      rankBadge = "🥇";
+      rankCardClass = "rank-gold";
+    } else if (rank === 2) {
+      rankBadge = "🥈";
+      rankCardClass = "rank-silver";
+    } else if (rank === 3) {
+      rankBadge = "🥉";
+      rankCardClass = "rank-bronze";
+    }
+
+    const currentQIdx = Math.min(totalQ, s.currentQIndex || 0);
+    const progressPercent = Math.min(100, Math.round((currentQIdx / totalQ) * 100));
+    const isFinished = s.finished || currentQIdx >= totalQ;
+
+    return `
+      <div class="supervisor-student-race-card ${rankCardClass} ${climbAnimClass}" data-student="${escapeHtml(s.name)}">
+        <div class="race-card-top-row">
+          <div class="race-student-info-flex">
+            <div class="race-rank-badge">${rankBadge}</div>
+            <div class="race-student-name-box">
+              <h4>${escapeHtml(s.name)}</h4>
+              <span><i class="fa-solid fa-school"></i> ${escapeHtml(s.school || "مشارك")} — ${escapeHtml(s.grade || "مسابقة عامة")}</span>
+            </div>
+          </div>
+
+          <div class="race-student-scores-flex">
+            ${isFinished ? `
+              <span class="race-finished-badge">
+                <i class="fa-solid fa-flag-checkered"></i> أنهى السباق بنجاح! 🏁
+              </span>
+            ` : `
+              <span class="race-solving-badge">
+                <i class="fa-solid fa-pen-fancy"></i> يحل السؤال (${currentQIdx + 1} من ${totalQ})
+              </span>
+            `}
+
+            <span class="bonus-speed-tag">
+              <i class="fa-solid fa-bolt"></i> ${s.speedBonuses || 0} بونص
+            </span>
+
+            <div class="race-score-pill ${scoreChanged ? 'score-pop' : ''}">
+              <i class="fa-solid fa-star" style="color: #ca8a04;"></i>
+              <strong>${s.score || 0}</strong>
+              <span style="font-size: 11px;">نقطة</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- شريط تحديث التقدم المباشر تحت كل طالب بثيم المنصة -->
+        <div class="race-progress-track-wrapper">
+          <div class="race-progress-labels">
+            <span>
+              ${isFinished ? '🏆 اكتملت جميع الأسئلة 100%' : `📍 وصل إلى: السؤال ${currentQIdx} من ${totalQ}`}
+            </span>
+            <span>${progressPercent}% إنجاز</span>
+          </div>
+
+          <div class="race-progress-track">
+            <div class="race-progress-fill" style="width: ${progressPercent}%;">
+              <div class="race-runner-icon" title="${escapeHtml(s.name)}">
+                ${isFinished ? '🏁' : '🏃'}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  cardsListEl.innerHTML = cardsHtml;
+
+  window.prevRaceStudentRanks = newRanks;
+  window.prevRaceStudentScores = newScores;
+
+  const btnFullScreen = document.getElementById("btnToggleRaceFullScreen");
+  if (btnFullScreen) {
+    btnFullScreen.onclick = () => {
+      if (!document.fullscreenElement) {
+        container.requestFullscreen?.().catch(() => {});
+      } else {
+        document.exitFullscreen?.().catch(() => {});
+      }
+    };
+  }
+
+  const btnEndRace = document.getElementById("btnEndRaceFromSupervisor");
+  if (btnEndRace) {
+    btnEndRace.onclick = async () => {
+      const confirmed = await showInAppConfirm({
+        title: "تتويج الأبطال وإنهاء السباق",
+        message: "هل ترغب في تتويج الفائزين وإنهاء هذا السباق التفاعلي الآن وتوثيق النتائج في الأرشيف ولوحة الشرف؟",
+        confirmText: "نعم، تتويج وإنهاء",
+        cancelText: "مواصلة السباق",
+        type: "success",
+        icon: "fa-trophy"
+      });
+
+      if (confirmed) {
+        try {
+          const roomRef = doc(db, "live_rooms", room.id);
+          await updateDoc(roomRef, {
+            phase: "interactive_leaderboard",
+            isFinished: true,
+            lastUpdated: serverTimestamp()
+          });
+          showToast("تم إنهاء وتوثيق نتائج السباق بنجاح! 🏆", "fa-trophy");
+        } catch (e) {
+          console.warn("End race error:", e);
+        }
+      }
+    };
+  }
+}
+
+// --------------------------------------------------------
+// 3. إدارة السؤال والسباق التفاعلي المباشر للطلاب والمشرف
 // --------------------------------------------------------
 function handleInteractiveQuestion(room, isLead) {
-  // إخفاء اللوبي والعد التنازلي ولوحة الصدارة
+  // إخفاء اللوبي والعد التنازلي ولوحة الصدارة القديمة
   document.getElementById("arenaInteractiveLobby")?.classList.add("hidden");
   document.getElementById("interactiveCountdownOverlay")?.classList.add("hidden");
   document.getElementById("interactiveLeaderboardModal")?.classList.add("hidden");
 
-  // إظهار مسرح المسابقة
+  const isSupervisorRole = currentUser && (
+    currentUser.role === "supervisor" || 
+    currentUser.name === room.leaderName || 
+    isSupervisor(currentUser.name)
+  );
+
+  // إذا كان المستخدم هو المشرف: تظهر له حصرياً لوحة الصدارة العريضة التي تملأ الشاشة
+  if (isSupervisorRole) {
+    renderSupervisorLiveRaceMonitor(room);
+    return;
+  }
+
+  // ------------------------------------------------------
+  // وضع الطلاب: كل طالب في سباق ذاتي ينتقل لوحده فور إجابته
+  // ------------------------------------------------------
+  document.getElementById("supervisorLiveRaceMonitor")?.classList.add("hidden");
+
   const stage = document.getElementById("arenaStage");
   if (stage) stage.classList.remove("hidden");
   if (stageQuestionCard) stageQuestionCard.classList.remove("hidden");
@@ -17029,28 +17375,37 @@ function handleInteractiveQuestion(room, isLead) {
   const questions = (room.interactiveQuestions && room.interactiveQuestions.length > 0)
     ? room.interactiveQuestions
     : (quizzesCache[0]?.sections?.flatMap(s => s.questions || []).filter(q => !q.type?.includes("oral")) || []);
+  const totalQ = questions.length || 1;
 
-  const totalQ = questions.length;
-  const qIndex = room.interactiveCurrentQIndex || 0;
-  const curQ = questions[qIndex % totalQ] || { text: "سؤال مسابقة نور البيان", type: "mcq", options: ["خيار 1", "خيار 2"], correct: 0, points: 5 };
+  const myName = currentUser?.name || "المتسابق";
+  const myStudentData = room.interactiveStudents?.[myName] || { currentQIndex: 0, score: 0, speedBonuses: 0, answers: {} };
 
-  // تقسيم الأسئلة بدقة على جولات السرعة الثلاث
+  // فحص هل أتم الطالب جميع الأسئلة
+  const myQIndex = myStudentData.currentQIndex || 0;
+  const isFinished = myStudentData.finished || myQIndex >= totalQ;
+
+  if (isFinished) {
+    renderStudentCompletionModal(room, myStudentData, totalQ);
+    return;
+  }
+
+  // حساب جولة السرعة الخاصة بهذا السؤال وتحديد ثيم الألوان المبهج المتغير
   const r1Count = Math.max(1, Math.floor(totalQ / 3));
   const r2Count = Math.max(1, Math.floor(totalQ / 3));
 
   let roundNum = 1;
   let roundDuration = 15;
-  let roundTitle = "الفقرة الأولى — جولة السرعة (15 ثانية)";
+  let roundTitle = "جولة السرعة (15 ثانية)";
   let themeName = "purple";
   let bonusConditionText = "⚡ بونص +5 نقاط عند الإجابة في أقل من 10 ثوانٍ!";
 
-  if (qIndex < r1Count) {
+  if (myQIndex < r1Count) {
     roundNum = 1;
     roundDuration = 15;
     roundTitle = "الفقرة الأولى — جولة السرعة (15 ثانية)";
     themeName = "purple";
     bonusConditionText = "⚡ بونص +5 نقاط عند الإجابة في أقل من 10 ثوانٍ!";
-  } else if (qIndex < r1Count + r2Count) {
+  } else if (myQIndex < r1Count + r2Count) {
     roundNum = 2;
     roundDuration = 10;
     roundTitle = "الفقرة الثانية — جولة التحدي (10 ثوانٍ)";
@@ -17064,92 +17419,86 @@ function handleInteractiveQuestion(room, isLead) {
     bonusConditionText = "⚡ بونص +5 نقاط عند الإجابة في أقل من 3 ثوانٍ!";
   }
 
-  // تشغيل الخلفية الفاقعة والمبهجة وتغيير اللون وفق الجولة (بنفسجي، برتقالي، أخضر)
+  // تغيير ألوان الخلفية وكارت السؤال ديناميكياً وفق الجولة (بنفسجي، برتقالي، أخضر)
   if (window.startInteractiveBackground) {
     window.startInteractiveBackground(themeName);
   }
 
+  if (stageQuestionCard) {
+    stageQuestionCard.className = `stage-question-card theme-${themeName}`;
+  }
+
+  // تحديث شريط تقدم السباق الشخصي للطالب
+  const personalBanner = document.getElementById("studentPersonalRaceBanner");
+  if (personalBanner) {
+    personalBanner.classList.remove("hidden");
+    const roundTitleEl = document.getElementById("studentRaceRoundTitle");
+    if (roundTitleEl) roundTitleEl.textContent = roundTitle;
+
+    const qProgressEl = document.getElementById("studentRaceQProgressText");
+    if (qProgressEl) qProgressEl.textContent = `السؤال ${myQIndex + 1} من ${totalQ}`;
+
+    const scoreEl = document.getElementById("studentRaceScoreText");
+    if (scoreEl) scoreEl.textContent = `⭐ ${myStudentData.score || 0} نقطة`;
+
+    const progressFill = document.getElementById("studentRaceProgressFill");
+    if (progressFill) {
+      progressFill.style.width = `${Math.round((myQIndex / totalQ) * 100)}%`;
+    }
+  }
+
   // تحديث بيانات الترويسة والعداد
   const qNumEl = document.getElementById("stageQuestionNumber");
-  if (qNumEl) qNumEl.textContent = `السؤال ${qIndex + 1} من ${totalQ}`;
+  if (qNumEl) qNumEl.textContent = `السؤال ${myQIndex + 1} من ${totalQ}`;
 
   const secNameEl = document.getElementById("stageSectionName");
   if (secNameEl) secNameEl.textContent = roundTitle;
 
-  // إظهار شارة البونص المبهجة بالترويسة
-  let bonusPill = document.getElementById("interactiveSpeedBonusPill");
-  if (!bonusPill && secNameEl) {
-    bonusPill = document.createElement("span");
-    bonusPill.id = "interactiveSpeedBonusPill";
-    bonusPill.className = "interactive-speed-bonus-pill";
-    secNameEl.parentNode?.insertBefore(bonusPill, secNameEl.nextSibling);
-  }
-  if (bonusPill) bonusPill.innerHTML = bonusConditionText;
+  const curQ = questions[myQIndex % totalQ] || { text: "سؤال مسابقة نور البيان", type: "mcq", options: ["خيار 1", "خيار 2"], correct: 0, points: 5 };
 
-  // تحديث بنر المتسابق الحالي ليعرض اسم الطالب ونقاطه الذاتية
-  const myName = currentUser?.name || "المتسابق";
-  const myStudentData = room.interactiveStudents?.[myName] || { score: 0 };
-  const studentNameEl = document.getElementById("stageStudentName");
-  if (studentNameEl) studentNameEl.textContent = currentUser?.role === "student" ? myName : `المسابقة التفاعلية — ${room.name}`;
-
-  const studentScoreEl = document.getElementById("stageStudentScore");
-  if (studentScoreEl) studentScoreEl.textContent = myStudentData.score || 0;
-
-  // حساب الوقت المتبقي اللحظي
-  const startTime = room.questionStartTime || Date.now();
-  const elapsed = (Date.now() - startTime) / 1000;
-  const remaining = Math.max(0, Math.ceil(roundDuration - elapsed));
-
-  const timerSecEl = document.getElementById("stageTimerSeconds");
-  if (timerSecEl) timerSecEl.textContent = remaining;
-
-  // تلوين التايمر عند قرب انتهاء الوقت
-  const timerPill = document.getElementById("stageTimerPill");
-  if (timerPill) {
-    if (remaining <= 3) {
-      timerPill.style.background = "#fee2e2";
-      timerPill.style.borderColor = "#ef4444";
-      timerPill.style.color = "#b91c1c";
-    } else {
-      timerPill.style.background = "";
-      timerPill.style.borderColor = "";
-      timerPill.style.color = "";
-    }
-  }
-
-  // بناء وعرض السؤال إذا تغير رقم السؤال
-  if (lastInteractiveQIndexSeen !== qIndex || lastInteractivePhaseSeen !== "interactive_question") {
-    lastInteractiveQIndexSeen = qIndex;
-    lastInteractivePhaseSeen = "interactive_question";
-    renderInteractiveQuestionBody(curQ, qIndex, room, roundNum);
-  }
-
-  // فحص هل أجاب جميع الطلاب المتواجدين
-  const allStudents = Object.values(room.interactiveStudents || {});
-  const allAnswered = allStudents.length > 0 && allStudents.every(s => s.answers && s.answers[qIndex] !== undefined);
-
-  // إذا انتهى الوقت أو أجاب الجميع: المشرف يقود الانتقال للوحة الصدارة
-  if (isLead && (remaining <= 0 || allAnswered) && !window.transitioningToLeaderboard) {
-    window.transitioningToLeaderboard = true;
-    setTimeout(async () => {
-      try {
-        const roomRef = doc(db, "live_rooms", room.id);
-        await updateDoc(roomRef, {
-          phase: "interactive_leaderboard",
-          leaderboardShownAt: Date.now(),
-          lastUpdated: serverTimestamp()
-        });
-      } catch (err) {
-        console.warn("Leaderboard transition error:", err);
-      } finally {
-        window.transitioningToLeaderboard = false;
-      }
-    }, 600);
-  }
+  // رسم السؤال الحالي للطالب وتمكينه من الحل والانتقال الذاتي
+  renderStudentIndependentQuestion(curQ, myQIndex, totalQ, room, roundNum, themeName);
 }
 
-// رسم محتوى السؤال وخياراته التفاعلية للطالب
-function renderInteractiveQuestionBody(q, qIndex, room, roundNum) {
+// عرض مودال إتمام السباق للطالب مع زر المغادرة وحذف الحساب المؤقت
+function renderStudentCompletionModal(room, myStudentData, totalQ) {
+  const finishModal = document.getElementById("studentRaceFinishModal");
+  if (!finishModal) return;
+
+  finishModal.classList.remove("hidden");
+  if (stageQuestionCard) stageQuestionCard.classList.add("hidden");
+
+  const scoreEl = document.getElementById("finishStudentFinalScore");
+  if (scoreEl) scoreEl.textContent = `${myStudentData.score || 0} نقطة`;
+
+  const bonusEl = document.getElementById("finishStudentSpeedBonuses");
+  if (bonusEl) bonusEl.textContent = `⚡ ${myStudentData.speedBonuses || 0}`;
+
+  const studentsList = Object.values(room.interactiveStudents || {});
+  studentsList.sort((a, b) => (b.score || 0) - (a.score || 0));
+  const myName = currentUser?.name;
+  const rank = studentsList.findIndex(s => s.name === myName) + 1;
+
+  const rankEl = document.getElementById("finishStudentFinalRank");
+  if (rankEl) {
+    if (rank === 1) rankEl.textContent = "🥇 الأول 🏆";
+    else if (rank === 2) rankEl.textContent = "🥈 الثاني";
+    else if (rank === 3) rankEl.textContent = "🥉 الثالث";
+    else rankEl.textContent = `المركز ${rank || 1}`;
+  }
+
+  const btnExit = document.getElementById("btnStudentFinishAndExit");
+  if (btnExit) {
+    btnExit.onclick = () => {
+      cleanupGuestStudentAndExit();
+    };
+  }
+
+  try { soundFX.celebrate(); } catch (e) {}
+}
+
+// رسم السؤال التفاعلي المباشر للسباق الفردي
+function renderStudentIndependentQuestion(q, qIndex, totalQ, room, roundNum, themeName) {
   if (stageQuestionText) {
     stageQuestionText.textContent = q.text || q.question || "سؤال المسابقة";
   }
@@ -17160,9 +17509,10 @@ function renderInteractiveQuestionBody(q, qIndex, room, roundNum) {
 
   if (!stageInteractiveArea) return;
 
-  const submitInteractiveResult = async (isCorrect) => {
-    const startTime = room.questionStartTime || Date.now();
-    const timeTaken = (Date.now() - startTime) / 1000;
+  let questionStartTime = Date.now();
+
+  const submitStudentAnswer = async (isCorrect) => {
+    const timeTaken = (Date.now() - questionStartTime) / 1000;
 
     let gotBonus = false;
     if (isCorrect) {
@@ -17177,40 +17527,59 @@ function renderInteractiveQuestionBody(q, qIndex, room, roundNum) {
     if (isCorrect) {
       try { soundFX.correct(); } catch (e) {}
       if (gotBonus) {
-        showToast(`⚡ إجابة صحيحة وفائقة السرعة! كسبت (+${totalPoints} نقاط مع بونص السرعة)!`, "fa-bolt", 2500);
+        showToast(`⚡ إجابة صحيحة وبونص سرعة (+${totalPoints} نقاط)!`, "fa-bolt", 2000);
       } else {
-        showToast(`⭐ إجابة صحيحة ومتقنة! كسبت (+${totalPoints} نقاط)!`, "fa-circle-check", 2200);
+        showToast(`⭐ أحسنت! إجابة صحيحة (+${totalPoints} نقاط)!`, "fa-circle-check", 1800);
       }
     } else {
       try { soundFX.wrong(); } catch (e) {}
-      showToast("❌ إجابة غير دقيقة، استعد للسؤال القادم لتعويض النقاط!", "fa-circle-xmark", 2200);
+      showToast("❌ إجابة غير موفقة، عوض في السؤال التالي!", "fa-circle-xmark", 1800);
     }
 
-    const feedbackNotice = document.getElementById("interactiveAnswerFeedbackNotice");
-    if (feedbackNotice) feedbackNotice.classList.remove("hidden");
-
     if (myName && room.id) {
+      const nextQIndex = qIndex + 1;
+      const isComplete = nextQIndex >= totalQ;
+
       try {
         const currentStudentObj = room.interactiveStudents?.[myName] || { name: myName, score: 0, speedBonuses: 0, answers: {} };
         const newScore = (currentStudentObj.score || 0) + totalPoints;
         const newBonuses = (currentStudentObj.speedBonuses || 0) + (gotBonus ? 1 : 0);
         const newAnswers = { ...(currentStudentObj.answers || {}), [qIndex]: { isCorrect, points: totalPoints, bonus: gotBonus ? 5 : 0, timeTaken } };
 
-        const roomRef = doc(db, "live_rooms", room.id);
-        await updateDoc(roomRef, {
+        const updatePayload = {
           [`interactiveStudents.${myName}.score`]: newScore,
           [`interactiveStudents.${myName}.speedBonuses`]: newBonuses,
           [`interactiveStudents.${myName}.answers`]: newAnswers,
+          [`interactiveStudents.${myName}.currentQIndex`]: nextQIndex,
           [`interactiveStudents.${myName}.lastAnswerTime`]: Date.now(),
           lastUpdated: serverTimestamp()
-        });
+        };
+
+        if (isComplete) {
+          updatePayload[`interactiveStudents.${myName}.finished`] = true;
+          updatePayload[`interactiveStudents.${myName}.finishedAt`] = Date.now();
+        }
+
+        const roomRef = doc(db, "live_rooms", room.id);
+        await updateDoc(roomRef, updatePayload);
       } catch (saveErr) {
-        console.error("Save interactive answer error:", saveErr);
+        console.error("Save student answer error:", saveErr);
       }
+
+      // الانتقال الذاتي الفوري للسؤال التالي للطالب دون انتظار
+      setTimeout(() => {
+        if (room.interactiveStudents?.[myName]) {
+          room.interactiveStudents[myName].currentQIndex = nextQIndex;
+          if (nextQIndex >= totalQ) {
+            room.interactiveStudents[myName].finished = true;
+          }
+        }
+        handleInteractiveQuestion(room, false);
+      }, 500);
     }
   };
 
-  // نوع السؤال 1: خيارات متعددة (MCQ)
+  // خيارات متعددة (MCQ)
   if (q.options && Array.isArray(q.options)) {
     stageInteractiveArea.innerHTML = `
       <div class="mcq-options-grid">
@@ -17220,21 +17589,7 @@ function renderInteractiveQuestionBody(q, qIndex, room, roundNum) {
           </button>
         `).join("")}
       </div>
-      <div id="interactiveAnswerFeedbackNotice" class="${alreadyAnswered ? '' : 'hidden'}" style="margin-top: 14px; text-align: center; padding: 10px 18px; background: #f0fdf4; border: 2px solid #86efac; border-radius: 14px; color: #166534; font-weight: 800; font-size: 14.5px;">
-        <i class="fa-solid fa-circle-check" style="color: #22c55e;"></i> تم تسجيل إجابتك بنجاح! في انتظار انتهاء الوقت لعرض ترتيب لوحة الصدارة...
-      </div>
     `;
-
-    if (alreadyAnswered) {
-      const prevAns = myData.answers[qIndex];
-      const btns = stageInteractiveArea.querySelectorAll(".btn-choice-duo");
-      if (prevAns.isCorrect) {
-        btns[q.correct]?.classList.add("correct");
-      } else {
-        btns[q.correct]?.classList.add("correct");
-      }
-      return;
-    }
 
     const btns = stageInteractiveArea.querySelectorAll(".btn-choice-duo");
     btns.forEach(btn => {
@@ -17249,11 +17604,11 @@ function renderInteractiveQuestionBody(q, qIndex, room, roundNum) {
           const corBtn = stageInteractiveArea.querySelector(`[data-choice="${q.correct}"]`);
           if (corBtn) corBtn.classList.add("correct");
         }
-        await submitInteractiveResult(isCorrect);
+        await submitStudentAnswer(isCorrect);
       }, { once: true });
     });
 
-  // نوع السؤال 2: ترتيب الكلمات (Ordering)
+  // ترتيب الكلمات (Ordering)
   } else if (q.type === "ordering" && Array.isArray(q.items) && q.items.length > 0) {
     const originalSentence = (q.targetSentence || q.items.join(" ")).trim();
     const shuffledItems = [...q.items].sort(() => Math.random() - 0.5);
@@ -17265,189 +17620,151 @@ function renderInteractiveQuestionBody(q, qIndex, room, roundNum) {
           انقر على الكلمات بالترتيب الصحيح لتكوين الجملة القرآنية:
         </div>
         <div id="interactiveOrderingSlots" style="min-height: 54px; padding: 10px; background: #ffffff; border: 2.5px dashed #a855f7; border-radius: 14px; display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; align-items: center; margin-bottom: 14px;">
-          ${alreadyAnswered ? `<span style="color:#16a34a; font-weight:900; font-size:18px;">${escapeHtml(originalSentence)}</span>` : '<span style="color:#94a3b8; font-size:13px;" id="orderingEmptyHint">انقر الكلمات من الأسفل لوضعها هنا...</span>'}
+          <span style="color:#94a3b8; font-size:13px;" id="orderingEmptyHint">انقر الكلمات من الأسفل لوضعها هنا...</span>
         </div>
-        ${!alreadyAnswered ? `
-          <div id="interactiveOrderingBank" style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 16px;">
-            ${shuffledItems.map((item, idx) => `
-              <button type="button" class="btn-choice-duo font-${q.font || 'quran'} ordering-bank-btn" data-word="${escapeHtml(item)}" data-idx="${idx}" style="padding: 10px 18px; font-size: 17px; cursor: pointer;">
+        <div id="interactiveOrderingBank" style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 16px;">
+          ${shuffledItems.map((item, idx) => `
+            <button type="button" class="btn-choice-duo font-${q.font || 'quran'} ordering-bank-btn" data-word="${escapeHtml(item)}" data-idx="${idx}" style="padding: 10px 18px; font-size: 17px; cursor: pointer;">
+              ${escapeHtml(item)}
+            </button>
+          `).join("")}
+        </div>
+        <div style="display: flex; justify-content: center; gap: 10px;">
+          <button type="button" id="btnConfirmOrdering" class="btn-duo-green" style="padding: 10px 24px; font-size: 15px;" disabled>
+            <i class="fa-solid fa-check"></i> تأكيد الترتيب
+          </button>
+          <button type="button" id="btnResetOrdering" class="btn-duo-outline" style="padding: 10px 16px; font-size: 14px;">
+            <i class="fa-solid fa-rotate-left"></i> إعادة
+          </button>
+        </div>
+      </div>
+    `;
+
+    const slots = document.getElementById("interactiveOrderingSlots");
+    const emptyHint = document.getElementById("orderingEmptyHint");
+    const bank = document.getElementById("interactiveOrderingBank");
+    const confirmBtn = document.getElementById("btnConfirmOrdering");
+    const resetBtn = document.getElementById("btnResetOrdering");
+
+    bank?.querySelectorAll(".ordering-bank-btn").forEach(b => {
+      b.addEventListener("click", () => {
+        const word = b.getAttribute("data-word");
+        chosenOrder.push(word);
+        b.style.display = "none";
+        if (emptyHint) emptyHint.style.display = "none";
+
+        const slotWord = document.createElement("span");
+        slotWord.className = "ordering-slot-word font-" + (q.font || "quran");
+        slotWord.style.cssText = "padding: 6px 14px; background: #f3e8ff; border: 1.5px solid #c084fc; border-radius: 10px; font-weight: 800; font-size: 16px; color: #581c87;";
+        slotWord.textContent = word;
+        slots.appendChild(slotWord);
+
+        if (chosenOrder.length === q.items.length && confirmBtn) {
+          confirmBtn.disabled = false;
+        }
+      });
+    });
+
+    confirmBtn?.addEventListener("click", async () => {
+      confirmBtn.disabled = true;
+      const userSentence = chosenOrder.join(" ").trim();
+      const isCorrect = (userSentence === originalSentence);
+      if (isCorrect) {
+        slots.style.borderColor = "#22c55e";
+        slots.style.background = "#f0fdf4";
+      } else {
+        slots.style.borderColor = "#ef4444";
+        slots.style.background = "#fee2e2";
+      }
+      await submitStudentAnswer(isCorrect);
+    }, { once: true });
+
+    resetBtn?.addEventListener("click", () => {
+      chosenOrder.length = 0;
+      if (slots) slots.innerHTML = '<span style="color:#94a3b8; font-size:13px;" id="orderingEmptyHint">انقر الكلمات من الأسفل لوضعها هنا...</span>';
+      bank?.querySelectorAll(".ordering-bank-btn").forEach(b => { b.style.display = ""; });
+      if (confirmBtn) confirmBtn.disabled = true;
+    });
+
+  // نوع السؤال 3: توصيل (Matching)
+  } else if (q.type === "matching" && Array.isArray(q.pairs) && q.pairs.length > 0) {
+    const leftItems = q.pairs.map(p => Array.isArray(p) ? p[0] : (p.first || p.left));
+    const rightItems = [...q.pairs.map(p => Array.isArray(p) ? p[1] : (p.second || p.right))].sort(() => Math.random() - 0.5);
+
+    stageInteractiveArea.innerHTML = `
+      <div style="max-width: 640px; margin: 0 auto; text-align: center;">
+        <div style="font-weight: 800; color: #475569; margin-bottom: 12px; font-size: 13.5px;">
+          انقر عنصراً من العمود الأيمن ثم صلْه بما يناسبه في العمود الأيسر:
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px;">
+          <div id="matchingLeftCol" style="display: flex; flex-direction: column; gap: 8px;">
+            ${leftItems.map((item, idx) => `
+              <button type="button" class="btn-choice-duo font-${q.font || 'quran'} match-left-btn" data-idx="${idx}" style="padding: 10px 14px; font-size: 16px;">
                 ${escapeHtml(item)}
               </button>
             `).join("")}
           </div>
-          <div style="display: flex; justify-content: center; gap: 10px;">
-            <button type="button" id="btnConfirmOrdering" class="btn-duo-green" style="padding: 10px 24px; font-size: 15px;" disabled>
-              <i class="fa-solid fa-check"></i> تأكيد الترتيب
-            </button>
-            <button type="button" id="btnResetOrdering" class="btn-duo-outline" style="padding: 10px 16px; font-size: 14px;">
-              <i class="fa-solid fa-rotate-left"></i> إعادة
-            </button>
+          <div id="matchingRightCol" style="display: flex; flex-direction: column; gap: 8px;">
+            ${rightItems.map((item, idx) => `
+              <button type="button" class="btn-choice-duo font-${q.font || 'quran'} match-right-btn" data-text="${escapeHtml(item)}" style="padding: 10px 14px; font-size: 16px;">
+                ${escapeHtml(item)}
+              </button>
+            `).join("")}
           </div>
-        ` : ''}
-        <div id="interactiveAnswerFeedbackNotice" class="${alreadyAnswered ? '' : 'hidden'}" style="margin-top: 14px; text-align: center; padding: 10px 18px; background: #f0fdf4; border: 2px solid #86efac; border-radius: 14px; color: #166534; font-weight: 800; font-size: 14.5px;">
-          <i class="fa-solid fa-circle-check" style="color: #22c55e;"></i> تم تسجيل ترتيبك بنجاح!
         </div>
       </div>
     `;
 
-    if (!alreadyAnswered) {
-      const slots = document.getElementById("interactiveOrderingSlots");
-      const bank = document.getElementById("interactiveOrderingBank");
-      const btnConfirm = document.getElementById("btnConfirmOrdering");
-      const btnReset = document.getElementById("btnResetOrdering");
+    let selectedLeftIdx = null;
+    let selectedLeftBtn = null;
+    let matchedCount = 0;
+    let allCorrect = true;
 
-      const updateOrderingUI = () => {
-        if (chosenOrder.length === 0) {
-          slots.innerHTML = '<span style="color:#94a3b8; font-size:13px;" id="orderingEmptyHint">انقر الكلمات من الأسفل لوضعها هنا...</span>';
-          if (btnConfirm) btnConfirm.disabled = true;
-        } else {
-          slots.innerHTML = chosenOrder.map((word, cIdx) => `
-            <span class="font-${q.font || 'quran'}" style="padding: 8px 14px; background: #f5f3ff; border: 2px solid #c084fc; border-radius: 10px; font-size: 17px; font-weight: 800; color: #581c87; display: inline-flex; align-items: center; gap: 6px;">
-              ${escapeHtml(word)}
-            </span>
-          `).join("");
-          if (btnConfirm) btnConfirm.disabled = (chosenOrder.length !== q.items.length);
+    const leftBtns = stageInteractiveArea.querySelectorAll(".match-left-btn");
+    const rightBtns = stageInteractiveArea.querySelectorAll(".match-right-btn");
+
+    leftBtns.forEach(btn => {
+      btn.addEventListener("click", () => {
+        leftBtns.forEach(b => b.classList.remove("selected-match"));
+        btn.classList.add("selected-match");
+        selectedLeftIdx = parseInt(btn.getAttribute("data-idx"));
+        selectedLeftBtn = btn;
+      });
+    });
+
+    rightBtns.forEach(btn => {
+      btn.addEventListener("click", async () => {
+        if (selectedLeftIdx === null || !selectedLeftBtn) {
+          showToast("اختر عنصراً من العمود الأيمن أولاً", "fa-hand-pointer");
+          return;
         }
-      };
 
-      bank?.querySelectorAll(".ordering-bank-btn").forEach(b => {
-        b.addEventListener("click", () => {
-          const w = b.getAttribute("data-word");
-          b.style.display = "none";
-          chosenOrder.push(w);
-          try { soundFX.btnClick(); } catch (e) {}
-          updateOrderingUI();
-        });
+        const chosenRightText = btn.getAttribute("data-text");
+        const correctRightText = Array.isArray(q.pairs[selectedLeftIdx]) ? q.pairs[selectedLeftIdx][1] : (q.pairs[selectedLeftIdx].second || q.pairs[selectedLeftIdx].right);
+
+        if (chosenRightText === correctRightText) {
+          selectedLeftBtn.classList.add("correct");
+          btn.classList.add("correct");
+          selectedLeftBtn.disabled = true;
+          btn.disabled = true;
+          matchedCount++;
+        } else {
+          selectedLeftBtn.classList.add("wrong");
+          btn.classList.add("wrong");
+          selectedLeftBtn.disabled = true;
+          btn.disabled = true;
+          allCorrect = false;
+          matchedCount++;
+        }
+
+        selectedLeftIdx = null;
+        selectedLeftBtn = null;
+
+        if (matchedCount === q.pairs.length) {
+          await submitStudentAnswer(allCorrect);
+        }
       });
-
-      btnReset?.addEventListener("click", () => {
-        chosenOrder.length = 0;
-        bank?.querySelectorAll(".ordering-bank-btn").forEach(b => { b.style.display = "inline-flex"; });
-        updateOrderingUI();
-      });
-
-      btnConfirm?.addEventListener("click", async () => {
-        btnConfirm.disabled = true;
-        btnReset.disabled = true;
-        const studentSentence = chosenOrder.join(" ").trim();
-        const isCorrect = (studentSentence === originalSentence);
-        await submitInteractiveResult(isCorrect);
-      }, { once: true });
-    }
-
-  // نوع السؤال 3: التوصيل (Matching)
-  } else if (q.type === "matching" && Array.isArray(q.pairs) && q.pairs.length > 0) {
-    const cleanPairs = q.pairs.map(p => Array.isArray(p) ? [p[0], p[1]] : [p.left || p.first, p.right || p.second]).filter(p => p[0] || p[1]);
-    const leftItems = cleanPairs.map(p => p[0]);
-    const rightItems = cleanPairs.map(p => p[1]).sort(() => Math.random() - 0.5);
-    const userMatches = {};
-    let selectedLeft = null;
-
-    stageInteractiveArea.innerHTML = `
-      <div style="max-width: 620px; margin: 0 auto;">
-        <div style="font-weight: 800; color: #475569; margin-bottom: 10px; text-align: center; font-size: 13.5px;">
-          صل كل عبارة على اليمين بما يناسبها على اليسار:
-        </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px;">
-          <div id="interactiveMatchLeftCol" style="display: flex; flex-direction: column; gap: 8px;">
-            ${leftItems.map((lItem, idx) => `
-              <button type="button" class="btn-choice-duo font-${q.font || 'amiri'} match-left-btn" data-left="${escapeHtml(lItem)}" data-idx="${idx}" style="text-align: right; padding: 10px 14px; font-size: 15px;" ${alreadyAnswered ? 'disabled' : ''}>
-                <span class="left-text">${escapeHtml(lItem)}</span>
-                <span class="match-indicator" style="float: left; font-size: 12px; color: #94a3b8;">⚪</span>
-              </button>
-            `).join("")}
-          </div>
-          <div id="interactiveMatchRightCol" style="display: flex; flex-direction: column; gap: 8px;">
-            ${rightItems.map((rItem, idx) => `
-              <button type="button" class="btn-choice-duo font-${q.font || 'amiri'} match-right-btn" data-right="${escapeHtml(rItem)}" data-idx="${idx}" style="text-align: right; padding: 10px 14px; font-size: 15px;" ${alreadyAnswered ? 'disabled' : ''}>
-                <span class="right-text">${escapeHtml(rItem)}</span>
-                <span class="match-indicator" style="float: left; font-size: 12px; color: #94a3b8;">⚪</span>
-              </button>
-            `).join("")}
-          </div>
-        </div>
-        ${!alreadyAnswered ? `
-          <div style="text-align: center;">
-            <button type="button" id="btnConfirmMatching" class="btn-duo-green" style="padding: 10px 28px; font-size: 15px;" disabled>
-              <i class="fa-solid fa-check"></i> تأكيد التوصيل
-            </button>
-          </div>
-        ` : ''}
-        <div id="interactiveAnswerFeedbackNotice" class="${alreadyAnswered ? '' : 'hidden'}" style="margin-top: 14px; text-align: center; padding: 10px 18px; background: #f0fdf4; border: 2px solid #86efac; border-radius: 14px; color: #166534; font-weight: 800; font-size: 14.5px;">
-          <i class="fa-solid fa-circle-check" style="color: #22c55e;"></i> تم تسجيل إجابتك بنجاح!
-        </div>
-      </div>
-    `;
-
-    if (!alreadyAnswered) {
-      const leftBtns = stageInteractiveArea.querySelectorAll(".match-left-btn");
-      const rightBtns = stageInteractiveArea.querySelectorAll(".match-right-btn");
-      const btnConfirm = document.getElementById("btnConfirmMatching");
-
-      leftBtns.forEach(lBtn => {
-        lBtn.addEventListener("click", () => {
-          leftBtns.forEach(b => b.classList.remove("selected-active"));
-          lBtn.classList.add("selected-active");
-          selectedLeft = lBtn.getAttribute("data-left");
-          try { soundFX.btnClick(); } catch (e) {}
-        });
-      });
-
-      rightBtns.forEach(rBtn => {
-        rBtn.addEventListener("click", () => {
-          if (!selectedLeft) {
-            showToast("يرجى اختيار عنصر من العمود الأيمن أولاً", "fa-arrow-right");
-            return;
-          }
-          const chosenRight = rBtn.getAttribute("data-right");
-          userMatches[selectedLeft] = chosenRight;
-          try { soundFX.pop(); } catch (e) {}
-
-          const lBtn = Array.from(leftBtns).find(b => b.getAttribute("data-left") === selectedLeft);
-          if (lBtn) {
-            lBtn.classList.add("matched");
-            const ind = lBtn.querySelector(".match-indicator");
-            if (ind) ind.textContent = "🔗";
-          }
-          rBtn.classList.add("matched");
-          const rInd = rBtn.querySelector(".match-indicator");
-          if (rInd) rInd.textContent = "🔗";
-
-          selectedLeft = null;
-          leftBtns.forEach(b => b.classList.remove("selected-active"));
-
-          if (Object.keys(userMatches).length === cleanPairs.length && btnConfirm) {
-            btnConfirm.disabled = false;
-          }
-        });
-      });
-
-      btnConfirm?.addEventListener("click", async () => {
-        btnConfirm.disabled = true;
-        let allCorrect = true;
-        cleanPairs.forEach(([l, r]) => {
-          if (userMatches[l] !== r) allCorrect = false;
-        });
-        await submitInteractiveResult(allCorrect);
-      }, { once: true });
-    }
-
-  // الأسئلة النصية العادية
-  } else {
-    stageInteractiveArea.innerHTML = `
-      <div style="text-align: center; padding: 20px;">
-        <p style="font-size: 18px; font-weight: 800; color: #1e293b;">${escapeHtml(q.text || '')}</p>
-        <button type="button" id="btnSubmitInteractiveSimple" class="btn-duo-green" style="padding: 12px 32px; font-size: 16px;">
-          <i class="fa-solid fa-check"></i> تأكيد وإرسال الإجابة
-        </button>
-      </div>
-      <div id="interactiveAnswerFeedbackNotice" class="hidden" style="margin-top: 14px; text-align: center; padding: 10px 18px; background: #f0fdf4; border: 2px solid #86efac; border-radius: 14px; color: #166534; font-weight: 800; font-size: 14.5px;">
-        <i class="fa-solid fa-circle-check" style="color: #22c55e;"></i> تم تسجيل إجابتك بنجاح!
-      </div>
-    `;
-    document.getElementById("btnSubmitInteractiveSimple")?.addEventListener("click", async () => {
-      await submitInteractiveResult(true);
-    }, { once: true });
+    });
   }
 }
 

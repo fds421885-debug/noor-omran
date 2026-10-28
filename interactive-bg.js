@@ -110,12 +110,41 @@
   };
 
   window.stopInteractiveBackground = function () {
-    document.body.classList.remove("interactive-theme-purple", "interactive-theme-orange", "interactive-theme-green");
+    document.body.classList.remove(
+      "interactive-theme-purple",
+      "interactive-theme-orange",
+      "interactive-theme-green",
+      "theme-purple",
+      "theme-orange",
+      "theme-green"
+    );
+    document.body.style.removeProperty("background");
+    document.body.style.removeProperty("color");
+    const mainContent = document.querySelector(".main-content");
+    if (mainContent) {
+      mainContent.style.removeProperty("background");
+      mainContent.style.removeProperty("color");
+    }
+    const arenaSection = document.getElementById("liveArenaSection");
+    if (arenaSection) {
+      arenaSection.classList.remove(
+        "interactive-theme-purple",
+        "interactive-theme-orange",
+        "interactive-theme-green",
+        "theme-purple",
+        "theme-orange",
+        "theme-green"
+      );
+      arenaSection.style.removeProperty("background");
+      arenaSection.style.removeProperty("color");
+    }
     isRunning = false;
     if (animationFrameId) {
       cancelAnimationFrame(animationFrameId);
       animationFrameId = null;
     }
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (ctx && canvas) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
   };
 })();

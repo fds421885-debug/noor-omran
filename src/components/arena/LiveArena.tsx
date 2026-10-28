@@ -386,16 +386,16 @@ export const LiveArena: React.FC = () => {
         } else {
           // انتهت البطولة بالكامل! إعلان الفائز وحفل التتويج
           const sortedTeams = [...(activeRoom.teams || [])].sort((a, b) => (b.score || 0) - (a.score || 0));
-          const winner = sortedTeams[0] || { name: "الفريق الفائز", score: 0 };
-          const runnerUp = sortedTeams[1] || { name: "الوصيف", score: 0 };
+          const winner = sortedTeams[0];
+          const runnerUp = sortedTeams[1];
 
           const archiveItem = {
             id: `tour_${Date.now()}`,
             roomTitle: activeRoom.title,
             supervisorName: activeRoom.leaderName,
             archivedAt: new Date().toISOString(),
-            winnerTeam: { name: winner.name, score: winner.score, members: winner.members?.map(m => m.name) },
-            runnerUpTeam: { name: runnerUp.name, score: runnerUp.score, members: runnerUp.members?.map(m => m.name) },
+            winnerTeam: { name: winner?.name || "الفريق الفائز", score: winner?.score || 0, members: winner?.members ? winner.members.map(m => m.name) : [] },
+            runnerUpTeam: { name: runnerUp?.name || "الوصيف", score: runnerUp?.score || 0, members: runnerUp?.members ? runnerUp.members.map(m => m.name) : [] },
             standings: sortedTeams.map((t, idx) => ({ rank: idx + 1, name: t.name, score: t.score })),
             teamsCount: sortedTeams.length,
             roundsCount: 4

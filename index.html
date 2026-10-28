@@ -948,6 +948,40 @@
           </div>
         </div>
 
+        <!-- لوحة الصدارة والسباق المباشر للمشرف (Supervisor Wide Live Race Board) -->
+        <div id="supervisorLiveRaceMonitor" class="supervisor-live-race-container hidden">
+          <div class="supervisor-race-header-bar">
+            <div class="supervisor-race-title-group">
+              <h2>
+                <i class="fa-solid fa-flag-checkered"></i>
+                <span id="supervisorRaceRoomTitle">سباق مسابقة نور البيان المباشر</span>
+              </h2>
+              <p>شاشة عريضة لمتابعة تقدم كل طالب في الأسئلة والمراكز والنقاط لحظياً بدون تحديث الصفحة</p>
+            </div>
+            <div class="supervisor-race-stats-flex">
+              <div class="supervisor-race-stat-pill">
+                <i class="fa-solid fa-users" style="color: #60a5fa;"></i>
+                <span>المتسابقون: <strong id="supervisorRaceActiveCount">0</strong></span>
+              </div>
+              <div class="supervisor-race-stat-pill">
+                <i class="fa-solid fa-circle-check" style="color: #4ade80;"></i>
+                <span>أنهوا السباق: <strong id="supervisorRaceCompletedCount">0</strong></span>
+              </div>
+              <button type="button" id="btnToggleRaceFullScreen" class="btn-duo-outline btn-sm" style="border-color: #94a3b8; color: #ffffff; background: rgba(255,255,255,0.08);" title="ملء الشاشة">
+                <i class="fa-solid fa-expand"></i> <span>شاشة كاملة</span>
+              </button>
+              <button type="button" id="btnEndRaceFromSupervisor" class="btn-duo-green btn-sm" style="box-shadow: 0 4px 14px rgba(34,197,94,0.3);">
+                <i class="fa-solid fa-trophy"></i> <span>تتويج الأبطال وإنهاء السباق</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- قائمة سباق الطلاب المباشر ذات الأشرطة التفاعلية والأنيميشن -->
+          <div id="supervisorLiveRaceCardsList" class="supervisor-race-cards-list">
+            <!-- تُبنى ديناميكياً بأشرطة التقدم والتصنيف اللحظي لكل طالب -->
+          </div>
+        </div>
+
         <!-- ═══ المرحلة أ: اختيار المتسابق ═══ -->
         <div id="arenaPhaseStudentSelect" class="arena-phase-card hidden">
           <!-- ما يراه المشرف -->
@@ -1129,6 +1163,30 @@
                 </div>
                 <div class="result-badge-title" id="resultOverlayTitle">إجابة صحيحة ومتقنة!</div>
                 <div class="result-badge-points" id="resultOverlayPoints">+5 نقاط</div>
+              </div>
+            </div>
+
+            <!-- شريط تقدم السباق الخاص بالطالب -->
+            <div id="studentPersonalRaceBanner" class="student-personal-race-banner hidden">
+              <div class="student-personal-race-header">
+                <div style="display:flex;align-items:center;gap:10px;">
+                  <span id="studentRaceRoundBadge" class="interactive-speed-bonus-pill">
+                    <i class="fa-solid fa-bolt"></i> <span id="studentRaceRoundTitle">جولة السرعة</span>
+                  </span>
+                  <span id="studentRaceQProgressText" style="font-size:13.5px;font-weight:900;color:#1e293b;">
+                    السؤال 1 من 10
+                  </span>
+                </div>
+                <div style="display:flex;align-items:center;gap:10px;">
+                  <span id="studentRaceScoreText" style="font-size:14.5px;font-weight:900;color:#047857;background:#dcfce7;border:1.5px solid #86efac;padding:3px 10px;border-radius:10px;">
+                    ⭐ 0 نقطة
+                  </span>
+                </div>
+              </div>
+              <div class="race-progress-track">
+                <div class="race-progress-fill" id="studentRaceProgressFill" style="width: 0%;">
+                  <div class="race-runner-icon">🏃</div>
+                </div>
               </div>
             </div>
 
@@ -2517,6 +2575,46 @@
         </span>
         <button type="button" id="btnInteractiveNextQuestion" class="btn-duo-yellow" style="font-size: 15px; font-weight: 900; padding: 10px 24px; border-radius: 14px;">
           <span>السؤال التالي</span> <i class="fa-solid fa-forward-step" style="margin-right: 6px;"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- مودال إتمام السباق وتوديع الطالب الزائر -->
+  <div id="studentRaceFinishModal" class="modal-overlay hidden" style="z-index: 10025;">
+    <div class="duo-modal-box" style="max-width: 580px; text-align: center; padding: 26px 20px;">
+      <div style="width: 80px; height: 80px; margin: 0 auto 16px; border-radius: 50%; background: #fef08a; border: 4px solid #facc15; display: flex; align-items: center; justify-content: center; font-size: 38px; color: #854d0e; box-shadow: 0 10px 25px rgba(234, 179, 8, 0.35);">
+        <i class="fa-solid fa-trophy"></i>
+      </div>
+      <h2 style="font-size: 24px; font-weight: 900; color: #0f172a; margin-bottom: 8px;">
+        ألف مبارك يا بطل! أتممت جميع أسئلة الاختبار 🏆
+      </h2>
+      <p style="font-size: 14.5px; color: #64748b; font-weight: 700; margin-bottom: 20px;">
+        تم تسجيل جميع إجاباتك بنجاح وتوثيق نتيجتك المشرفة في لوحة صدارة المسابقة.
+      </p>
+
+      <div style="background: #f8fafc; border: 2.5px solid #e2e8f0; border-radius: 18px; padding: 18px; margin-bottom: 22px; display: flex; justify-content: space-around; align-items: center; flex-wrap: wrap; gap: 12px;">
+        <div>
+          <div style="font-size: 12px; color: #64748b; font-weight: 800;">رصيدك الإجمالي</div>
+          <div id="finishStudentFinalScore" style="font-size: 24px; font-weight: 900; color: #16a34a;">0 نقطة</div>
+        </div>
+        <div>
+          <div style="font-size: 12px; color: #64748b; font-weight: 800;">بونص السرعة</div>
+          <div id="finishStudentSpeedBonuses" style="font-size: 24px; font-weight: 900; color: #eab308;">⚡ 0</div>
+        </div>
+        <div>
+          <div style="font-size: 12px; color: #64748b; font-weight: 800;">المركز في السباق</div>
+          <div id="finishStudentFinalRank" style="font-size: 24px; font-weight: 900; color: #2563eb;">🥇 الأول</div>
+        </div>
+      </div>
+
+      <div style="background: #f0fdf4; border: 2px dashed #86efac; border-radius: 14px; padding: 12px; font-size: 13.5px; color: #166534; font-weight: 800; margin-bottom: 22px;">
+        <i class="fa-solid fa-circle-check"></i> شكراً لمشاركتك المتميزة! سيتم الآن إنهاء جلستك وإعادتك للرئيسية لتبقى المنصة مهيأة للمتسابق القادم.
+      </div>
+
+      <div style="display: flex; justify-content: center; gap: 12px;">
+        <button type="button" id="btnStudentFinishAndExit" class="btn-duo-green" style="font-size: 16px; font-weight: 900; padding: 12px 32px; border-radius: 16px; box-shadow: 0 4px 14px rgba(34, 197, 94, 0.4);">
+          <i class="fa-solid fa-arrow-right-from-bracket"></i> إنهاء ومغادرة الموقع
         </button>
       </div>
     </div>
