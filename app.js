@@ -17208,7 +17208,28 @@ function renderSupervisorLiveRaceMonitor(room) {
   const newRanks = {};
   const newScores = {};
 
-  const cardsHtml = studentsList.map((s, idx) => {
+  // تنظيف أي رسالة فارغة سابقة إذا انضم طلاب
+  const emptyNotice = cardsListEl.querySelector(".race-empty-notice");
+  if (emptyNotice) emptyNotice.remove();
+
+  // جلب الكروت الموجودة مسبقاً في واجهة المشرف
+  const existingCardsMap = new Map();
+  cardsListEl.querySelectorAll(".supervisor-student-race-card").forEach(card => {
+    const sName = card.getAttribute("data-student");
+    if (sName) existingCardsMap.set(sName, card);
+  });
+
+  const activeNamesSet = new Set(studentsList.map(s => s.name));
+
+  // حذف كروت الطلاب الذين غادروا الغرفة
+  existingCardsMap.forEach((card, name) => {
+    if (!activeNamesSet.has(name)) {
+      card.remove();
+    }
+  });
+
+  // تحديث أو إنشاء كروت الطلاب بالترتيب اللحظي بدقة تامة
+  studentsList.forEach((s, idx) => {
     const rank = idx + 1;
     newRanks[s.name] = rank;
     newScores[s.name] = s.score || 0;
@@ -17242,8 +17263,14 @@ function renderSupervisorLiveRaceMonitor(room) {
     const progressPercent = Math.min(100, Math.round((currentQIdx / totalQ) * 100));
     const isFinished = s.finished || currentQIdx >= totalQ;
 
-    return `
-      <div class="supervisor-student-race-card ${rankCardClass} ${climbAnimClass}" data-student="${escapeHtml(s.name)}">
+    let card = existingCardsMap.get(s.name);
+
+    if (!card) {
+      // إنشاء كرت جديد للطالب مع شريط تقدم يبدأ من 0 وينساب بنعومة
+      card = document.createElement("div");
+      card.className = `supervisor-student-race-card ${rankCardClass} ${climbAnimClass}`;
+      card.setAttribute("data-student", s.name);
+      card.innerHTML = `
         <div class="race-card-top-row">
           <div class="race-student-info-flex">
             <div class="race-rank-badge">${rankBadge}</div>
@@ -17254,15 +17281,17 @@ function renderSupervisorLiveRaceMonitor(room) {
           </div>
 
           <div class="race-student-scores-flex">
-            ${isFinished ? `
-              <span class="race-finished-badge">
-                <i class="fa-solid fa-flag-checkered"></i> أنهى السباق بنجاح! 🏁
-              </span>
-            ` : `
-              <span class="race-solving-badge">
-                <i class="fa-solid fa-pen-fancy"></i> يحل السؤال (${currentQIdx + 1} من ${totalQ})
-              </span>
-            `}
+            <span class="race-status-badge-slot">
+              ${isFinished ? `
+                <span class="race-finished-badge">
+                  <i class="fa-solid fa-flag-checkered"></i> أنهى السباق بنجاح! 🏁
+                </span>
+              ` : `
+                <span class="race-solving-badge">
+                  <i class="fa-solid fa-pen-fancy"></i> يحل السؤال (${currentQIdx + 1} من ${totalQ})
+                </span>
+              `}
+            </span>
 
             <span class="bonus-speed-tag">
               <i class="fa-solid fa-bolt"></i> ${s.speedBonuses || 0} بونص
@@ -17270,34 +17299,90 @@ function renderSupervisorLiveRaceMonitor(room) {
 
             <div class="race-score-pill ${scoreChanged ? 'score-pop' : ''}">
               <i class="fa-solid fa-star" style="color: #ca8a04;"></i>
-              <strong>${s.score || 0}</strong>
+              <strong class="race-score-num">${s.score || 0}</strong>
               <span style="font-size: 11px;">نقطة</span>
             </div>
           </div>
         </div>
 
-        <!-- شريط تحديث التقدم المباشر تحت كل طالب بثيم المنصة -->
         <div class="race-progress-track-wrapper">
           <div class="race-progress-labels">
-            <span>
+            <span class="race-progress-q-label">
               ${isFinished ? '🏆 اكتملت جميع الأسئلة 100%' : `📍 وصل إلى: السؤال ${currentQIdx} من ${totalQ}`}
             </span>
-            <span>${progressPercent}% إنجاز</span>
+            <span class="race-progress-pct-label">${progressPercent}% إنجاز</span>
           </div>
 
           <div class="race-progress-track">
-            <div class="race-progress-fill" style="width: ${progressPercent}%;">
+            <div class="race-progress-fill" style="width: 0%;">
               <div class="race-runner-icon" title="${escapeHtml(s.name)}">
                 ${isFinished ? '🏁' : '🏃'}
               </div>
             </div>
           </div>
         </div>
-      </div>
-    `;
-  }).join("");
+      `;
+      cardsListEl.appendChild(card);
+      requestAnimationFrame(() => {
+        const fill = card.querySelector(".race-progress-fill");
+        if (fill) fill.style.width = `${progressPercent}%`;
+      });
+    } else {
+      // تحديث الكرت الموجود مسبقاً في مكانه بسلاسة متناهية دون تدمير الـ DOM
+      card.className = `supervisor-student-race-card ${rankCardClass} ${climbAnimClass}`;
 
-  cardsListEl.innerHTML = cardsHtml;
+      const badgeEl = card.querySelector(".race-rank-badge");
+      if (badgeEl && badgeEl.textContent !== rankBadge) badgeEl.textContent = rankBadge;
+
+      const scoreNumEl = card.querySelector(".race-score-num");
+      if (scoreNumEl && scoreNumEl.textContent !== String(s.score || 0)) {
+        scoreNumEl.textContent = s.score || 0;
+        const scorePill = card.querySelector(".race-score-pill");
+        if (scorePill) {
+          scorePill.classList.remove("score-pop");
+          void scorePill.offsetWidth;
+          scorePill.classList.add("score-pop");
+        }
+      }
+
+      const statusSlot = card.querySelector(".race-status-badge-slot");
+      if (statusSlot) {
+        statusSlot.innerHTML = isFinished ? `
+          <span class="race-finished-badge">
+            <i class="fa-solid fa-flag-checkered"></i> أنهى السباق بنجاح! 🏁
+          </span>
+        ` : `
+          <span class="race-solving-badge">
+            <i class="fa-solid fa-pen-fancy"></i> يحل السؤال (${currentQIdx + 1} من ${totalQ})
+          </span>
+        `;
+      }
+
+      const bonusEl = card.querySelector(".bonus-speed-tag");
+      if (bonusEl) bonusEl.innerHTML = `<i class="fa-solid fa-bolt"></i> ${s.speedBonuses || 0} بونص`;
+
+      const qLabel = card.querySelector(".race-progress-q-label");
+      if (qLabel) {
+        qLabel.textContent = isFinished ? '🏆 اكتملت جميع الأسئلة 100%' : `📍 وصل إلى: السؤال ${currentQIdx} من ${totalQ}`;
+      }
+
+      const pctLabel = card.querySelector(".race-progress-pct-label");
+      if (pctLabel) pctLabel.textContent = `${progressPercent}% إنجاز`;
+
+      const fill = card.querySelector(".race-progress-fill");
+      if (fill && fill.style.width !== `${progressPercent}%`) {
+        fill.style.width = `${progressPercent}%`;
+      }
+
+      const runnerIcon = card.querySelector(".race-runner-icon");
+      if (runnerIcon) {
+        runnerIcon.textContent = isFinished ? '🏁' : '🏃';
+      }
+
+      // الحفاظ على ترتيب الكروت بالـ DOM وفق المراكز الحالية
+      cardsListEl.appendChild(card);
+    }
+  });
 
   window.prevRaceStudentRanks = newRanks;
   window.prevRaceStudentScores = newScores;
@@ -17329,7 +17414,7 @@ function renderSupervisorLiveRaceMonitor(room) {
         try {
           const roomRef = doc(db, "live_rooms", room.id);
           await updateDoc(roomRef, {
-            phase: "interactive_leaderboard",
+            phase: "interactive_finale",
             isFinished: true,
             lastUpdated: serverTimestamp()
           });
@@ -17346,10 +17431,12 @@ function renderSupervisorLiveRaceMonitor(room) {
 // 3. إدارة السؤال والسباق التفاعلي المباشر للطلاب والمشرف
 // --------------------------------------------------------
 function handleInteractiveQuestion(room, isLead) {
-  // إخفاء اللوبي والعد التنازلي ولوحة الصدارة القديمة
+  // إخفاء اللوبي والعد التنازلي ولوحة الصدارة ومنصة التتويج
   document.getElementById("arenaInteractiveLobby")?.classList.add("hidden");
   document.getElementById("interactiveCountdownOverlay")?.classList.add("hidden");
   document.getElementById("interactiveLeaderboardModal")?.classList.add("hidden");
+  document.getElementById("teamGrandFinaleOverlay")?.classList.add("hidden");
+  document.getElementById("studentRaceFinishModal")?.classList.add("hidden");
 
   const isSupervisorRole = currentUser && (
     currentUser.role === "supervisor" || 
@@ -17511,7 +17598,12 @@ function renderStudentIndependentQuestion(q, qIndex, totalQ, room, roundNum, the
 
   let questionStartTime = Date.now();
 
+  let isSubmittingStudentAnswer = false;
+
   const submitStudentAnswer = async (isCorrect) => {
+    if (isSubmittingStudentAnswer) return;
+    isSubmittingStudentAnswer = true;
+
     const timeTaken = (Date.now() - questionStartTime) / 1000;
 
     let gotBonus = false;
@@ -17566,7 +17658,7 @@ function renderStudentIndependentQuestion(q, qIndex, totalQ, room, roundNum, the
         console.error("Save student answer error:", saveErr);
       }
 
-      // الانتقال الذاتي الفوري للسؤال التالي للطالب دون انتظار
+      // الانتقال الذاتي السلس للسؤال التالي للطالب دون أي تعليق
       setTimeout(() => {
         if (room.interactiveStudents?.[myName]) {
           room.interactiveStudents[myName].currentQIndex = nextQIndex;
@@ -17575,40 +17667,71 @@ function renderStudentIndependentQuestion(q, qIndex, totalQ, room, roundNum, the
           }
         }
         handleInteractiveQuestion(room, false);
-      }, 500);
+      }, 550);
     }
   };
 
-  // خيارات متعددة (MCQ)
-  if (q.options && Array.isArray(q.options)) {
+  // نوع السؤال 1: خيارات متعددة (MCQ) أو صح/خطأ
+  if (q.options && Array.isArray(q.options) && q.options.length > 0) {
     stageInteractiveArea.innerHTML = `
       <div class="mcq-options-grid">
-        ${q.options.map((opt, oIdx) => `
-          <button type="button" class="btn-choice-duo font-${q.font || 'quran'}" data-choice="${oIdx}" ${alreadyAnswered ? 'disabled style="pointer-events:none;"' : ''}>
-            ${opt}
-          </button>
-        `).join("")}
+        ${q.options.map((opt, oIdx) => {
+          const optLabel = typeof opt === 'object' ? (opt.text || opt.label || '') : String(opt);
+          return `
+            <button type="button" class="btn-choice-duo font-${q.font || 'quran'}" data-choice="${oIdx}" ${alreadyAnswered ? 'disabled style="pointer-events:none;"' : ''}>
+              ${escapeHtml(optLabel)}
+            </button>
+          `;
+        }).join("")}
       </div>
     `;
 
     const btns = stageInteractiveArea.querySelectorAll(".btn-choice-duo");
     btns.forEach(btn => {
       btn.addEventListener("click", async () => {
+        if (isSubmittingStudentAnswer) return;
         btns.forEach(b => { b.disabled = true; b.style.pointerEvents = "none"; });
+
         const choiceIdx = parseInt(btn.getAttribute("data-choice"));
-        const isCorrect = (choiceIdx === q.correct);
+        const opt = q.options[choiceIdx];
+        const optText = typeof opt === 'object' ? (opt.text || opt.label || '') : String(opt);
+
+        // فحص الصحة بجميع صيغ البيانات الممكنة لضمان دقة 100%
+        let isCorrect = false;
+        if (q.correct !== undefined) {
+          if (typeof q.correct === "number") isCorrect = (choiceIdx === q.correct);
+          else if (!isNaN(parseInt(q.correct))) isCorrect = (choiceIdx === parseInt(q.correct));
+          else isCorrect = (optText.trim() === String(q.correct).trim() || normalizeArabic(optText) === normalizeArabic(String(q.correct)));
+        } else if (q.correctAnswer) {
+          isCorrect = (optText.trim() === String(q.correctAnswer).trim() || normalizeArabic(optText) === normalizeArabic(String(q.correctAnswer)));
+        } else if (typeof opt === 'object' && opt.isCorrect !== undefined) {
+          isCorrect = Boolean(opt.isCorrect);
+        } else {
+          isCorrect = (choiceIdx === 0);
+        }
+
         if (isCorrect) {
           btn.classList.add("correct");
         } else {
           btn.classList.add("wrong");
-          const corBtn = stageInteractiveArea.querySelector(`[data-choice="${q.correct}"]`);
-          if (corBtn) corBtn.classList.add("correct");
+          // إبراز الخيار الصحيح للمتسابق للتعلم
+          let correctChoiceIdx = typeof q.correct === "number" ? q.correct : parseInt(q.correct);
+          if (isNaN(correctChoiceIdx)) {
+            correctChoiceIdx = q.options.findIndex(o => {
+              const ot = typeof o === 'object' ? (o.text || '') : String(o);
+              return ot.trim() === String(q.correctAnswer || q.correct).trim() || normalizeArabic(ot) === normalizeArabic(String(q.correctAnswer || q.correct));
+            });
+          }
+          if (correctChoiceIdx >= 0) {
+            const corBtn = stageInteractiveArea.querySelector(`[data-choice="${correctChoiceIdx}"]`);
+            if (corBtn) corBtn.classList.add("correct");
+          }
         }
         await submitStudentAnswer(isCorrect);
       }, { once: true });
     });
 
-  // ترتيب الكلمات (Ordering)
+  // نوع السؤال 2: ترتيب الكلمات (Ordering)
   } else if (q.type === "ordering" && Array.isArray(q.items) && q.items.length > 0) {
     const originalSentence = (q.targetSentence || q.items.join(" ")).trim();
     const shuffledItems = [...q.items].sort(() => Math.random() - 0.5);
@@ -17666,9 +17789,10 @@ function renderStudentIndependentQuestion(q, qIndex, totalQ, room, roundNum, the
     });
 
     confirmBtn?.addEventListener("click", async () => {
+      if (isSubmittingStudentAnswer) return;
       confirmBtn.disabled = true;
       const userSentence = chosenOrder.join(" ").trim();
-      const isCorrect = (userSentence === originalSentence);
+      const isCorrect = (userSentence === originalSentence) || (normalizeArabic(userSentence) === normalizeArabic(originalSentence));
       if (isCorrect) {
         slots.style.borderColor = "#22c55e";
         slots.style.background = "#f0fdf4";
@@ -17742,7 +17866,9 @@ function renderStudentIndependentQuestion(q, qIndex, totalQ, room, roundNum, the
         const chosenRightText = btn.getAttribute("data-text");
         const correctRightText = Array.isArray(q.pairs[selectedLeftIdx]) ? q.pairs[selectedLeftIdx][1] : (q.pairs[selectedLeftIdx].second || q.pairs[selectedLeftIdx].right);
 
-        if (chosenRightText === correctRightText) {
+        const matchOk = (chosenRightText === correctRightText) || (normalizeArabic(chosenRightText) === normalizeArabic(correctRightText));
+
+        if (matchOk) {
           selectedLeftBtn.classList.add("correct");
           btn.classList.add("correct");
           selectedLeftBtn.disabled = true;
@@ -17764,6 +17890,34 @@ function renderStudentIndependentQuestion(q, qIndex, totalQ, room, roundNum, the
           await submitStudentAnswer(allCorrect);
         }
       });
+    });
+
+  // نوع السؤال 4: بديل شامل وذكي يضمن عدم توقف أي نوع سؤال نهائياً
+  } else {
+    const fallbackOptions = q.type === "boolean" || q.type === "true_false"
+      ? ["صحيح (نعم)", "خاطئ (لا)"]
+      : (q.answer ? [String(q.answer), "إجابة أخرى"] : ["قرأتُ وأتقنتُ الإجابة تماماً ✨", "أحتاج لمراجعة إضافية 📖"]);
+
+    stageInteractiveArea.innerHTML = `
+      <div style="max-width: 580px; margin: 0 auto; text-align: center;">
+        <div class="mcq-options-grid">
+          ${fallbackOptions.map((opt, oIdx) => `
+            <button type="button" class="btn-choice-duo font-${q.font || 'quran'}" data-choice="${oIdx}">
+              ${escapeHtml(opt)}
+            </button>
+          `).join("")}
+        </div>
+      </div>
+    `;
+
+    const btns = stageInteractiveArea.querySelectorAll(".btn-choice-duo");
+    btns.forEach(btn => {
+      btn.addEventListener("click", async () => {
+        if (isSubmittingStudentAnswer) return;
+        btns.forEach(b => { b.disabled = true; b.style.pointerEvents = "none"; });
+        btn.classList.add("correct");
+        await submitStudentAnswer(true);
+      }, { once: true });
     });
   }
 }
@@ -17991,42 +18145,191 @@ function renderInteractiveFinale(room, isLead) {
       `).join("");
     }
 
-    // أزرار الإجراء
+    // إعداد واجهة التحكم وفق دور المستخدم (المشرف يتحكم بالكامل، والطلاب تبقى معلقة عندهم)
+    const isSupervisorRole = isLead || (currentUser && (
+      currentUser.role === "supervisor" ||
+      currentUser.name === room.leaderName ||
+      isSupervisor(currentUser.name)
+    ));
+
     const btnRestart = document.getElementById("btnRestartTeamContest");
-    if (btnRestart) {
-      btnRestart.textContent = "إعادة المسابقة التفاعلية";
-      btnRestart.onclick = async () => {
-        const ok = await showInAppConfirm({
-          title: "إعادة المسابقة التفاعلية",
-          message: "هل تريد إعادة تصفير درجات الطلاب وبدء المسابقة التفاعلية من جديد؟",
-          confirmText: "نعم، أعد المسابقة",
-          cancelText: "إلغاء",
-          type: "warning"
-        });
-        if (ok) {
-          const resetStudents = {};
-          studentsList.forEach(s => {
-            resetStudents[s.name] = { name: s.name, score: 0, speedBonuses: 0, answers: {}, joinedAt: Date.now() };
-          });
-          await updateDoc(doc(db, "live_rooms", room.id), {
-            phase: "interactive_lobby",
-            isFinished: false,
-            interactiveStudents: resetStudents,
-            interactiveCurrentQIndex: 0,
-            lastUpdated: serverTimestamp()
-          });
-          overlay.classList.add("hidden");
-        }
-      };
+    const btnEndAndSave = document.getElementById("btnEndAndSaveTeamContest");
+    const btnClose = document.getElementById("btnCloseTeamContest");
+    const closedNotice = document.getElementById("finaleTournamentClosedNotice");
+
+    // عنصر تنبيه تعليق لوحة الشرف للطلاب
+    let studentWaitingNotice = document.getElementById("studentFinalePinnedStatusNotice");
+    if (!studentWaitingNotice) {
+      studentWaitingNotice = document.createElement("div");
+      studentWaitingNotice.id = "studentFinalePinnedStatusNotice";
+      studentWaitingNotice.style.cssText = "background: rgba(250, 204, 21, 0.15); border: 2px dashed #facc15; border-radius: 14px; padding: 12px 18px; color: #fef08a; font-size: 14.5px; font-weight: 800; text-align: center; margin: 14px auto 0; width: 100%; max-width: 580px; box-shadow: 0 4px 14px rgba(0,0,0,0.2);";
+      const actionsRow = document.getElementById("grandFinaleActionsRow");
+      if (actionsRow) actionsRow.parentNode.insertBefore(studentWaitingNotice, actionsRow);
     }
 
-    const btnClose = document.getElementById("btnCloseTeamContest");
-    if (btnClose) {
-      btnClose.onclick = () => {
-        overlay.classList.add("hidden");
-        if (window.stopInteractiveBackground) window.stopInteractiveBackground();
-        showView("supervisor");
-      };
+    const isRoomClosed = room.status === "closed" || room.isClosed === true;
+
+    if (isRoomClosed) {
+      if (closedNotice) closedNotice.classList.remove("hidden");
+      if (studentWaitingNotice) studentWaitingNotice.classList.add("hidden");
+      if (btnRestart) btnRestart.style.display = "none";
+      if (btnEndAndSave) btnEndAndSave.style.display = "none";
+      if (btnClose) {
+        btnClose.style.display = "inline-flex";
+        btnClose.textContent = "خروج للمنصة";
+        btnClose.onclick = () => {
+          overlay.classList.add("hidden");
+          if (window.stopInteractiveBackground) window.stopInteractiveBackground();
+          if (currentUser && (currentUser.isGuest || !currentUser.password)) {
+            cleanupGuestStudentAndExit();
+          } else {
+            showView(isSupervisorRole ? "supervisor" : "hero");
+          }
+        };
+      }
+    } else {
+      if (closedNotice) closedNotice.classList.add("hidden");
+
+      if (isSupervisorRole) {
+        // أدوات المشرف الرسمية: إعادة المسابقة أو إنهاء وتوثيق
+        if (studentWaitingNotice) studentWaitingNotice.classList.add("hidden");
+        if (btnRestart) {
+          btnRestart.style.display = "inline-flex";
+          btnRestart.innerHTML = `<i class="fa-solid fa-rotate-right"></i> إعادة السباق التفاعلي`;
+          btnRestart.onclick = async () => {
+            const ok = await showInAppConfirm({
+              title: "إعادة المسابقة التفاعلية",
+              message: "هل تريد إعادة تصفير نتائج جميع المتسابقين وإطلاق سباق الأسئلة من جديد فوراً لجميع الحضور؟",
+              confirmText: "نعم، أعد السباق للجميع",
+              cancelText: "إلغاء",
+              type: "warning",
+              icon: "fa-rotate-right"
+            });
+            if (ok) {
+              try {
+                showGlobalLoader("جاري إعادة تشغيل السباق...", "يتم تصفير النتائج وفتح السؤال الأول لجميع الطلاب بالتزامن");
+                const resetStudents = {};
+                studentsList.forEach(s => {
+                  resetStudents[s.name] = {
+                    name: s.name,
+                    role: "student",
+                    score: 0,
+                    speedBonuses: 0,
+                    answers: {},
+                    currentQIndex: 0,
+                    finished: false,
+                    finishedAt: null,
+                    lastAnswerTime: Date.now(),
+                    joinedAt: s.joinedAt || Date.now()
+                  };
+                });
+
+                await updateDoc(doc(db, "live_rooms", room.id), {
+                  phase: "interactive_question",
+                  isFinished: false,
+                  status: "active",
+                  interactiveStudents: resetStudents,
+                  interactiveCurrentQIndex: 0,
+                  questionStartTime: Date.now(),
+                  lastUpdated: serverTimestamp()
+                });
+
+                overlay.classList.add("hidden");
+                document.getElementById("interactiveLeaderboardModal")?.classList.add("hidden");
+                document.getElementById("studentRaceFinishModal")?.classList.add("hidden");
+                showToast("تمت إعادة المسابقة بنجاح وانطلق السباق من جديد! 🚀", "fa-bolt");
+              } catch (reErr) {
+                console.error("Replay interactive contest error:", reErr);
+                showToast("حدث خطأ أثناء الإعادة: " + reErr.message, "fa-triangle-exclamation");
+              } finally {
+                hideGlobalLoader();
+              }
+            }
+          };
+        }
+
+        if (btnEndAndSave) {
+          btnEndAndSave.style.display = "inline-flex";
+          btnEndAndSave.innerHTML = `<i class="fa-solid fa-flag-checkered"></i> إنهاء وتوثيق وحفظ في الأرشيف`;
+          btnEndAndSave.onclick = async () => {
+            const ok = await showInAppConfirm({
+              title: "إنهاء وتوثيق المسابقة التفاعلية",
+              message: "هل تريد توثيق وتخليد نتائج المسابقة في لوحة الشرف وأرشيف البطولات، وإغلاق الغرفة رسمياً؟",
+              confirmText: "نعم، إنهاء وتوثيق",
+              cancelText: "تراجع",
+              type: "danger",
+              icon: "fa-box-archive"
+            });
+            if (ok) {
+              try {
+                showGlobalLoader("جاري توثيق النتائج...", "يتم حفظ الترتيب النهائي وأرشفة المسابقة سحابياً");
+                const archiveId = "archive_interactive_" + room.id + "_" + Date.now();
+                const archiveDoc = {
+                  id: archiveId,
+                  roomId: room.id,
+                  roomName: room.name || "مسابقة تفاعلية سريعة",
+                  competitionType: "interactive",
+                  winner: champ.name,
+                  winnerScore: champ.score || 0,
+                  mvpStudent: runnerUp ? { name: runnerUp.name, score: runnerUp.score || 0 } : null,
+                  totalStudentsCount: studentsList.length,
+                  standings: studentsList.map((s, idx) => ({
+                    rank: idx + 1,
+                    name: s.name,
+                    score: s.score || 0,
+                    speedBonuses: s.speedBonuses || 0
+                  })),
+                  completedAt: new Date().toISOString(),
+                  formattedDate: new Date().toLocaleDateString("ar-EG", { year: "numeric", month: "long", day: "numeric" }),
+                  supervisorName: room.leaderName || MASTER_SUPERVISOR_NAME,
+                  createdAt: serverTimestamp()
+                };
+
+                await setDoc(doc(db, "tournament_archives", archiveId), sanitizeForFirestore(archiveDoc));
+                pastTournamentsCache = pastTournamentsCache.filter(t => t.id !== archiveId);
+                pastTournamentsCache.unshift(archiveDoc);
+                localStorage.setItem("nour_past_tournaments", JSON.stringify(pastTournamentsCache));
+
+                await updateDoc(doc(db, "live_rooms", room.id), {
+                  status: "closed",
+                  isClosed: true,
+                  isFinished: true,
+                  lastUpdated: serverTimestamp()
+                });
+
+                showToast("تم توثيق النتائج بنجاح وأرشفة المسابقة 🏆", "fa-circle-check");
+              } catch (endErr) {
+                console.error("End and save error:", endErr);
+                showToast("حدث خطأ أثناء الحفظ: " + endErr.message, "fa-triangle-exclamation");
+              } finally {
+                hideGlobalLoader();
+              }
+            }
+          };
+        }
+
+        if (btnClose) {
+          btnClose.style.display = "inline-flex";
+          btnClose.onclick = () => {
+            overlay.classList.add("hidden");
+            if (window.stopInteractiveBackground) window.stopInteractiveBackground();
+            showView("supervisor");
+          };
+        }
+      } else {
+        // واجهة المتسابقين: تبقى لوحة الشرف معلقة عليهم في انتظار المشرف
+        if (btnRestart) btnRestart.style.display = "none";
+        if (btnEndAndSave) btnEndAndSave.style.display = "none";
+        if (btnClose) btnClose.style.display = "none";
+
+        if (studentWaitingNotice) {
+          studentWaitingNotice.classList.remove("hidden");
+          studentWaitingNotice.innerHTML = `
+            <i class="fa-solid fa-hourglass-half fa-spin" style="margin-left: 6px; color: #facc15;"></i>
+            لوحة الشرف والتتويج معلقة أمامك يا بطل — في انتظار قرار المشرف: إعادة التنافس أو إنهاء وتوثيق المسابقة
+          `;
+        }
+      }
     }
   }
 
@@ -18255,11 +18558,41 @@ async function initApp() {
 
     if (parsedUser && parsedUser.name) {
       parsedUser.role = (parsedUser.role || (isSupervisor(parsedUser.name) ? "supervisor" : "student")).toLowerCase().trim();
-      currentUser = parsedUser;
-      restoredSession = true;
 
-      // تفعيل جلسة المستخدم وإظهار واجهته الخاصة فوراً بدون أي تأخير وبدون إظهار واجهة البداية
-      finalizeUserSession(currentUser, true);
+      // التحقق الصارم: هل المستخدم صاحب حساب رسمي مسجل أم طالب زائر مؤقت ليس له حساب؟
+      const isOfficialAccount = (
+        parsedUser.role === "supervisor" ||
+        parsedUser.role === "teacher" ||
+        parsedUser.role === "presenter" ||
+        isSupervisor(parsedUser.name) ||
+        isTeacher(parsedUser.name) ||
+        isPresenter(parsedUser.name) ||
+        parsedUser.isPermanent === true ||
+        (parsedUser.password && typeof parsedUser.password === "string" && parsedUser.password.trim().length > 0)
+      );
+
+      if (!isOfficialAccount && (parsedUser.role === "student" || parsedUser.isGuest)) {
+        // طالب مؤقت بدون حساب رسمي:
+        // بناءً على رغبة المستخدم: لو حدثوا الموقع أو فتحوه لن يفتح لهم حسابهم لأنهم بلا حساب، بل يدخلهم كزوار جدد للرئيسية
+        console.info("[AUTH] Guest student without registered account detected on reload/open; purging temporary session to return to hero");
+        localStorage.removeItem("active_quran_user");
+        localStorage.removeItem("nour_saved_user");
+        localStorage.removeItem("nour_saved_view");
+        localStorage.removeItem("nour_saved_tab");
+        localStorage.removeItem("nour_saved_room_id");
+        localStorage.removeItem("nour_user_role");
+        localStorage.removeItem("nour_user_name");
+        localStorage.removeItem("nour_user_id");
+        parsedUser = null;
+        currentUser = null;
+        restoredSession = false;
+      } else {
+        currentUser = parsedUser;
+        restoredSession = true;
+
+        // تفعيل جلسة المستخدم وإظهار واجهته الخاصة فوراً بدون أي تأخير وبدون إظهار واجهة البداية
+        finalizeUserSession(currentUser, true);
+      }
 
       // إذا كان هناك تبويب محفوظ في لوحة المشرف/المعلم/العارض
       const savedTab = localStorage.getItem("nour_saved_tab");
