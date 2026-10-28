@@ -830,7 +830,7 @@
         </div>
 
         <!-- وضع الانتظار (Lobby) -->
-        <div id="arenaLobby" class="arena-lobby-card">
+        <div id="arenaLobby" class="arena-lobby-card hidden">
           <div class="lobby-header">
             <div class="lobby-icon"><i class="fa-solid fa-users-line"></i></div>
             <h2>غرفة انتظار المتسابقين والمعلمين</h2>
@@ -1071,7 +1071,7 @@
               </div>
 
               <!-- خانة محفظة البطاقات التكتيكية داخل البنر - موقع رئيسي لا يمكن أن يغطي على السؤال أبداً -->
-              <div id="contestantCardsWalletTrigger" class="contestant-cards-wallet-trigger" title="محفظة البطاقات التكتيكية للمتسابق — انقر لفتحها واستعراضها بتزامن كامل">
+              <div id="contestantCardsWalletTrigger" class="contestant-cards-wallet-trigger hidden" title="محفظة البطاقات التكتيكية للمتسابق — انقر لفتحها واستعراضها بتزامن كامل">
                 <div class="wallet-badge-red" id="walletBadgeCount">0</div>
                 <div class="wallet-card-inner">
                   <div class="wallet-card-icon">
@@ -1089,13 +1089,13 @@
           <!-- أدوات التحكم الخاصة بمشرف الغرفة -->
           <div class="supervisor-controls-panel" id="supervisorControlBar">
             <div class="ctrl-group">
-              <button id="btnNextStudentCycle" class="btn-duo-green btn-sm">
+              <button id="btnNextStudentCycle" class="btn-duo-green btn-sm hidden">
                 <i class="fa-solid fa-forward-step"></i> إنهاء والانتقال لمتسابق آخر
               </button>
-              <button id="btnTriggerTacticalCards" class="btn-duo-purple btn-sm" title="فتح البطاقات التكتيكية الـ 40 الآن للمتسابق">
+              <button id="btnTriggerTacticalCards" class="btn-duo-purple btn-sm hidden" title="فتح البطاقات التكتيكية الـ 40 الآن للمتسابق">
                 <i class="fa-solid fa-bolt"></i> البطاقات التكتيكية
               </button>
-              <button id="btnOpenWalletFromBar" class="btn-duo-yellow btn-sm" title="استعراض وفتح محفظة بطاقات المتسابق بتزامن كامل">
+              <button id="btnOpenWalletFromBar" class="btn-duo-yellow btn-sm hidden" title="استعراض وفتح محفظة بطاقات المتسابق بتزامن كامل">
                 <i class="fa-solid fa-layer-group"></i> محفظة البطاقات (<span id="walletBarCount">0</span>)
               </button>
               <button id="btnOpenRoomSettingsModal" class="btn-duo-yellow btn-sm" title="إعدادات الغرفة وصلاحيات الحل">

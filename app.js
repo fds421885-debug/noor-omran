@@ -47,6 +47,7 @@ import {
   onSnapshot,
   arrayUnion,
   arrayRemove,
+  deleteField,
   isQuotaExhausted,
   markQuotaExhausted
 } from "./firebase-config.js";
@@ -1816,12 +1817,34 @@ function updateArenaUIRealtime(room) {
 
   // توجيه مراحل المسابقة التفاعلية المباشرة (Interactive Online Flow)
   if (room.isInteractiveOnline) {
+    document.getElementById("arenaLobby")?.classList.add("hidden");
+    document.getElementById("arenaPhaseStudentSelect")?.classList.add("hidden");
+    document.getElementById("arenaPhaseQuestionDraw")?.classList.add("hidden");
+    document.getElementById("arenaTeamSelectionOverlay")?.classList.add("hidden");
+    document.getElementById("teamEntranceOverlay")?.classList.add("hidden");
+    document.getElementById("teamRoundBannerOverlay")?.classList.add("hidden");
+    document.getElementById("teamGrandFinaleOverlay")?.classList.add("hidden");
+    if (btnNextStudentCycle) btnNextStudentCycle.classList.add("hidden");
+    if (btnTriggerTacticalCards) btnTriggerTacticalCards.classList.add("hidden");
+    if (btnOpenWalletFromBar) btnOpenWalletFromBar.classList.add("hidden");
+    const walletTrig = document.getElementById("contestantCardsWalletTrigger");
+    if (walletTrig) walletTrig.classList.add("hidden");
+    document.getElementById("tacticalCardsModal")?.classList.add("hidden");
     syncInteractiveArenaRealtime(room);
     return;
   }
 
   // توجيه مراحل مسابقة الفرق التنافسية (Teams Mode Flow)
   if (room.isTeamMatch) {
+    document.getElementById("arenaLobby")?.classList.add("hidden");
+    document.getElementById("arenaInteractiveLobby")?.classList.add("hidden");
+    if (btnNextStudentCycle) btnNextStudentCycle.classList.add("hidden");
+    if (btnTriggerTacticalCards) btnTriggerTacticalCards.classList.add("hidden");
+    if (btnOpenWalletFromBar) btnOpenWalletFromBar.classList.add("hidden");
+    const walletTrig = document.getElementById("contestantCardsWalletTrigger");
+    if (walletTrig) walletTrig.classList.add("hidden");
+    document.getElementById("tacticalCardsModal")?.classList.add("hidden");
+
     if (room.savedToArchive || room.isClosed || room.status === "closed" || room.tournamentEnded || room.phase === "team_finale" || room.isFinished) {
       showTeamGrandFinaleModal(room);
       return;
@@ -1834,8 +1857,7 @@ function updateArenaUIRealtime(room) {
     document.getElementById("arenaTeamSelectionOverlay")?.classList.add("hidden");
 
     if (!phase || phase === "lobby") {
-      showArenaPhase("lobby");
-      renderTeamLobbyInfo(room);
+      renderArenaTeamPickerUI(room);
       return;
     }
     if (phase === "team_intro") {
@@ -5868,32 +5890,36 @@ function openCreateRoomModal(prefilledQuizId = null) {
     }
   }
 
-  tabInPerson?.addEventListener("click", () => setMainRoomType("in_person"));
-  tabInteractive?.addEventListener("click", () => setMainRoomType("interactive"));
+  if (tabInPerson) tabInPerson.onclick = () => setMainRoomType("in_person");
+  if (tabInteractive) tabInteractive.onclick = () => setMainRoomType("interactive");
   setMainRoomType("in_person");
 
   // تفعيل تبديل نمط المسابقة الحضورية (فردي vs فرق)
   const modeCardInd = document.getElementById("modeCardIndividual");
   const modeCardTms = document.getElementById("modeCardTeams");
 
-  modeCardInd?.addEventListener("click", () => {
-    modeCardInd.classList.add("active");
-    modeCardTms?.classList.remove("active");
-    const radio = modeCardInd.querySelector("input");
-    if (radio) radio.checked = true;
-    teamsSecWrap?.classList.add("hidden");
-    tacGroup?.classList.remove("hidden");
-  });
+  if (modeCardInd) {
+    modeCardInd.onclick = () => {
+      modeCardInd.classList.add("active");
+      modeCardTms?.classList.remove("active");
+      const radio = modeCardInd.querySelector("input");
+      if (radio) radio.checked = true;
+      teamsSecWrap?.classList.add("hidden");
+      tacGroup?.classList.remove("hidden");
+    };
+  }
 
-  modeCardTms?.addEventListener("click", () => {
-    modeCardTms.classList.add("active");
-    modeCardInd?.classList.remove("active");
-    const radio = modeCardTms.querySelector("input");
-    if (radio) radio.checked = true;
-    teamsSecWrap?.classList.remove("hidden");
-    tacGroup?.classList.add("hidden");
-    renderTeamsSelectOptions();
-  });
+  if (modeCardTms) {
+    modeCardTms.onclick = () => {
+      modeCardTms.classList.add("active");
+      modeCardInd?.classList.remove("active");
+      const radio = modeCardTms.querySelector("input");
+      if (radio) radio.checked = true;
+      teamsSecWrap?.classList.remove("hidden");
+      tacGroup?.classList.add("hidden");
+      renderTeamsSelectOptions();
+    };
+  }
 
   renderTeamsSelectOptions();
 
@@ -6761,12 +6787,19 @@ btnExitArena?.addEventListener("click", async () => {
       if (currentLiveRoom && currentUser) {
         try {
           const roomRef = doc(db, "live_rooms", currentLiveRoom.id);
-          await updateDoc(roomRef, {
+          const updatePayload = {
             users: arrayRemove(currentUser.name),
             lastUpdated: serverTimestamp()
-          });
+          };
+          if (currentLiveRoom.isInteractiveOnline) {
+            updatePayload[`interactiveStudents.${currentUser.name}`] = deleteField();
+          }
+          await updateDoc(roomRef, updatePayload);
         } catch (e) {
           currentLiveRoom.users = (currentLiveRoom.users || []).filter(u => u !== currentUser.name);
+          if (currentLiveRoom.interactiveStudents) {
+            delete currentLiveRoom.interactiveStudents[currentUser.name];
+          }
           await saveRooms(currentLiveRoom);
         }
       }
@@ -13725,9 +13758,9 @@ let isTeamEntranceActive = false;
 // --------------------------------------------------------
 // استخراج وتأمين توزيع أسئلة الاختبار كاملة بالتساوي على الفقرات الأربع
 // --------------------------------------------------------
-function ensureTeamQuestionsPopulated(room) {
+function ensureTeamQuestionsPopulated(room, forceFresh = false) {
   if (!room || !room.isTeamMatch) return;
-  if (!room.roundQuestions || !Array.isArray(room.roundQuestions) || room.roundQuestions.length === 0 || !room.roundQuestionConfig) {
+  if (forceFresh || !room.roundQuestions || !Array.isArray(room.roundQuestions) || room.roundQuestions.length === 0 || !room.roundQuestionConfig) {
     const quiz = (room.quizData && room.quizData.sections) 
       ? room.quizData 
       : (quizzesCache.find(q => q.id === room.quizId) || quizzesCache[0]);
@@ -16170,6 +16203,24 @@ document.getElementById("btnRestartTeamContest")?.addEventListener("click", asyn
       if (stageQuestionCard) stageQuestionCard.classList.add("hidden");
       if (stageInteractiveArea) stageInteractiveArea.innerHTML = "";
 
+      // إيقاف وتجميد أي مؤقت قديم تماماً
+      if (liveTimerInterval) {
+        clearInterval(liveTimerInterval);
+        liveTimerInterval = null;
+      }
+      currentActiveTeamSolver = null;
+      isTeamRollingCardActive = false;
+      currentTeamQuestionAnswered = false;
+      currentActiveTeamRound = 1;
+      window.lastHandledTeamSolverStartedAt = null;
+      window.lastHandledTeamAnswerTs = null;
+      window.lastHandledRoundStartTs = null;
+      window.lastShownRoundBannerNum = null;
+      window.lastHandledTeamLaunch = null;
+      window.lastSeenCinematicAlertTimestamp = null;
+      lastTimerConfigKey = "team_picker_paused";
+      if (stageTimerSeconds) stageTimerSeconds.textContent = "⏸️";
+
       const originalTeams = currentLiveRoom.tournamentState?.teams || currentLiveRoom.teams || teamsCache;
       currentLiveRoom.tournamentState = initTournamentBracket(originalTeams);
       currentLiveRoom.teams = originalTeams;
@@ -16185,6 +16236,8 @@ document.getElementById("btnRestartTeamContest")?.addEventListener("click", asyn
       currentLiveRoom.lastPickedStudentByTeam = {};
       currentLiveRoom.teamRoundStarted = false;
       currentLiveRoom.teamRoundState = "selecting_teams";
+      currentLiveRoom.teamLaunchTimestamp = null;
+      currentLiveRoom.teamCountdownStartedAt = null;
       currentLiveRoom.teamActiveSolver = null;
       currentLiveRoom.lastCinematicAlert = null;
       currentLiveRoom.lastTeamAnswerEvent = null;
@@ -16195,14 +16248,35 @@ document.getElementById("btnRestartTeamContest")?.addEventListener("click", asyn
       currentLiveRoom.isClosed = false;
       currentLiveRoom.phase = "team_stage";
       currentLiveRoom.teamSelectionState = "selecting";
+      currentLiveRoom.timerState = {
+        isFrozen: true,
+        remainingSeconds: currentLiveRoom.questionTimer || 25,
+        isCorrectionPaused: false,
+        isWalletSelectionPaused: false,
+        updatedAt: Date.now()
+      };
 
-      window.lastHandledTeamSolverStartedAt = null;
-      window.lastHandledTeamAnswerTs = null;
-      window.lastHandledRoundStartTs = null;
-      window.lastShownRoundBannerNum = null;
-      currentActiveTeamRound = 1;
+      // إعادة خلط أسئلة المسابقة من جديد للبطولة
+      ensureTeamQuestionsPopulated(currentLiveRoom, true);
 
-      await saveRooms(currentLiveRoom);
+      // استبدال المستند سحابياً بدون merge لمنع بقاء أي بيانات قديمة أو معلقة
+      try {
+        const cleanRoom = sanitizeForFirestore(currentLiveRoom);
+        const roomRef = doc(db, "live_rooms", currentLiveRoom.id);
+        await setDoc(roomRef, {
+          ...cleanRoom,
+          teamActiveSolver: null,
+          teamA: null,
+          teamB: null,
+          lastCinematicAlert: null,
+          lastTeamAnswerEvent: null,
+          lastUpdated: serverTimestamp()
+        });
+      } catch (err) {
+        console.warn("Firestore clean restart notice:", err);
+        await saveRooms(currentLiveRoom);
+      }
+
       renderArenaTeamPickerUI(currentLiveRoom);
       showToast("تمت إعادة البطولة من البداية وتصفير النتائج بنجاح!", "fa-rotate-right");
     },
@@ -16569,6 +16643,7 @@ function syncInteractiveArenaRealtime(room) {
   document.getElementById("teamGrandFinaleOverlay")?.classList.add("hidden");
   document.getElementById("arenaPhaseStudentSelect")?.classList.add("hidden");
   document.getElementById("arenaPhaseQuestionDraw")?.classList.add("hidden");
+  document.getElementById("arenaLobby")?.classList.add("hidden");
   document.getElementById("arenaLobbyCard")?.classList.add("hidden");
 
   // إخفاء الأزرار والبطاقات التكتيكية التي لا صلة لها بالمسابقة التفاعلية
@@ -16616,7 +16691,8 @@ function renderInteractiveLobby(room, isLead) {
   // إيقاف أي ثيم فاقع أثناء الانتظار
   if (window.stopInteractiveBackground) window.stopInteractiveBackground();
 
-  // إخفاء شاشات المسابقة والمودالات
+  // إخفاء شاشات المسابقة والمودالات والغرفة التقليدية القديمة
+  document.getElementById("arenaLobby")?.classList.add("hidden");
   document.getElementById("interactiveCountdownOverlay")?.classList.add("hidden");
   document.getElementById("interactiveLeaderboardModal")?.classList.add("hidden");
   if (stageQuestionCard) stageQuestionCard.classList.add("hidden");
@@ -17100,19 +17176,35 @@ function handleInteractiveLeaderboard(room, isLead) {
     const climbSub = document.getElementById("climbBannerSub");
     const climbPill = document.getElementById("climbBadgePill");
 
-    if (prevRank && currentRank > 0 && currentRank < prevRank) {
-      const jumped = prevRank - currentRank;
+    if (currentRank > 0) {
       if (climbCard) climbCard.classList.remove("hidden");
-      if (climbTitle) {
-        climbTitle.textContent = `ما شاء الله! صعدت للمركز ${currentRank === 1 ? 'الأول 🏆' : (currentRank === 2 ? 'الثاني 🥈' : (currentRank === 3 ? 'الثالث 🥉' : currentRank + ' 🏅'))}`;
+      if (prevRank && currentRank < prevRank) {
+        const jumped = prevRank - currentRank;
+        if (climbTitle) {
+          climbTitle.textContent = `ما شاء الله! صعدت للمركز ${currentRank === 1 ? 'الأول 🏆' : (currentRank === 2 ? 'الثاني 🥈' : (currentRank === 3 ? 'الثالث 🥉' : currentRank + ' 🏅'))}`;
+        }
+        if (climbSub) {
+          climbSub.textContent = `أحسنت صنعاً يا بطل! تقدمت بمقدار ${jumped} ${jumped === 1 ? 'مركز' : (jumped === 2 ? 'مركزين' : 'مراكز')} بفضل سرعتك ودقتك في الإجابة!`;
+        }
+        if (climbPill) {
+          climbPill.textContent = `+${jumped} مراكز 🚀`;
+        }
+        try { soundFX.celebrate(); } catch (e) {}
+      } else if (currentRank === 1) {
+        if (climbTitle) climbTitle.textContent = `🏆 أنت المتصدر بالمركز الأول!`;
+        if (climbSub) climbSub.textContent = `ما شاء الله، إجابات متميزة وسرعة فائقة.. واصل الصدارة لنيل كأس البطولة!`;
+        if (climbPill) climbPill.textContent = `المتصدر 🥇`;
+        try { soundFX.celebrate(); } catch (e) {}
+      } else if (currentRank <= 3) {
+        if (climbTitle) climbTitle.textContent = `⭐ أنت في المركز ${currentRank === 2 ? 'الثاني 🥈' : 'الثالث 🥉'} بين جميع المتسابقين!`;
+        if (climbSub) climbSub.textContent = `أداء بطولي رائع، يفصلك القليل عن القمة، شد حيلك في السؤال القادم!`;
+        if (climbPill) climbPill.textContent = `منصة الشرف 🌟`;
+      } else {
+        const myScore = studentsList.find(s => s.name === myName)?.score || 0;
+        if (climbTitle) climbTitle.textContent = `🏅 أنت حالياً في المركز (${currentRank}) برصيد (${myScore}) نقطة`;
+        if (climbSub) climbSub.textContent = `أحسنت يا بطل! ركز في السؤال القادم واستغل بونص السرعة للصعود للأعلى!`;
+        if (climbPill) climbPill.textContent = `المركز ${currentRank}`;
       }
-      if (climbSub) {
-        climbSub.textContent = `أحسنت صنعاً يا بطل! تقدمت بمقدار ${jumped} ${jumped === 1 ? 'مركز' : (jumped === 2 ? 'مركزين' : 'مراكز')} بفضل سرعتك ودقتك في الإجابة!`;
-      }
-      if (climbPill) {
-        climbPill.textContent = `+${jumped} مراكز 🚀`;
-      }
-      try { soundFX.celebrate(); } catch (e) {}
     } else {
       if (climbCard) climbCard.classList.add("hidden");
     }
@@ -17654,6 +17746,23 @@ setInterval(() => {
     loadCloudData().catch(() => {});
   }
 }, 20000);
+
+// مزامنة فورية عند مغادرة الصفحة أو إغلاق المتصفح لضمان دقة المتواجدين
+window.addEventListener("beforeunload", () => {
+  if (currentLiveRoom && currentUser) {
+    try {
+      const roomRef = doc(db, "live_rooms", currentLiveRoom.id);
+      const updatePayload = {
+        users: arrayRemove(currentUser.name),
+        lastUpdated: serverTimestamp()
+      };
+      if (currentLiveRoom.isInteractiveOnline) {
+        updatePayload[`interactiveStudents.${currentUser.name}`] = deleteField();
+      }
+      updateDoc(roomRef, updatePayload).catch(() => {});
+    } catch (e) {}
+  }
+});
 
 // إعادة التمركز والتحجيم التلقائي فوراً عند تغيير حجم الشاشة أو تدوير الهاتف
 window.addEventListener("resize", () => {

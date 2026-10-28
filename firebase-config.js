@@ -19,7 +19,8 @@ import {
   serverTimestamp,
   onSnapshot as rawOnSnapshot,
   arrayUnion,
-  arrayRemove 
+  arrayRemove,
+  deleteField
 } from "firebase/firestore";
 import { 
   getAuth, 
@@ -363,5 +364,6 @@ export {
   orderBy, 
   serverTimestamp,
   arrayUnion,
-  arrayRemove
+  arrayRemove,
+  deleteField
 };
