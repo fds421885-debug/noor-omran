@@ -11354,18 +11354,24 @@ body:has(#arenaTeamSelectionOverlay:not(.hidden)) #currentContestantBanner {
    بنفسجي، برتقالي، أخضر
    ======================================================== */
 
-body.interactive-theme-purple #liveArenaSection {
-  background: linear-gradient(135deg, #4c1d95 0%, #5b21b6 50%, #312e81 100%) !important;
+body.interactive-theme-purple,
+body.interactive-theme-purple #liveArenaSection,
+body.interactive-theme-purple .main-content {
+  background: linear-gradient(135deg, #4c1d95 0%, #6d28d9 45%, #7c3aed 100%) !important;
   color: #ffffff !important;
 }
 
-body.interactive-theme-orange #liveArenaSection {
-  background: linear-gradient(135deg, #9a3412 0%, #ea580c 50%, #c2410c 100%) !important;
+body.interactive-theme-orange,
+body.interactive-theme-orange #liveArenaSection,
+body.interactive-theme-orange .main-content {
+  background: linear-gradient(135deg, #7c2d12 0%, #c2410c 45%, #ea580c 100%) !important;
   color: #ffffff !important;
 }
 
-body.interactive-theme-green #liveArenaSection {
-  background: linear-gradient(135deg, #064e3b 0%, #059669 50%, #047857 100%) !important;
+body.interactive-theme-green,
+body.interactive-theme-green #liveArenaSection,
+body.interactive-theme-green .main-content {
+  background: linear-gradient(135deg, #064e3b 0%, #047857 45%, #10b981 100%) !important;
   color: #ffffff !important;
 }
 
@@ -11551,6 +11557,22 @@ body[class*="interactive-theme-"] .role-pill-live {
   gap: 4px;
 }
 
-
-
-
+/* في نظام الفرق والمسابقات التفاعلية: إخفاء البطاقات التكتيكية ومحفظتها وزر الانتقال تماماً */
+body.is-team-mode #btnNextStudentCycle,
+body.is-team-mode #btnTriggerTacticalCards,
+body.is-team-mode #btnOpenWalletFromBar,
+body.is-team-mode #contestantCardsWalletTrigger,
+body.is-interactive-mode #btnNextStudentCycle,
+body.is-interactive-mode #btnTriggerTacticalCards,
+body.is-interactive-mode #btnOpenWalletFromBar,
+body.is-interactive-mode #contestantCardsWalletTrigger,
+#liveArenaSection.is-team-mode #btnNextStudentCycle,
+#liveArenaSection.is-team-mode #btnTriggerTacticalCards,
+#liveArenaSection.is-team-mode #btnOpenWalletFromBar,
+#liveArenaSection.is-team-mode #contestantCardsWalletTrigger,
+#liveArenaSection.is-interactive-mode #btnNextStudentCycle,
+#liveArenaSection.is-interactive-mode #btnTriggerTacticalCards,
+#liveArenaSection.is-interactive-mode #btnOpenWalletFromBar,
+#liveArenaSection.is-interactive-mode #contestantCardsWalletTrigger {
+  display: none !important;
+}
