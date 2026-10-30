@@ -617,8 +617,45 @@ export const LiveArena: React.FC = () => {
                 </div>
               </div>
 
-              {/* بطاقات نتائج الفريقين إذا كانت بطولة */}
-              {activeRoom.type === "tournament" && activeRoom.teams && (
+              {/* بطاقات نتائج الفريقين إذا كانت بطولة مع شارة VS الاحترافية */}
+              {activeRoom.type === "tournament" && activeRoom.teams && activeRoom.teams.length >= 2 && (
+                <div className="arena-teams-hud-wrapper" style={{ display: "flex", gap: "10px", alignItems: "center", justifyContent: "center", width: "100%", margin: "8px 0" }}>
+                  <div
+                    style={{
+                      background: activeRoom.currentTeamIdx === 0 ? "#fefce8" : "#ffffff",
+                      border: activeRoom.currentTeamIdx === 0 ? "2.5px solid #eab308" : "1.5px solid #cbd5e1",
+                      borderRadius: "14px",
+                      padding: "8px 16px",
+                      textAlign: "center",
+                      flex: "1 1 120px",
+                      maxWidth: "240px"
+                    }}
+                  >
+                    <div style={{ fontSize: "12px", fontWeight: 800, color: "#64748b" }}>{activeRoom.teams[0].name}</div>
+                    <div style={{ fontSize: "20px", fontWeight: 900, color: "#ca8a04" }}>{activeRoom.teams[0].score || 0} ن</div>
+                  </div>
+
+                  <div className="hud-vs-badge" style={{ width: "36px", height: "36px", borderRadius: "50%", background: "#fee2e2", color: "#ef4444", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: "13px", flexShrink: 0, border: "2px solid #fecaca" }}>
+                    VS
+                  </div>
+
+                  <div
+                    style={{
+                      background: activeRoom.currentTeamIdx === 1 ? "#fefce8" : "#ffffff",
+                      border: activeRoom.currentTeamIdx === 1 ? "2.5px solid #eab308" : "1.5px solid #cbd5e1",
+                      borderRadius: "14px",
+                      padding: "8px 16px",
+                      textAlign: "center",
+                      flex: "1 1 120px",
+                      maxWidth: "240px"
+                    }}
+                  >
+                    <div style={{ fontSize: "12px", fontWeight: 800, color: "#64748b" }}>{activeRoom.teams[1].name}</div>
+                    <div style={{ fontSize: "20px", fontWeight: 900, color: "#ca8a04" }}>{activeRoom.teams[1].score || 0} ن</div>
+                  </div>
+                </div>
+              )}
+              {activeRoom.type === "tournament" && activeRoom.teams && activeRoom.teams.length < 2 && (
                 <div style={{ display: "flex", gap: "10px", alignItems: "center", justifyContent: "center", flexWrap: "wrap", width: "100%" }}>
                   {activeRoom.teams.map((t, idx) => (
                     <div

@@ -6783,6 +6783,79 @@ const selectNewLeaderCandidate = document.getElementById("selectNewLeaderCandida
 const btnHandoverAndExit = document.getElementById("btnHandoverAndExit");
 const btnTerminateContestForAll = document.getElementById("btnTerminateContestForAll");
 
+// دالة مغادرة الغرفة الآمنة والنظيفة (تفريغ جميع العدادات والنوافذ والعودة للوحة التحكم)
+async function executeLeaveRoomSafely(terminate = false) {
+  if (!currentLiveRoom) {
+    localStorage.removeItem("nour_saved_room_id");
+    showView(currentUser ? (currentUser.role === 'student' ? "student" : "supervisor") : "hero");
+    return;
+  }
+
+  const roomId = currentLiveRoom.id;
+
+  // إخفاء جميع النوافذ المعلقة المرتبطة بالمسرح
+  document.getElementById("arenaTeamSelectionOverlay")?.classList.add("hidden");
+  document.getElementById("teamEntranceOverlay")?.classList.add("hidden");
+  document.getElementById("leaderExitModal")?.classList.add("hidden");
+  document.getElementById("roomSettingsModal")?.classList.add("hidden");
+  document.getElementById("tacticalWalletModal")?.classList.add("hidden");
+  document.getElementById("tacticalCardsModal")?.classList.add("hidden");
+  document.getElementById("tacticalCardDetailModal")?.classList.add("hidden");
+  document.getElementById("arenaOfflineWarningBanner")?.classList.add("hidden");
+
+  if (window.teamCountdownInterval) {
+    clearInterval(window.teamCountdownInterval);
+    window.teamCountdownInterval = null;
+  }
+
+  if (terminate) {
+    await executeRoomTermination(roomId);
+    return;
+  }
+
+  // مغادرة عادية مع إبقاء الغرفة مفتوحة في السحابة
+  if (currentRoomUnsubscribe) {
+    currentRoomUnsubscribe();
+    currentRoomUnsubscribe = null;
+  }
+
+  clearInterval(liveTimerInterval);
+  clearInterval(cardsTimerInterval);
+  stopOfflineCountdown();
+
+  // إزالة اسم المستخدم الحالي من قائمة المتواجدين بالغرفة
+  if (currentUser && currentLiveRoom) {
+    try {
+      const roomRef = doc(db, "live_rooms", roomId);
+      const updatePayload = {
+        users: arrayRemove(currentUser.name),
+        lastUpdated: serverTimestamp()
+      };
+      if (currentLiveRoom.isInteractiveOnline) {
+        updatePayload[`interactiveStudents.${currentUser.name}`] = deleteField();
+      }
+      await updateDoc(roomRef, updatePayload);
+    } catch (e) {
+      currentLiveRoom.users = (currentLiveRoom.users || []).filter(u => u !== currentUser.name);
+      if (currentLiveRoom.interactiveStudents) {
+        delete currentLiveRoom.interactiveStudents[currentUser.name];
+      }
+      try { await saveRooms(currentLiveRoom); } catch (err) {}
+    }
+  }
+
+  currentLiveRoom = null;
+  currentContestant = null;
+  localStorage.removeItem("nour_saved_room_id");
+  localStorage.setItem("nour_saved_view", currentUser ? (currentUser.role === 'student' ? "student" : "supervisor") : "hero");
+
+  cleanupCompetitionThemeAndAura();
+  showView(currentUser ? (currentUser.role === 'student' ? "student" : "supervisor") : "hero");
+  renderLiveRoomsList();
+  showToast("تمت مغادرة الغرفة والعودة للوحة التحكم بنجاح", "fa-person-walking-arrow-right");
+}
+window.executeLeaveRoomSafely = executeLeaveRoomSafely;
+
 btnExitArena?.addEventListener("click", async () => {
   if (!currentLiveRoom) {
     localStorage.removeItem("nour_saved_room_id");
@@ -6792,16 +6865,16 @@ btnExitArena?.addEventListener("click", async () => {
 
   const isRoomLeader = currentUser && (
     currentUser.name === currentLiveRoom.leaderName || 
+    currentUser.name === currentLiveRoom.creatorName ||
     isSupervisor(currentUser.name) || 
     currentUser.role === "supervisor"
   );
 
   if (isRoomLeader) {
-    // قائد الغرفة (المشرف أو المعلم الذي يقود الغرفة)
+    // قائد أو منشئ الغرفة
     const otherMembers = (currentLiveRoom.users || []).filter(u => u !== currentUser.name);
 
     if (otherMembers.length > 0) {
-      // يوجد أشخاص آخرون في الغرفة: إظهار نافذة تسليم الإشراف أو إنهاء المسابقة
       if (selectNewLeaderCandidate) {
         selectNewLeaderCandidate.innerHTML = otherMembers.map(m => `
           <option value="${m}">${m}</option>
@@ -6809,36 +6882,18 @@ btnExitArena?.addEventListener("click", async () => {
       }
       leaderExitModal?.classList.remove("hidden");
     } else {
-      // لا يوجد غيره في الغرفة حالياً: إتاحة خيار إبقاء الغرفة مفتوحة ونشطة في السحابة أو إنهاؤها
-      const keepRoomActive = await showInAppConfirm({
+      // منشئ الغرفة متواجد بمفرده: خيار مباشر لمغادرة الغرفة والعودة للوحة التحكم بكل سلاسة
+      const confirmed = await showInAppConfirm({
         title: "مغادرة مسرح المسابقة",
-        message: "أنت المتواجد الوحيد حالياً. هل ترغب في إبقاء الغرفة مفتوحة ونشطة في السحابة حتى يتمكن المشرف والطلاب من الدخول إليها، أم إنهاء وإغلاق الغرفة نهائياً؟",
-        confirmText: "إبقاء الغرفة مفتوحة والعودة للوحة التحكم",
-        cancelText: "إنهاء وإغلاق الغرفة نهائياً للجميع",
+        message: "هل ترغب في مغادرة الغرفة والعودة للوحة التحكم؟ ستظل الغرفة مفتوحة في السحابة للطلاب والمشرفين.",
+        confirmText: "نعم، مغادرة الغرفة",
+        cancelText: "البقاء في الغرفة",
         type: "info",
-        icon: "fa-tower-broadcast"
+        icon: "fa-person-walking-arrow-right"
       });
 
-      if (keepRoomActive) {
-        // إبقاء الغرفة مفتوحة في Firestore والعودة للوحة التحكم
-        if (currentRoomUnsubscribe) {
-          currentRoomUnsubscribe();
-          currentRoomUnsubscribe = null;
-        }
-        clearInterval(liveTimerInterval);
-        clearInterval(cardsTimerInterval);
-        stopOfflineCountdown();
-        const keptRoomId = currentLiveRoom.id;
-        currentLiveRoom = null;
-        currentContestant = null;
-        localStorage.removeItem("nour_saved_room_id");
-        localStorage.setItem("nour_saved_view", currentUser ? (currentUser.role === 'student' ? "student" : "supervisor") : "hero");
-        showView(currentUser ? (currentUser.role === 'student' ? "student" : "supervisor") : "hero");
-        renderLiveRoomsList();
-        showToast(`الغرفة (#${keptRoomId}) ما زالت مفتوحة ونشطة في السحابة ويمكن للجميع الدخول إليها!`, "fa-tower-broadcast");
-      } else {
-        // إنهاء وإغلاق الغرفة نهائياً من Firestore
-        await executeRoomTermination(currentLiveRoom.id);
+      if (confirmed) {
+        await executeLeaveRoomSafely(false);
       }
     }
   } else {
@@ -6883,10 +6938,45 @@ btnExitArena?.addEventListener("click", async () => {
       if (currentUser && currentUser.role === "student") {
         await cleanupGuestStudentAndExit();
       } else {
-        localStorage.setItem("nour_saved_view", currentUser ? "supervisor" : "hero");
-        showView(currentUser ? "supervisor" : "hero");
+        await executeLeaveRoomSafely(false);
       }
     }
+  }
+});
+
+// مستمع خيار الخروج وإبقاء الغرفة مفتوحة لقائد الغرفة
+document.getElementById("btnLeaderLeaveKeepRoom")?.addEventListener("click", async () => {
+  leaderExitModal?.classList.add("hidden");
+  await executeLeaveRoomSafely(false);
+});
+
+// مستمع زر الخروج من نافذة اختيار الفرق (داخل المسرح)
+document.getElementById("btnExitFromTeamPicker")?.addEventListener("click", async () => {
+  const confirmed = await showInAppConfirm({
+    title: "مغادرة الغرفة",
+    message: "هل ترغب في مغادرة الغرفة والعودة للوحة التحكم؟",
+    confirmText: "نعم، مغادرة",
+    cancelText: "البقاء هنا",
+    type: "warning",
+    icon: "fa-person-walking-arrow-right"
+  });
+  if (confirmed) {
+    await executeLeaveRoomSafely(false);
+  }
+});
+
+// مستمع زر الخروج من شاشة العرض السينمائي للفرق
+document.getElementById("btnEntranceExitRoom")?.addEventListener("click", async () => {
+  const confirmed = await showInAppConfirm({
+    title: "مغادرة الغرفة",
+    message: "هل ترغب في مغادرة الغرفة والعودة للوحة التحكم؟",
+    confirmText: "نعم، مغادرة",
+    cancelText: "البقاء هنا",
+    type: "warning",
+    icon: "fa-person-walking-arrow-right"
+  });
+  if (confirmed) {
+    await executeLeaveRoomSafely(false);
   }
 });
 
@@ -6927,23 +7017,9 @@ btnHandoverAndExit?.addEventListener("click", async () => {
     }
   }
 
-  if (currentRoomUnsubscribe) {
-    currentRoomUnsubscribe();
-    currentRoomUnsubscribe = null;
-  }
-
   leaderExitModal?.classList.add("hidden");
-  clearInterval(liveTimerInterval);
-  clearInterval(cardsTimerInterval);
-  stopOfflineCountdown();
-  currentLiveRoom = null;
-  currentContestant = null;
-  localStorage.removeItem("nour_saved_room_id");
-  localStorage.setItem("nour_saved_view", currentUser ? (currentUser.role === 'student' ? "student" : "supervisor") : "hero");
-
+  await executeLeaveRoomSafely(false);
   showToast(`تم تسليم قيادة المسابقة إلى (${newLeader}) بنجاح والمغادرة`, "fa-handshake");
-  showView(currentUser ? (currentUser.role === 'student' ? "student" : "supervisor") : "hero");
-  renderLiveRoomsList();
 });
 
 // تنفيذ خيار 2: إنهاء وإغلاق المسابقة للجميع

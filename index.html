@@ -1863,7 +1863,7 @@
         </div>
 
         <!-- الخيار 2: إنهاء المسابقة للجميع -->
-        <div class="exit-choice-box" style="background: #fef2f2; border: 2px solid #fecaca; border-radius: var(--radius-md); padding: 16px;">
+        <div class="exit-choice-box" style="background: #fef2f2; border: 2px solid #fecaca; border-radius: var(--radius-md); padding: 16px; margin-bottom: 16px;">
           <h4 style="font-size: 15px; font-weight: 800; color: #dc2626; margin-bottom: 8px; display: flex; align-items: center; gap: 8px;">
             <i class="fa-solid fa-power-off"></i> الخيار الثاني: إنهاء وإغلاق المسابقة
           </h4>
@@ -1872,6 +1872,19 @@
           </p>
           <button type="button" id="btnTerminateContestForAll" class="btn-duo-red" style="width: 100%; padding: 12px 20px;">
             <i class="fa-solid fa-door-closed"></i> إنهاء وإغلاق المسابقة لجميع المشاركين
+          </button>
+        </div>
+
+        <!-- الخيار 3: مغادرة الغرفة والعودة للوحة التحكم (مع إبقاء الغرفة مفتوحة) -->
+        <div class="exit-choice-box" style="background: #f0fdf4; border: 2px solid #bbf7d0; border-radius: var(--radius-md); padding: 16px;">
+          <h4 style="font-size: 15px; font-weight: 800; color: #166534; margin-bottom: 8px; display: flex; align-items: center; gap: 8px;">
+            <i class="fa-solid fa-arrow-right-from-bracket"></i> الخيار الثالث: مغادرة والعودة للوحة التحكم
+          </h4>
+          <p style="font-size: 13px; color: #14532d; margin-bottom: 12px;">
+            الخروج من الغرفة فوراً والعودة لشاشة المشرف مع إبقاء الغرفة نشطة في السحابة:
+          </p>
+          <button type="button" id="btnLeaderLeaveKeepRoom" class="btn-duo-green" style="width: 100%; padding: 12px 20px;">
+            <i class="fa-solid fa-person-walking-arrow-right"></i> مغادرة الغرفة والعودة للوحة التحكم
           </button>
         </div>
 
@@ -2743,7 +2756,12 @@
   <!-- نافذة اختيار وتحديد الفريقين من داخل المسرح بثيم دولينجو (In-Arena Team Picker Overlay) -->
   <div id="arenaTeamSelectionOverlay" class="arena-team-selection-overlay hidden">
     <div class="arena-team-picker-card">
-      <div class="team-picker-header">
+      <div class="team-picker-header" style="position: relative;">
+        <div style="position: absolute; top: 0; left: 0;">
+          <button type="button" id="btnExitFromTeamPicker" class="btn-duo-outline btn-sm" style="border-color: #ef4444; color: #ef4444; background: #ffffff; font-weight: 800;" title="مغادرة الغرفة والعودة للوحة التحكم">
+            <i class="fa-solid fa-person-walking-arrow-right"></i> مغادرة الغرفة
+          </button>
+        </div>
         <div class="team-picker-badge">
           <i class="fa-solid fa-crown" style="color: #facc15;"></i>
           <span id="arenaTeamPickerRoleBadge">غرفة مسابقة الفرق الكبرى</span>
@@ -2851,10 +2869,13 @@
 
   <!-- العرض التقديمي السينمائي للفرق (Cinematic Team Entrance Overlay) -->
   <div id="teamEntranceOverlay" class="team-entrance-overlay hidden">
-    <!-- زر العودة لاختيار الفرق بالأعلى في حال اختيار فريق بالخطأ -->
-    <div class="team-entrance-top-bar" style="position: absolute; top: 18px; right: 24px; z-index: 50;">
+    <!-- أزرار الإجراء بالأعلى في شاشة العرض السينمائي (العودة لاختيار الفرق + مغادرة الغرفة) -->
+    <div class="team-entrance-top-bar" style="position: absolute; top: 18px; right: 24px; z-index: 50; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
       <button type="button" id="btnEntranceReturnToTeamSelect" class="btn-duo-outline btn-sm" style="background: rgba(15, 23, 42, 0.75); color: #ffffff; border: 2px solid rgba(255, 255, 255, 0.35); backdrop-filter: blur(8px); font-size: 14px; font-weight: 800; padding: 8px 18px; border-radius: 12px; cursor: pointer; transition: all 0.2s ease;">
         <i class="fa-solid fa-arrow-right"></i> العودة لاختيار الفرق
+      </button>
+      <button type="button" id="btnEntranceExitRoom" class="btn-duo-outline btn-sm" style="background: rgba(239, 68, 68, 0.25); color: #fee2e2; border: 2px solid #ef4444; backdrop-filter: blur(8px); font-size: 14px; font-weight: 800; padding: 8px 18px; border-radius: 12px; cursor: pointer; transition: all 0.2s ease;">
+        <i class="fa-solid fa-person-walking-arrow-right"></i> مغادرة الغرفة
       </button>
     </div>
 
