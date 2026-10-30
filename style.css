@@ -10418,53 +10418,68 @@ button:disabled .fa-spin,
 
 /* ========================================================
    سؤال التوصيل التفاعلي المبعثر للفرق (Duolingo Team Matching)
+   مُحسّن ليتكيف 100% مع كامل الشاشات والهواتف دون خروج عن المشهد
    ======================================================== */
 .team-matching-container {
-  max-width: 680px;
-  margin: 16px auto;
+  width: 100%;
+  max-width: 720px;
+  margin: 6px auto;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: clamp(8px, 1.5vh, 12px);
+  max-height: min(62vh, 460px);
+  overflow-y: auto;
+  padding: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
 }
 
 .team-matching-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 16px;
+  gap: clamp(8px, 1.5vw, 14px);
+  align-items: stretch;
 }
 
 .team-matching-col {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: clamp(6px, 1.2vh, 10px);
 }
 
 .team-matching-header {
-  font-size: 13.5px;
-  font-weight: 800;
+  font-size: clamp(11.5px, 1.3vw, 13px);
+  font-weight: 900;
   color: #475569;
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 4px;
+  justify-content: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
 }
 
 .team-match-tile {
   background: #ffffff;
   border: 2px solid #e2e8f0;
-  border-bottom: 4px solid #cbd5e1;
-  border-radius: 14px;
-  padding: 12px 14px;
-  font-size: 16px;
+  border-bottom: 3px solid #cbd5e1;
+  border-radius: 12px;
+  padding: clamp(6px, 1.2vh, 10px) clamp(8px, 1.4vw, 12px);
+  min-height: clamp(38px, 4.4vh, 46px);
+  font-size: clamp(12.5px, 1.5vw, 14.5px);
   font-weight: 800;
   color: #0f172a;
   cursor: pointer;
-  transition: all 0.16s ease;
+  transition: all 0.15s ease;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
   user-select: none;
+  word-break: break-word;
+  line-height: 1.35;
 }
 
 .team-match-tile:hover {
@@ -10476,8 +10491,8 @@ button:disabled .fa-spin,
   background: #eff6ff !important;
   border-color: #3b82f6 !important;
   border-bottom-color: #1d4ed8 !important;
-  box-shadow: 0 4px 14px rgba(59, 130, 246, 0.25);
-  transform: translateY(-2px);
+  box-shadow: 0 3px 10px rgba(59, 130, 246, 0.22);
+  transform: translateY(-1px);
 }
 
 .team-match-tile.connected {
@@ -10491,18 +10506,60 @@ button:disabled .fa-spin,
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 28px;
-  height: 28px;
-  border-radius: 8px;
+  min-width: 22px;
+  height: 22px;
+  border-radius: 6px;
   background: #f1f5f9;
   color: #475569;
   font-weight: 900;
-  font-size: 14px;
+  font-size: 11.5px;
+  flex-shrink: 0;
 }
 
 .team-match-tile.connected .team-match-badge {
   background: #22c55e;
   color: #ffffff;
+}
+
+/* بطاقة اختبار المواجهة بأسلوب دولينجو للمشرف */
+.team-match-quiz-card {
+  transition: all 0.2s ease;
+}
+.team-match-quiz-card:hover {
+  border-color: #38bdf8 !important;
+  box-shadow: 0 4px 12px rgba(56, 189, 248, 0.15) !important;
+}
+
+.quiz-select-btn-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 2px solid #e2e8f0;
+  background: #ffffff;
+  cursor: pointer;
+  transition: all 0.16s ease;
+  text-align: right;
+  width: 100%;
+}
+.quiz-select-btn-item:hover {
+  border-color: #0284c7;
+  background: #f0f9ff;
+  transform: translateY(-2px);
+  box-shadow: 0 3px 8px rgba(2, 132, 199, 0.15);
+}
+.quiz-select-btn-item.active {
+  border-color: #0284c7;
+  border-bottom: 4px solid #0369a1;
+  background: #e0f2fe;
+}
+
+/* نافذة احتفالية نهاية المباراة بأسلوب دولينجو */
+.winner-celebration-dialog {
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+  border: none !important;
 }
 
 /* ========================================================

@@ -2840,6 +2840,25 @@
           </div>
         </div>
 
+        <!-- بطاقة اختيار وتغيير اختبار المواجهة بأسلوب دولينجو -->
+        <div id="teamMatchQuizSelectorCard" class="team-match-quiz-card" style="background:#f8fafc;border:2px solid #e2e8f0;border-radius:18px;padding:12px 18px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:12px;box-shadow:0 3px 0 #cbd5e1;flex-wrap:wrap;">
+          <div style="display:flex;align-items:center;gap:12px;min-width:240px;">
+            <div style="width:44px;height:44px;border-radius:12px;background:#e0f2fe;display:flex;align-items:center;justify-content:center;color:#0284c7;font-size:20px;flex-shrink:0;box-shadow:0 3px 0 #bae6fd;">
+              <i class="fa-solid fa-book-open-reader"></i>
+            </div>
+            <div>
+              <div style="font-size:12px;color:#64748b;font-weight:800;">الاختبار المعتمد لهذه المواجهة:</div>
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:2px;">
+                <strong id="activeMatchQuizTitle" style="font-size:15px;color:#0f172a;">جاري تحميل الاختبار...</strong>
+                <span id="activeMatchQuizBadge" style="background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:800;">4 فقرات متوازنة</span>
+              </div>
+            </div>
+          </div>
+          <button type="button" id="btnOpenChangeMatchQuizModal" class="btn-duo-blue btn-sm" style="font-size:13px;padding:8px 16px;font-weight:800;border-radius:14px;">
+            <i class="fa-solid fa-arrows-rotate"></i> تغيير اختبار المواجهة
+          </button>
+        </div>
+
         <!-- ألسنة وفلاتر تصنيف الفرق (الكل، في الانتظار، متأهل، تم إقصاؤه) -->
         <div class="tournament-teams-filter-bar" style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
           <button type="button" class="team-filter-pill active" data-filter="all">
@@ -3159,6 +3178,81 @@
         <button type="button" id="btnCloseTeamContest" class="btn-duo-slate" style="font-size:15px;padding:10px 26px;font-weight:900;">
           <i class="fa-solid fa-house"></i> خروج للمنصة
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- نافذة منبثقة لتغيير اختبار المواجهة بأسلوب دولينجو للمشرف -->
+  <div id="changeMatchQuizModal" class="modal-overlay hidden" style="z-index:99999;">
+    <div class="modal-dialog-duo" style="max-width:540px;width:95%;">
+      <div class="modal-header-duo" style="background:#0284c7;color:#fff;border-bottom:4px solid #0369a1;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <i class="fa-solid fa-book-bookmark" style="font-size:22px;"></i>
+          <h3 style="margin:0;font-size:18px;font-weight:900;">تحديد اختبار المواجهة الحالية</h3>
+        </div>
+        <button type="button" class="btn-close-duo" id="btnCloseChangeMatchQuizModal" style="color:#fff;">&times;</button>
+      </div>
+      <div class="modal-body-duo" style="padding:18px 20px;max-height:65vh;overflow-y:auto;">
+        <p style="font-size:13.5px;color:#475569;margin-bottom:14px;line-height:1.6;font-weight:700;">
+          اختر أي اختبار متاح في المنصة لتطبيقه على هذه المباراة بين الفريقين. سيتم توزيع كامل أسئلته على الفقرات الأربع واستثناء التوصيل والترتيب من فقرة تحت الضغط تلقائياً:
+        </p>
+        <div id="availableQuizzesListForMatch" style="display:flex;flex-direction:column;gap:10px;">
+          <!-- يتم ملؤها ديناميكياً -->
+        </div>
+      </div>
+      <div class="modal-footer-duo" style="padding:14px 20px;border-top:2px solid #e2e8f0;display:flex;justify-content:flex-end;gap:10px;">
+        <button type="button" class="btn-duo-slate" id="btnCancelChangeMatchQuizModal" style="padding:8px 18px;font-weight:800;">إلغاء</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- نافذة احتفالية نهاية المباراة بأسلوب دولينجو لجميع الطلاب والمشرف -->
+  <div id="teamMatchWinnerOverlay" class="modal-overlay hidden" style="z-index:99998;background:rgba(15,23,42,0.85);backdrop-filter:blur(6px);">
+    <div class="modal-dialog-duo winner-celebration-dialog" style="max-width:560px;width:94%;text-align:center;animation:popIn 0.35s cubic-bezier(0.175,0.885,0.32,1.275);">
+      <div style="background:linear-gradient(135deg, #10b981 0%, #059669 100%);color:#fff;padding:26px 20px 20px;border-radius:24px 24px 0 0;position:relative;border-bottom:5px solid #047857;">
+        <div style="width:76px;height:76px;background:#fff;border-radius:50%;margin:0 auto 12px;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 16px rgba(0,0,0,0.2);border:4px solid #34d399;">
+          <i class="fa-solid fa-trophy" style="font-size:38px;color:#f59e0b;"></i>
+        </div>
+        <h2 style="font-size:24px;font-weight:900;margin:0 0 6px;" id="matchWinnerModalTitle">نهاية المواجهة الحماسية!</h2>
+        <div style="font-size:14px;opacity:0.95;font-weight:800;" id="matchWinnerRoundSub">ضمن مرحلة التصفيات</div>
+      </div>
+
+      <div style="padding:24px 20px;background:#fff;border-radius:0 0 24px 24px;">
+        <!-- بطاقة الفائز -->
+        <div style="background:#f0fdf4;border:3px solid #86efac;border-radius:20px;padding:16px;margin-bottom:14px;box-shadow:0 4px 0 #bbf7d0;display:flex;align-items:center;gap:14px;text-align:right;">
+          <div style="width:54px;height:54px;background:#22c55e;color:#fff;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0;box-shadow:0 3px 0 #15803d;">
+            <i class="fa-solid fa-crown"></i>
+          </div>
+          <div style="flex:1;">
+            <div style="font-size:12px;font-weight:900;color:#16a34a;text-transform:uppercase;">الفائز المؤهل رسمياً للدور القادم 🏆</div>
+            <strong id="matchWinnerTeamName" style="font-size:19px;color:#0f172a;display:block;margin:2px 0;">اسم الفريق</strong>
+            <div style="font-size:13px;color:#475569;font-weight:800;">النتيجة النهائية: <span id="matchWinnerTeamScore" style="color:#16a34a;font-weight:900;font-size:16px;">0</span> نقطة</div>
+          </div>
+          <span style="background:#22c55e;color:#fff;font-size:12px;font-weight:900;padding:4px 10px;border-radius:12px;">تأهل ✔</span>
+        </div>
+
+        <!-- بطاقة الفريق الثاني (لم يحالفه الحظ) -->
+        <div style="background:#f8fafc;border:2px solid #e2e8f0;border-radius:18px;padding:14px;margin-bottom:18px;box-shadow:0 3px 0 #cbd5e1;display:flex;align-items:center;gap:14px;text-align:right;">
+          <div style="width:48px;height:48px;background:#e2e8f0;color:#64748b;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">
+            <i class="fa-solid fa-shield-halved"></i>
+          </div>
+          <div style="flex:1;">
+            <div style="font-size:11.5px;font-weight:800;color:#64748b;">المركز الثاني في هذه المواجهة</div>
+            <strong id="matchLoserTeamName" style="font-size:16px;color:#334155;display:block;margin:2px 0;">اسم الخصم</strong>
+            <div style="font-size:12.5px;color:#64748b;font-weight:700;">النتيجة النهائية: <span id="matchLoserTeamScore" style="font-weight:800;font-size:14px;color:#475569;">0</span> نقطة</div>
+          </div>
+          <span style="background:#f1f5f9;color:#64748b;font-size:11.5px;font-weight:800;padding:4px 10px;border-radius:12px;border:1px solid #cbd5e1;">لم يتأهل</span>
+        </div>
+
+        <!-- زر المتابعة للمشرف / رسالة انتظار للطلاب -->
+        <div id="matchWinnerSupervisorControls" style="display:flex;justify-content:center;gap:10px;">
+          <button type="button" id="btnConfirmMatchWinnerAndNext" class="btn-duo-green" style="font-size:16px;padding:12px 36px;font-weight:900;border-radius:16px;box-shadow:0 5px 0 #15803d;width:100%;max-width:320px;">
+            <i class="fa-solid fa-arrow-right"></i> تم ومتابعة البطولة
+          </button>
+        </div>
+        <div id="matchWinnerStudentNotice" class="hidden" style="font-size:13.5px;color:#64748b;font-weight:800;padding:10px;background:#f8fafc;border-radius:12px;">
+          <i class="fa-solid fa-clock-rotate-left fa-spin" style="margin-left:6px;color:#0284c7;"></i> يرجى الانتظار، المشرف سيبدأ المواجهة التالية قريباً...
+        </div>
       </div>
     </div>
   </div>
