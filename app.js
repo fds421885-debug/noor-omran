@@ -13447,7 +13447,7 @@ function getRoundNameForTeams(count) {
   if (count > 8) return "دور الـ 16";
   if (count > 4) return "الدور ربع النهائي (دور الـ 8)";
   if (count > 2) return "الدور نصف النهائي (المربع الذهبي)";
-  if (count === 2) return "المباراة النهائية الكبرى";
+  if (count === 2) return "المباراة النهائية الكبرى 🏆";
   return "المواجهة التصفوية";
 }
 
@@ -13477,11 +13477,19 @@ function initTournamentBracket(teams) {
     isFinished: false,
     championTeam: null,
     runnerUpTeam: null,
+    thirdPlaceTeam: null,
+    fourthPlaceTeam: null,
+    semiFinalLosers: [],
+    finalists: [],
+    teamMatchScores: {},
     fullStandings: [],
     rounds: [
       {
         roundIndex: 0,
         roundName: roundName,
+        isGrandFinal: validTeams.length === 2,
+        isThirdPlaceMatch: false,
+        isSemiFinal: validTeams.length === 4 || validTeams.length === 3,
         initialTeamsCount: validTeams.length,
         pendingTeamIds: pendingIds,
         qualifiedTeamIds: qualifiedIds,
@@ -14460,15 +14468,25 @@ function renderArenaTeamPickerUI(room = null) {
   // تحديث لافتة الدور الحالي
   if (roundTitleEl) roundTitleEl.textContent = currentRound.roundName || "المواجهة التصفوية";
   if (roundStatusEl) {
-    const pendingCount = currentRound.pendingTeamIds ? currentRound.pendingTeamIds.length : 0;
-    if (pendingCount > 0) {
-      roundStatusEl.textContent = `باقي ${Math.ceil(pendingCount / 2)} مواجهة في هذا الدور (${pendingCount} فرق بالانتظار)`;
-      roundStatusEl.style.background = "#e0f2fe";
-      roundStatusEl.style.color = "#0369a1";
+    if (currentRound.isThirdPlaceMatch) {
+      roundStatusEl.textContent = `مواجهة تحديد صاحب المركز الثالث والميدالية البرونزية 🥉`;
+      roundStatusEl.style.background = "#fef3c7";
+      roundStatusEl.style.color = "#b45309";
+    } else if (currentRound.isGrandFinal) {
+      roundStatusEl.textContent = `المباراة الختامية الكبرى لتتويج بطل المسابقة بالمركز الأول وكأس البطولة 🏆`;
+      roundStatusEl.style.background = "#fef9c3";
+      roundStatusEl.style.color = "#854d0e";
     } else {
-      roundStatusEl.textContent = `اكتملت جميع مواجهات هذا الدور!`;
-      roundStatusEl.style.background = "#dcfce7";
-      roundStatusEl.style.color = "#15803d";
+      const pendingCount = currentRound.pendingTeamIds ? currentRound.pendingTeamIds.length : 0;
+      if (pendingCount > 0) {
+        roundStatusEl.textContent = `باقي ${Math.ceil(pendingCount / 2)} مواجهة في هذا الدور (${pendingCount} فرق بالانتظار)`;
+        roundStatusEl.style.background = "#e0f2fe";
+        roundStatusEl.style.color = "#0369a1";
+      } else {
+        roundStatusEl.textContent = `اكتملت جميع مواجهات هذا الدور!`;
+        roundStatusEl.style.background = "#dcfce7";
+        roundStatusEl.style.color = "#15803d";
+      }
     }
   }
 
@@ -14476,7 +14494,13 @@ function renderArenaTeamPickerUI(room = null) {
     observerRoundTag.textContent = `مرحلة البطولة: ${currentRound.roundName || 'التصفيات'}`;
   }
   if (observerWaitingDesc) {
-    observerWaitingDesc.textContent = `يقوم المشرف العام الآن بتحديد فريقي المواجهة ضمن ${currentRound.roundName || 'التصفيات'}، استعدوا للمواجهة وتشجيع أبطالكم!`;
+    if (currentRound.isThirdPlaceMatch) {
+      observerWaitingDesc.textContent = "يستعد المشرف العام الآن لإطلاق مواجهة تحديد المركز الثالث والميدالية البرونزية 🥉 بين فريقي المربع الذهبي، شجعوا أبطالكم!";
+    } else if (currentRound.isGrandFinal) {
+      observerWaitingDesc.textContent = "حان موعد المباراة النهائية الكبرى المرتقبة! يستعد المشرف العام لإطلاق مواجهة حسم اللقب وكأس البطولة 🏆، ترقبوا بشوق!";
+    } else {
+      observerWaitingDesc.textContent = `يقوم المشرف العام الآن بتحديد فريقي المواجهة ضمن ${currentRound.roundName || 'التصفيات'}، استعدوا للمواجهة وتشجيع أبطالكم!`;
+    }
   }
 
   const isSup = currentUser && (currentUser.role === "supervisor" || isSupervisor(currentUser.name) || currentUser.name === targetRoom.leaderName);
@@ -14506,6 +14530,17 @@ function renderArenaTeamPickerUI(room = null) {
 
   // تجميع قائمة كافة الفرق المشاركة في البطولة
   const allTournamentTeams = (tState.teams && tState.teams.length > 0) ? tState.teams : teamsCache;
+
+  // في الأدوار الحاسمة ذات الفريقين فقط (مباراة المركز الثالث أو النهائي الكبير) يتم تحديدهما تلقائياً للتسهيل على المشرف
+  if (currentRound.pendingTeamIds && currentRound.pendingTeamIds.length === 2) {
+    if (!arenaSelectedTeamA || !arenaSelectedTeamB || arenaSelectedTeamA.id === arenaSelectedTeamB.id) {
+      const pTeams = currentRound.pendingTeamIds.map(id => allTournamentTeams.find(t => t.id === id)).filter(Boolean);
+      if (pTeams.length === 2) {
+        arenaSelectedTeamA = pTeams[0];
+        arenaSelectedTeamB = pTeams[1];
+      }
+    }
+  }
 
   // فحص أزرار الفلترة
   document.querySelectorAll(".team-filter-pill").forEach(pill => {
@@ -14577,7 +14612,7 @@ function renderArenaTeamPickerUI(room = null) {
 
     if (countAllEl) countAllEl.textContent = String(allTournamentTeams.length);
     if (countPendEl) countPendEl.textContent = String(pendingIds.length);
-    if (countQualEl) countQualEl.textContent = String(qualifiedIds.length);
+    if (countQualEl) countQualEl.textContent = String(qualifiedIds.length + (currentRound.isThirdPlaceMatch ? (tState.finalists?.length || 0) : 0));
     if (countElimEl) countElimEl.textContent = String(eliminatedIds.length);
 
     // تصفية الفرق وفق الفلتر المحدد
@@ -14585,7 +14620,7 @@ function renderArenaTeamPickerUI(room = null) {
     if (currentArenaTeamFilter === "pending") {
       displayedTeams = allTournamentTeams.filter(t => pendingIds.includes(t.id));
     } else if (currentArenaTeamFilter === "qualified") {
-      displayedTeams = allTournamentTeams.filter(t => qualifiedIds.includes(t.id));
+      displayedTeams = allTournamentTeams.filter(t => qualifiedIds.includes(t.id) || (currentRound.isThirdPlaceMatch && (tState.finalists || []).includes(t.id)));
     } else if (currentArenaTeamFilter === "eliminated") {
       displayedTeams = allTournamentTeams.filter(t => eliminatedIds.includes(t.id));
     }
@@ -14607,14 +14642,35 @@ function renderArenaTeamPickerUI(room = null) {
         const scheme = TEAM_COLOR_SCHEMES[t.color] || TEAM_COLOR_SCHEMES.blue;
         const membersCount = Array.isArray(t.members) ? t.members.length : 0;
 
-        const isQualified = qualifiedIds.includes(t.id);
-        const isEliminated = eliminatedIds.includes(t.id);
         const isPending = pendingIds.includes(t.id);
+        const isFinalistWaiting = currentRound.isThirdPlaceMatch && (tState.finalists || []).includes(t.id);
+        const is3rdRanked = tState.thirdPlaceTeam?.id === t.id;
+        const is4thRanked = tState.fourthPlaceTeam?.id === t.id;
+        const isQualified = !isPending && qualifiedIds.includes(t.id);
+        const isEliminated = !isPending && !isFinalistWaiting && !is3rdRanked && !is4thRanked && eliminatedIds.includes(t.id);
 
         let statusBadgeHtml = "";
         let cardClass = "duo-team-pick-card";
 
-        if (isQualified) {
+        if (isPending) {
+          cardClass += " is-pending";
+          if (currentRound.isThirdPlaceMatch) {
+            statusBadgeHtml = `<span class="badge-team-status pending" style="background:#fef3c7;color:#b45309;font-weight:900;"><i class="fa-solid fa-medal"></i> منافس على المركز الثالث 🥉</span>`;
+          } else if (currentRound.isGrandFinal) {
+            statusBadgeHtml = `<span class="badge-team-status pending" style="background:#fef9c3;color:#854d0e;font-weight:900;"><i class="fa-solid fa-trophy"></i> طرف النهائي الكبير 🏆</span>`;
+          } else {
+            statusBadgeHtml = `<span class="badge-team-status pending"><i class="fa-solid fa-hourglass-half"></i> لم ينافس بعد</span>`;
+          }
+        } else if (isFinalistWaiting) {
+          cardClass += " is-qualified";
+          statusBadgeHtml = `<span class="badge-team-status qualified" style="background:#dcfce7;color:#15803d;font-weight:800;"><i class="fa-solid fa-trophy"></i> متأهل للمباراة النهائية 🏆</span>`;
+        } else if (is3rdRanked) {
+          cardClass += " is-qualified";
+          statusBadgeHtml = `<span class="badge-team-status" style="background:#fed7aa;color:#9a3412;font-weight:900;"><i class="fa-solid fa-medal"></i> صاحب المركز الثالث 🥉</span>`;
+        } else if (is4thRanked) {
+          cardClass += " is-eliminated";
+          statusBadgeHtml = `<span class="badge-team-status" style="background:#f1f5f9;color:#475569;font-weight:800;"><i class="fa-solid fa-award"></i> المركز الرابع</span>`;
+        } else if (isQualified) {
           cardClass += " is-qualified";
           statusBadgeHtml = `<span class="badge-team-status qualified"><i class="fa-solid fa-bolt"></i> متأهل</span>`;
         } else if (isEliminated) {
@@ -14622,7 +14678,7 @@ function renderArenaTeamPickerUI(room = null) {
           statusBadgeHtml = `<span class="badge-team-status eliminated"><i class="fa-solid fa-xmark"></i> تم إقصاؤه</span>`;
         } else {
           cardClass += " is-pending";
-          statusBadgeHtml = `<span class="badge-team-status pending"><i class="fa-solid fa-hourglass-half"></i> لم ينافس بعد</span>`;
+          statusBadgeHtml = `<span class="badge-team-status pending"><i class="fa-solid fa-hourglass-half"></i> في الانتظار</span>`;
         }
 
         let selectionSubtext = `${membersCount} طلاب`;
@@ -14635,7 +14691,7 @@ function renderArenaTeamPickerUI(room = null) {
         }
 
         return `
-          <div class="${cardClass}" data-team-id="${escapeHtml(t.id)}" data-status="${isQualified ? 'qualified' : (isEliminated ? 'eliminated' : 'pending')}">
+          <div class="${cardClass}" data-team-id="${escapeHtml(t.id)}" data-status="${isPending ? 'pending' : (isFinalistWaiting ? 'finalist' : (isQualified ? 'qualified' : (isEliminated ? 'eliminated' : 'other')))}">
             ${statusBadgeHtml}
             <div class="team-card-icon" style="background:${scheme.badgeBg || '#f1f5f9'}; color:${scheme.badgeText || '#2563eb'};">
               <i class="fa-solid ${t.icon || 'fa-shield-halved'}"></i>
@@ -14649,22 +14705,29 @@ function renderArenaTeamPickerUI(room = null) {
       teamsGrid.querySelectorAll(".duo-team-pick-card").forEach(c => {
         c.addEventListener("click", () => {
           const tId = c.getAttribute("data-team-id");
-          const status = c.getAttribute("data-status");
           const team = allTournamentTeams.find(t => t.id === tId);
           if (!team) return;
 
-          // 1. منع اختيار الفريق المقضي
-          if (status === "eliminated") {
-            try { soundFX.wrong(); } catch (e) {}
-            showToast(`❌ تم إقصاء فريق «${team.name}» من البطولة ولا يمكن اختياره للمنافسة!`, "fa-circle-xmark", 2500);
-            return;
-          }
-
-          // 2. فحص اختيار فريق متأهل بينما لم ينتهِ الدور الحالي
-          if (status === "qualified") {
-            if (pendingIds.length > 0) {
+          // إذا لم يكن الفريق في الانتظار لهذا الدور، نتحقق من حالته
+          if (!pendingIds.includes(tId)) {
+            if (currentRound.isThirdPlaceMatch && (tState.finalists || []).includes(tId)) {
               try { soundFX.wrong(); } catch (e) {}
-              showToast(`⚠️ لم تنتهي المرحلة بعد! يجب إكمال جميع مواجهات الدور الحالي أولاً قبل اختيار المتأهلين.`, "fa-lock", 3000);
+              showToast(`🏆 فريق «${team.name}» تأهل للنهائي الكبير وسيلعب بعد حسم المركز الثالث!`, "fa-trophy", 3200);
+              return;
+            }
+            if (currentRound.isGrandFinal && (tState.thirdPlaceTeam?.id === tId || tState.fourthPlaceTeam?.id === tId)) {
+              try { soundFX.wrong(); } catch (e) {}
+              showToast(`🥉 فريق «${team.name}» حسم موقعه في ترتيب البطولة!`, "fa-medal", 3000);
+              return;
+            }
+            if (eliminatedIds.includes(tId)) {
+              try { soundFX.wrong(); } catch (e) {}
+              showToast(`❌ تم إقصاء فريق «${team.name}» في أدوار سابقة ولا يمكن اختياره للمنافسة!`, "fa-circle-xmark", 2500);
+              return;
+            }
+            if (qualifiedIds.includes(tId) && pendingIds.length > 0) {
+              try { soundFX.wrong(); } catch (e) {}
+              showToast(`⚠️ لم تنتهِ المرحلة بعد! يجب إكمال جميع مواجهات الدور الحالي أولاً قبل اختيار المتأهلين.`, "fa-lock", 3000);
               return;
             }
           }
@@ -14726,6 +14789,7 @@ function renderArenaTeamPickerUI(room = null) {
       targetRoom.currentTeamRound = 1;
       targetRoom.currentQuestionIdx = 0;
       targetRoom.teamRoundState = "entrance";
+      ensureTeamQuestionsPopulated(targetRoom, true);
 
       await saveRooms(targetRoom);
 
@@ -15791,11 +15855,18 @@ async function handleTournamentMatchFinished() {
   }
 
   const tState = room.tournamentState;
+  tState.teamMatchScores = tState.teamMatchScores || {};
+  tState.teamMatchScores[winner.id] = Math.max(scoreA, scoreB);
+  tState.teamMatchScores[loser.id] = Math.min(scoreA, scoreB);
+
   let currentRound = tState.rounds?.[tState.currentRoundIndex];
   if (!currentRound) {
     currentRound = {
       roundIndex: 0,
       roundName: getRoundNameForTeams(tState.teams?.length || 2),
+      isGrandFinal: (tState.teams?.length || 2) <= 2,
+      isThirdPlaceMatch: false,
+      isSemiFinal: (tState.teams?.length || 2) === 4,
       initialTeamsCount: tState.teams?.length || 2,
       pendingTeamIds: (tState.teams || []).map(t => t.id),
       qualifiedTeamIds: [],
@@ -15821,7 +15892,7 @@ async function handleTournamentMatchFinished() {
     timestamp: Date.now()
   });
 
-  // 2. الفائز ينضم لقائمة المتأهلين والخاسر للمقصيين
+  // 2. تحديث قوائم المتأهلين والمقصيين للدور
   if (!currentRound.qualifiedTeamIds.includes(winner.id)) {
     currentRound.qualifiedTeamIds.push(winner.id);
   }
@@ -15831,7 +15902,8 @@ async function handleTournamentMatchFinished() {
   currentRound.pendingTeamIds = (currentRound.pendingTeamIds || []).filter(id => id !== teamA.id && id !== teamB.id);
 
   // 3. فحص حالة الفريق الفردي المتبقي في الدور (تأهل تلقائي بالقرعة Bye)
-  if (currentRound.pendingTeamIds.length === 1) {
+  // لا تنطبق على مباراة المركز الثالث أو النهائي
+  if (currentRound.pendingTeamIds.length === 1 && !currentRound.isThirdPlaceMatch && !currentRound.isGrandFinal) {
     const byeId = currentRound.pendingTeamIds[0];
     const byeTeam = (tState.teams || []).find(t => t.id === byeId);
     if (!currentRound.qualifiedTeamIds.includes(byeId)) {
@@ -15844,7 +15916,7 @@ async function handleTournamentMatchFinished() {
 
   // 4. هل لا تزال هناك مواجهات متبقية في هذا الدور؟
   if (currentRound.pendingTeamIds.length >= 2) {
-    showToast(`🏆 مبروك لفريق «${winner.name}» الفوز (${Math.max(scoreA, scoreB)} - ${Math.min(scoreA, scoreB)}) والتأهل للدور القادم!`, "fa-circle-check", 3200);
+    showToast(`🏆 مبروك لفريق «${winner.name}» الفوز (${Math.max(scoreA, scoreB)} - ${Math.min(scoreA, scoreB)}) والتأهل!`, "fa-circle-check", 3200);
     try { soundFX.celebrate(); } catch (e) {}
 
     await saveRooms(room);
@@ -15854,42 +15926,69 @@ async function handleTournamentMatchFinished() {
     return;
   }
 
-  // 5. اكتملت جميع مواجهات هذا الدور!
-  const isFinalMatch = currentRound.roundName.includes("النهائي") || currentRound.initialTeamsCount <= 2 || currentRound.qualifiedTeamIds.length === 1;
+  // 5. اكتملت جميع مواجهات هذا الدور! نحدد الآن المرحلة التالية بدقة
+  const allTeams = tState.teams || [];
 
-  if (isFinalMatch) {
-    // تتويج بطل البطولة النهائي!
+  // أ) هل كانت هذه المباراة النهائية الكبرى؟
+  const isGrandFinalMatch = Boolean(
+    currentRound.isGrandFinal || 
+    currentRound.roundName === "المباراة النهائية الكبرى" || 
+    currentRound.roundName.includes("النهائية الكبرى") ||
+    (tState.rounds.length === 1 && currentRound.initialTeamsCount <= 2)
+  );
+
+  if (isGrandFinalMatch) {
     tState.isFinished = true;
     tState.championTeam = winner;
     tState.runnerUpTeam = loser;
+    room.championTeam = winner;
+    room.runnerUpTeam = loser;
 
-    // بناء جدول الترتيب الكامل لجميع الفرق المشاركة من الأول إلى الأخير
+    // بناء جدول الترتيب الكامل الشامل لكافة الفرق من المركز الأول للأخير
     const standings = [];
     standings.push({
       rank: 1,
       team: winner,
-      stageLabel: "البطل المتوج بالمركز الأول 🏆",
-      points: room.teamScores[winner.id] || 0
+      stageLabel: "البطل المتوج بالمركز الأول 🏆 🥇",
+      points: tState.teamMatchScores?.[winner.id] || Math.max(scoreA, scoreB)
     });
     standings.push({
       rank: 2,
       team: loser,
       stageLabel: "وصيف البطولة - المركز الثاني 🥈",
-      points: room.teamScores[loser.id] || 0
+      points: tState.teamMatchScores?.[loser.id] || Math.min(scoreA, scoreB)
     });
 
-    const allTeams = tState.teams || [];
+    if (tState.thirdPlaceTeam) {
+      standings.push({
+        rank: 3,
+        team: tState.thirdPlaceTeam,
+        stageLabel: "صاحب المركز الثالث - الميدالية البرونزية 🥉",
+        points: tState.teamMatchScores?.[tState.thirdPlaceTeam.id] || 0
+      });
+    }
+
+    if (tState.fourthPlaceTeam) {
+      standings.push({
+        rank: 4,
+        team: tState.fourthPlaceTeam,
+        stageLabel: "المركز الرابع - المربع الذهبي 🎖️",
+        points: tState.teamMatchScores?.[tState.fourthPlaceTeam.id] || 0
+      });
+    }
+
+    // إضافة باقي الفرق التي أقصيت في أدوار سابقة (مثل ربع النهائي)
     for (let rIdx = tState.rounds.length - 1; rIdx >= 0; rIdx--) {
       const r = tState.rounds[rIdx];
       (r.eliminatedTeamIds || []).forEach(tId => {
-        if (tId !== loser.id && !standings.some(s => s.team.id === tId)) {
+        if (!standings.some(s => s.team.id === tId)) {
           const tObj = allTeams.find(t => t.id === tId);
           if (tObj) {
             standings.push({
               rank: standings.length + 1,
               team: tObj,
-              stageLabel: r.roundName,
-              points: 0
+              stageLabel: r.roundName || "مشارك في البطولة",
+              points: tState.teamMatchScores?.[tId] || 0
             });
           }
         }
@@ -15902,19 +16001,144 @@ async function handleTournamentMatchFinished() {
           rank: standings.length + 1,
           team: tObj,
           stageLabel: "مشارك في البطولة",
-          points: 0
+          points: tState.teamMatchScores?.[tObj.id] || 0
         });
       }
     });
 
     tState.fullStandings = standings;
+    room.finalStandings = standings;
     room.phase = "team_finale";
+    room.tournamentEnded = true;
+
     await saveRooms(room);
     showTeamGrandFinaleModal(room);
     return;
   }
 
-  // انتقال لدور التصفيات التالي
+  // ب) هل كانت هذه مباراة تحديد المركز الثالث؟
+  const isThirdPlaceMatch = Boolean(
+    currentRound.isThirdPlaceMatch || 
+    currentRound.roundName.includes("المركز الثالث")
+  );
+
+  if (isThirdPlaceMatch) {
+    tState.thirdPlaceTeam = winner;
+    tState.fourthPlaceTeam = loser;
+
+    showToast(`🥉 مبارك لفريق «${winner.name}» حصد المركز الثالث والميدالية البرونزية! الاستعداد الآن للمباراة النهائية الكبرى! 🏆`, "fa-medal", 4500);
+    try { soundFX.celebrate(); } catch (e) {}
+
+    // الانتقال الآن إلى المباراة النهائية الكبرى بين طرفي النهائي المؤجلين
+    const finalRoundIndex = tState.currentRoundIndex + 1;
+    const finalPendingTeams = (Array.isArray(tState.finalists) && tState.finalists.length >= 2) 
+      ? [...tState.finalists] 
+      : [...currentRound.qualifiedTeamIds];
+
+    const finalRound = {
+      roundIndex: finalRoundIndex,
+      roundName: "المباراة النهائية الكبرى 🏆",
+      isGrandFinal: true,
+      isThirdPlaceMatch: false,
+      isSemiFinal: false,
+      initialTeamsCount: finalPendingTeams.length || 2,
+      pendingTeamIds: finalPendingTeams,
+      qualifiedTeamIds: [],
+      eliminatedTeamIds: [],
+      byeTeamId: null,
+      matches: []
+    };
+
+    tState.rounds.push(finalRound);
+    tState.currentRoundIndex = finalRoundIndex;
+    tState.currentRoundName = finalRound.roundName;
+
+    await saveRooms(room);
+    setTimeout(async () => {
+      await handleReturnToTeamSelection();
+    }, 2800);
+    return;
+  }
+
+  // ج) هل انتهى الدور نصف النهائي؟ (يتأهل فريقان للنهائي وفريقان يتنافسان على المركز الثالث)
+  const isSemiFinalRound = Boolean(
+    currentRound.isSemiFinal || 
+    currentRound.roundName.includes("نصف النهائي") || 
+    currentRound.roundName.includes("المربع الذهبي") ||
+    (currentRound.qualifiedTeamIds.length === 2 && currentRound.eliminatedTeamIds.length >= 1)
+  );
+
+  if (isSemiFinalRound) {
+    // إذا كان هناك خاسران في نصف النهائي (مثل بطولة 4 فرق)، تُقام مباراة تحديد المركز الثالث أولاً قبل النهائي!
+    if (currentRound.eliminatedTeamIds.length >= 2) {
+      tState.finalists = [...currentRound.qualifiedTeamIds];
+      tState.semiFinalLosers = [...currentRound.eliminatedTeamIds];
+
+      const thirdRoundIndex = tState.currentRoundIndex + 1;
+      const thirdRound = {
+        roundIndex: thirdRoundIndex,
+        roundName: "مباراة تحديد المركز الثالث (الميدالية البرونزية) 🥉",
+        isThirdPlaceMatch: true,
+        isGrandFinal: false,
+        isSemiFinal: false,
+        initialTeamsCount: 2,
+        pendingTeamIds: [...currentRound.eliminatedTeamIds], // الخاسران من مباراتي نصف النهائي يتنافسان على المركز الثالث
+        qualifiedTeamIds: [],
+        eliminatedTeamIds: [],
+        byeTeamId: null,
+        matches: []
+      };
+
+      tState.rounds.push(thirdRound);
+      tState.currentRoundIndex = thirdRoundIndex;
+      tState.currentRoundName = thirdRound.roundName;
+
+      showToast(`🔥 اكتمل الدور نصف النهائي! مباراة تحديد المركز الثالث 🥉 ستقام أولاً بين فريقي المربع الذهبي قبل النهائي الكبير 🏆!`, "fa-award", 4500);
+      try { soundFX.celebrate(); } catch (e) {}
+
+      await saveRooms(room);
+      setTimeout(async () => {
+        await handleReturnToTeamSelection();
+      }, 2800);
+      return;
+    } else {
+      // حالة وجود فريق وحيد خاسر (مثل مسابقة 3 فرق مع Bye): يحصل على المركز الثالث مباشرة ونذهب للنهائي
+      if (currentRound.eliminatedTeamIds.length === 1) {
+        tState.thirdPlaceTeam = allTeams.find(t => t.id === currentRound.eliminatedTeamIds[0]);
+      }
+      tState.finalists = [...currentRound.qualifiedTeamIds];
+
+      const finalRoundIndex = tState.currentRoundIndex + 1;
+      const finalRound = {
+        roundIndex: finalRoundIndex,
+        roundName: "المباراة النهائية الكبرى 🏆",
+        isGrandFinal: true,
+        isThirdPlaceMatch: false,
+        isSemiFinal: false,
+        initialTeamsCount: 2,
+        pendingTeamIds: [...currentRound.qualifiedTeamIds],
+        qualifiedTeamIds: [],
+        eliminatedTeamIds: [],
+        byeTeamId: null,
+        matches: []
+      };
+
+      tState.rounds.push(finalRound);
+      tState.currentRoundIndex = finalRoundIndex;
+      tState.currentRoundName = finalRound.roundName;
+
+      showToast(`🚀 اكتمل نصف النهائي! الانتقال إلى المباراة النهائية الكبرى 🏆!`, "fa-bolt", 4000);
+      try { soundFX.celebrate(); } catch (e) {}
+
+      await saveRooms(room);
+      setTimeout(async () => {
+        await handleReturnToTeamSelection();
+      }, 2800);
+      return;
+    }
+  }
+
+  // د) أي دور تصفوي آخر (مثل ربع النهائي، دور الـ 16... إلخ)
   const nextTeamsCount = currentRound.qualifiedTeamIds.length;
   const nextRoundName = getRoundNameForTeams(nextTeamsCount);
   const nextRoundIndex = tState.currentRoundIndex + 1;
@@ -15932,6 +16156,9 @@ async function handleTournamentMatchFinished() {
   const newRound = {
     roundIndex: nextRoundIndex,
     roundName: nextRoundName,
+    isGrandFinal: false,
+    isThirdPlaceMatch: false,
+    isSemiFinal: nextTeamsCount === 4 || nextTeamsCount === 3,
     initialTeamsCount: nextTeamsCount,
     pendingTeamIds: nextPending,
     qualifiedTeamIds: nextQualified,
@@ -16181,6 +16408,8 @@ async function saveCurrentTournamentToArchive() {
       title: currentLiveRoom.name,
       championTeam: winningTeam,
       runnerUpTeam: runnerUpTeam,
+      thirdPlaceTeam: tState.thirdPlaceTeam || null,
+      fourthPlaceTeam: tState.fourthPlaceTeam || null,
       fullStandings: fullStandings,
       totalTeamsCount: tState.teams?.length || currentLiveRoom.teams?.length || 2,
       roundsCount: tState.rounds?.length || 1,
@@ -16377,11 +16606,14 @@ function openTournamentDetailsModal(tournamentId) {
 
   const champion = tourn.championTeam || { name: "غير محدد" };
   const runnerUp = tourn.runnerUpTeam || { name: "غير محدد" };
+  const thirdPlace = tourn.thirdPlaceTeam || null;
   const standings = tourn.fullStandings || [];
 
+  const podiumColumns = thirdPlace ? "1fr 1fr 1fr" : "1fr 1fr";
+
   contentEl.innerHTML = `
-    <!-- منصة التتويج المصغرة للبطل والوصيف -->
-    <div class="podium-showcase-grid">
+    <!-- منصة التتويج المصغرة للبطل والوصيف والمركز الثالث -->
+    <div class="podium-showcase-grid" style="grid-template-columns: ${podiumColumns};">
       <div class="podium-card-duo gold">
         <div class="podium-icon">🏆</div>
         <div class="podium-card-role">بطل البطولة (المركز الأول)</div>
@@ -16392,6 +16624,13 @@ function openTournamentDetailsModal(tournamentId) {
         <div class="podium-card-role">وصيف البطولة (المركز الثاني)</div>
         <strong class="podium-card-name">${escapeHtml(runnerUp.name)}</strong>
       </div>
+      ${thirdPlace ? `
+        <div class="podium-card-duo bronze">
+          <div class="podium-icon">🥉</div>
+          <div class="podium-card-role">المركز الثالث (البرونزية)</div>
+          <strong class="podium-card-name">${escapeHtml(thirdPlace.name)}</strong>
+        </div>
+      ` : ''}
     </div>
 
     ${tourn.mvpStudent ? `
@@ -16609,6 +16848,8 @@ document.getElementById("btnRestartTeamContest")?.addEventListener("click", asyn
           ...cleanRoom,
           championTeam: null,
           runnerUpTeam: null,
+          thirdPlaceTeam: null,
+          fourthPlaceTeam: null,
           finalStandings: null,
           mvpStudent: null,
           teamActiveSolver: null,

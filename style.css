@@ -10843,6 +10843,14 @@ body:has(#arenaTeamSelectionOverlay:not(.hidden)) #currentContestantBanner {
   box-shadow: 0 4px 15px rgba(148, 163, 184, 0.2);
 }
 
+.podium-card-duo.bronze {
+  background: linear-gradient(135deg, #fffbeb 0%, #fed7aa 100%);
+  border: 2.5px solid #f97316;
+  border-bottom: 5px solid #c2410c;
+  color: #7c2d12;
+  box-shadow: 0 4px 15px rgba(249, 115, 22, 0.2);
+}
+
 .podium-icon {
   font-size: 28px;
   line-height: 1;
