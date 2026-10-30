@@ -619,7 +619,7 @@ export const LiveArena: React.FC = () => {
 
               {/* بطاقات نتائج الفريقين إذا كانت بطولة */}
               {activeRoom.type === "tournament" && activeRoom.teams && (
-                <div style={{ display: "flex", gap: "14px", alignItems: "center", flexWrap: "wrap" }}>
+                <div style={{ display: "flex", gap: "10px", alignItems: "center", justifyContent: "center", flexWrap: "wrap", width: "100%" }}>
                   {activeRoom.teams.map((t, idx) => (
                     <div
                       key={t.id}
@@ -628,7 +628,9 @@ export const LiveArena: React.FC = () => {
                         border: activeRoom.currentTeamIdx === idx ? "2.5px solid #eab308" : "1.5px solid #cbd5e1",
                         borderRadius: "14px",
                         padding: "8px 16px",
-                        textAlign: "center"
+                        textAlign: "center",
+                        flex: "1 1 120px",
+                        minWidth: "110px"
                       }}
                     >
                       <div style={{ fontSize: "12px", fontWeight: 800, color: "#64748b" }}>{t.name}</div>
@@ -832,7 +834,7 @@ export const LiveArena: React.FC = () => {
                       <p style={{ textAlign: "center", color: "#64748b", fontWeight: 700, marginBottom: "12px" }}>
                         اختر الطرف الأيمن ثم الطرف المقابل له للتوصيل:
                       </p>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", maxWidth: "600px", margin: "0 auto" }}>
+                      <div className="team-matching-grid" style={{ maxWidth: "600px", margin: "0 auto" }}>
                         <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                           {currentQuestion.pairs.map((p, i) => (
                             <button
