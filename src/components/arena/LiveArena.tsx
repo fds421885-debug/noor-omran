@@ -205,8 +205,8 @@ export const LiveArena: React.FC = () => {
     if (!activeRoom) return;
 
     if (activeRoom.type === "tournament") {
-      // بطولة فرق: التحقق من وجود فريقين
-      let matchTeams = activeRoom.teams || [];
+      // بطولة فرق: التحقق من وجود فريقين وتصفير النقاط
+      let matchTeams = (activeRoom.teams || []).map(t => ({ ...t, score: 0 }));
       if (matchTeams.length < 2) {
         // إنشاء فريقين افتراضيين إذا لم يتم تعيينهم
         matchTeams = [

@@ -8,15 +8,45 @@ import { useApp } from "../../context/AppContext.tsx";
 import { TournamentArchiveItem } from "../../types.ts";
 
 export const GrandFinaleModal: React.FC = () => {
-  const { activeModal, closeModal, modalData, exitLiveRoom } = useApp();
+  const { activeModal, closeModal, modalData, exitLiveRoom, activeRoom, updateLiveRoom, currentUser, participants, showToast } = useApp();
 
   if (activeModal !== "grandFinale") return null;
 
   const archive = modalData as TournamentArchiveItem;
 
+  const isSup = currentUser && (
+    currentUser.role === "supervisor" ||
+    isSupervisor(currentUser.name, participants) ||
+    currentUser.name === activeRoom?.leaderName
+  );
+
   const handleClose = () => {
     closeModal();
     exitLiveRoom();
+  };
+
+  const handleRestartTournament = async () => {
+    if (!activeRoom) return;
+    if (window.confirm("هل تريد إعادة بطولة الفرق من البداية وتصفير النتائج؟ سيبدأ الجميع من جديد في غرفة الانتظار (Lobby) كأن الغرفة فُتحت للتو بالتزامن.")) {
+      const resetTeams = (activeRoom.teams || []).map(t => ({
+        ...t,
+        score: 0
+      }));
+      const updated: LiveRoom = {
+        ...activeRoom,
+        status: "lobby",
+        tournamentRound: 1,
+        teamRoundStarted: false,
+        currentQuestionIdx: 0,
+        currentTeamIdx: 0,
+        contestantScore: 0,
+        teams: resetTeams,
+        currentStudentIdxInTeam: resetTeams.reduce((acc, t) => ({ ...acc, [t.id]: 0 }), {})
+      };
+      await updateLiveRoom(updated);
+      closeModal();
+      showToast("تمت إعادة البطولة من البداية وتصفير النتائج كأن الغرفة فُتحت للتو! 🔄", "fa-rotate-right");
+    }
   };
 
   return (
@@ -68,7 +98,17 @@ export const GrandFinaleModal: React.FC = () => {
           </div>
         )}
 
-        <div style={{ display: "flex", gap: "10px", justifyContent: "center" }}>
+        <div style={{ display: "flex", gap: "10px", justifyContent: "center", flexWrap: "wrap" }}>
+          {isSup && (
+            <button
+              type="button"
+              className="btn-duo-yellow"
+              onClick={handleRestartTournament}
+              style={{ fontSize: "16px", padding: "12px 28px", fontWeight: 800 }}
+            >
+              <i className="fa-solid fa-rotate-right"></i> أعد البطولة كأننا لسه فاتحين غرفة
+            </button>
+          )}
           <button
             type="button"
             className="btn-duo-green"
