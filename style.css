@@ -9682,16 +9682,18 @@ button:disabled .fa-spin,
 }
 
 .team-side-flyer.flyer-right {
-  transform: translateX(280px);
+  transform: translateX(360px);
 }
 
 .team-side-flyer.flyer-left {
-  transform: translateX(-280px);
+  transform: translateX(-360px);
 }
 
 .team-side-flyer.visible {
-  opacity: 1;
+  opacity: 1 !important;
+  visibility: visible !important;
   transform: translateX(0) !important;
+  pointer-events: auto !important;
 }
 
 .team-side-flyer.team-card-pulse-win {
@@ -12279,26 +12281,56 @@ body:has(#supervisorLiveRaceMonitor:not(.hidden)) .main-content,
     gap: 12px;
   }
 
-  /* بطاقات الفرق الجانبية: في الأجهزة اللوحية والجوال لا تثبت على الأطراف حتى لا تحجب السؤال */
+  /* بطاقات الفرق الجانبية المتحركة للنقاط على الأجهزة اللوحية */
   .team-score-flyers-container {
-    position: static !important;
+    position: fixed !important;
+    inset: 0 !important;
+    top: 72px !important;
+    bottom: auto !important;
+    height: auto !important;
+    padding: 0 16px !important;
     display: flex !important;
-    justify-content: center !important;
-    gap: 12px !important;
-    margin-bottom: 14px !important;
-    width: 100% !important;
-    pointer-events: auto !important;
+    justify-content: space-between !important;
+    align-items: flex-start !important;
+    pointer-events: none !important;
+    z-index: 88880 !important;
+    max-width: 100vw !important;
+    overflow: visible !important;
+    visibility: visible !important;
+    opacity: 1 !important;
   }
 
   .team-side-flyer {
-    position: static !important;
-    width: auto !important;
-    flex: 1 1 200px !important;
-    max-width: 320px !important;
-    transform: none !important;
-    opacity: 1 !important;
-    padding: 10px 16px !important;
+    width: clamp(160px, 32vw, 210px) !important;
+    padding: 10px 14px !important;
     border-radius: 16px !important;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4) !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 6px !important;
+    opacity: 0 !important;
+    pointer-events: auto !important;
+    transition: all 0.45s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  }
+
+  .team-side-flyer.flyer-right {
+    transform: translateX(110vw) !important;
+  }
+
+  .team-side-flyer.flyer-left {
+    transform: translateX(-110vw) !important;
+  }
+
+  .team-side-flyer.visible {
+    opacity: 1 !important;
+    visibility: visible !important;
+    transform: translateX(0) !important;
+  }
+
+  .team-side-flyer.team-card-pulse-win {
+    transform: scale(1.1) !important;
+    box-shadow: 0 0 35px rgba(250, 204, 21, 0.95), 0 12px 35px rgba(0, 0, 0, 0.45) !important;
+    border: 3px solid #facc15 !important;
   }
 
   .side-flyer-name {
@@ -13099,30 +13131,89 @@ body:has(#supervisorLiveRaceMonitor:not(.hidden)) .main-content,
   }
 
   /* ========================================================
-     إخفاء علامات الفرق الجانبية المتحركة كلياً على الجوال لمنع خروجها عن الشاشة
+     بطاقات الفرق الجانبية المتحركة للنقاط على الجوال والشاشات الصغيرة
+     تنزلق بسلاسة من اليمين واليسار فورياً لتسجيل النقاط والاحتفال
      ======================================================== */
   .team-score-flyers-container {
-    display: none !important;
-    visibility: hidden !important;
+    position: fixed !important;
+    top: 66px !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: auto !important;
+    height: auto !important;
     pointer-events: none !important;
-    width: 0 !important;
-    height: 0 !important;
-    overflow: hidden !important;
-    opacity: 0 !important;
+    z-index: 88880 !important;
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: flex-start !important;
+    padding: 0 8px !important;
+    max-width: 100vw !important;
+    overflow: visible !important;
+    visibility: visible !important;
+    opacity: 1 !important;
   }
 
   .team-side-flyer {
-    display: none !important;
-    visibility: hidden !important;
-    pointer-events: none !important;
-    transform: none !important;
-    width: 0 !important;
-    height: 0 !important;
+    display: flex !important;
+    visibility: visible !important;
+    width: clamp(130px, 44vw, 170px) !important;
+    padding: 8px 10px !important;
+    border-radius: 14px !important;
+    color: #ffffff !important;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45) !important;
+    transition: all 0.42s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    flex-direction: column !important;
+    gap: 3px !important;
     opacity: 0 !important;
+    pointer-events: auto !important;
+  }
+
+  .team-side-flyer.flyer-right {
+    transform: translateX(120vw) !important;
+  }
+
+  .team-side-flyer.flyer-left {
+    transform: translateX(-120vw) !important;
+  }
+
+  .team-side-flyer.visible {
+    opacity: 1 !important;
+    visibility: visible !important;
+    transform: translateX(0) !important;
+  }
+
+  .team-side-flyer.team-card-pulse-win {
+    transform: scale(1.08) !important;
+    box-shadow: 0 0 35px rgba(250, 204, 21, 0.95), 0 8px 25px rgba(0, 0, 0, 0.5) !important;
+    border: 3px solid #facc15 !important;
+  }
+
+  .side-flyer-header {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 4px !important;
+  }
+
+  .side-flyer-name {
+    font-size: 12px !important;
+    font-weight: 800 !important;
+    max-width: 90px !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+  }
+
+  .side-flyer-score {
+    font-size: 20px !important;
+    font-weight: 900 !important;
+    line-height: 1.1 !important;
+    color: #facc15 !important;
+    text-shadow: 0 2px 6px rgba(0, 0, 0, 0.5) !important;
   }
 
   /* ========================================================
-     ترتيب فريقي المواجهة رأسياً تحت بعضهما مع دائرة VS في المنتصف على الجوال
+     ترتيب فريقي المواجهة مع دعم الانزلاق من اليمين واليسار على الجوال
      ======================================================== */
   .team-entrance-overlay {
     padding: 16px 12px !important;
@@ -13165,9 +13256,15 @@ body:has(#supervisorLiveRaceMonitor:not(.hidden)) .main-content,
     max-width: 440px !important;
     min-height: auto !important;
     padding: 16px 14px !important;
-    animation: none !important;
-    transform: none !important;
     border-radius: 18px !important;
+  }
+
+  #introCardTeamA.team-right {
+    animation: slideInFromRight 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+  }
+
+  #introCardTeamA.reverse-exit-left {
+    animation: slideOutToLeft 0.38s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
   }
 
   .team-vs-divider {
@@ -13195,9 +13292,15 @@ body:has(#supervisorLiveRaceMonitor:not(.hidden)) .main-content,
     max-width: 440px !important;
     min-height: auto !important;
     padding: 16px 14px !important;
-    animation: none !important;
-    transform: none !important;
     border-radius: 18px !important;
+  }
+
+  #introCardTeamB.team-left {
+    animation: slideInFromLeft 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+  }
+
+  #introCardTeamB.reverse-exit-right {
+    animation: slideOutToRight 0.38s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
   }
 
   .team-intro-card-header {

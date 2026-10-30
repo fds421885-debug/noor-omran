@@ -70,6 +70,12 @@ export const LiveArena: React.FC = () => {
     title: string;
   } | null>(null);
 
+  // بطاقات النقاط المنزلقة من اليمين واليسار للفرق
+  const [teamFlyers, setTeamFlyers] = useState<{
+    show: boolean;
+    winningTeamId: string | null;
+  } | null>(null);
+
   // تقييم المعلمين الشفهي
   const [oralRating, setOralRating] = useState<number>(5);
 
@@ -315,6 +321,13 @@ export const LiveArena: React.FC = () => {
       if (targetTeam) {
         targetTeam.score = Math.max(0, targetTeam.score + scoreRes.netPoints);
       }
+      setTeamFlyers({
+        show: true,
+        winningTeamId: isCorrect && targetTeam ? targetTeam.id : null
+      });
+      setTimeout(() => {
+        setTeamFlyers(null);
+      }, 3500);
     }
 
     // إظهار أنيميشن النتيجة
@@ -624,7 +637,15 @@ export const LiveArena: React.FC = () => {
 
               {/* بطاقات نتائج الفريقين إذا كانت بطولة مع شارة VS الاحترافية */}
               {activeRoom.type === "tournament" && activeRoom.teams && activeRoom.teams.length >= 2 && (
-                <div className="arena-teams-hud-wrapper" style={{ display: "flex", gap: "10px", alignItems: "center", justifyContent: "center", width: "100%", margin: "8px 0" }}>
+                <div
+                  className="arena-teams-hud-wrapper"
+                  onClick={() => {
+                    setTeamFlyers({ show: true, winningTeamId: null });
+                    setTimeout(() => setTeamFlyers(null), 3500);
+                  }}
+                  title="انقر لإظهار بطاقات درجات الفريقين المنزلقة من اليمين واليسار"
+                  style={{ display: "flex", gap: "10px", alignItems: "center", justifyContent: "center", width: "100%", margin: "8px 0", cursor: "pointer" }}
+                >
                   <div
                     style={{
                       background: activeRoom.currentTeamIdx === 0 ? "#fefce8" : "#ffffff",
@@ -964,6 +985,43 @@ export const LiveArena: React.FC = () => {
               </div>
             )}
 
+          </div>
+        )}
+
+        {/* بطاقات الفرق الجانبية المتحركة لعرض النقاط وتكبيرها عند الفوز */}
+        {activeRoom?.type === "tournament" && activeRoom.teams && activeRoom.teams.length >= 2 && teamFlyers?.show && (
+          <div id="teamScoreFlyersContainer" className="team-score-flyers-container">
+            <div
+              id="flyerTeamA"
+              className={`team-side-flyer flyer-right visible ${teamFlyers.winningTeamId === activeRoom.teams[0].id ? "team-card-pulse-win" : ""}`}
+              style={{
+                background: "linear-gradient(135deg, #1e40af 0%, #3b82f6 100%)",
+                border: "2.5px solid #60a5fa"
+              }}
+            >
+              <div className="side-flyer-header">
+                <span className="side-flyer-name">{activeRoom.teams[0].name}</span>
+                <i className="fa-solid fa-shield" style={{ color: "#facc15" }}></i>
+              </div>
+              <div className="side-flyer-score">{activeRoom.teams[0].score || 0}</div>
+              <div style={{ fontSize: "11.5px", opacity: 0.85, fontWeight: 700 }}>درجة متراكمة</div>
+            </div>
+
+            <div
+              id="flyerTeamB"
+              className={`team-side-flyer flyer-left visible ${teamFlyers.winningTeamId === activeRoom.teams[1].id ? "team-card-pulse-win" : ""}`}
+              style={{
+                background: "linear-gradient(135deg, #991b1b 0%, #ef4444 100%)",
+                border: "2.5px solid #f87171"
+              }}
+            >
+              <div className="side-flyer-header">
+                <span className="side-flyer-name">{activeRoom.teams[1].name}</span>
+                <i className="fa-solid fa-shield" style={{ color: "#facc15" }}></i>
+              </div>
+              <div className="side-flyer-score">{activeRoom.teams[1].score || 0}</div>
+              <div style={{ fontSize: "11.5px", opacity: 0.85, fontWeight: 700 }}>درجة متراكمة</div>
+            </div>
           </div>
         )}
 

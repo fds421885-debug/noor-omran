@@ -15286,18 +15286,24 @@ function showTeamRollingStudentCard(team, studentName, onComplete) {
 }
 
 // بطاقات الفرق الجانبية المتحركة (Score Flyers)
+let teamScoreFlyersHideTimer = null;
+
 function updateTeamScoreFlyers(winningTeamId = null, deltaPoints = 0) {
   const container = document.getElementById("teamScoreFlyersContainer");
   const flyerA = document.getElementById("flyerTeamA");
   const flyerB = document.getElementById("flyerTeamB");
   if (!container || !currentLiveRoom) return;
 
-  const teamA = currentLiveRoom.teams?.[0];
-  const teamB = currentLiveRoom.teams?.[1];
+  const teamA = (currentLiveRoom.teams && currentLiveRoom.teams[0]) || currentLiveRoom.teamA || currentLiveRoom.tournamentState?.teams?.[0] || { id: "team_a", name: "الفريق الأول", color: "blue" };
+  const teamB = (currentLiveRoom.teams && currentLiveRoom.teams[1]) || currentLiveRoom.teamB || currentLiveRoom.tournamentState?.teams?.[1] || { id: "team_b", name: "الفريق الثاني", color: "red" };
   if (!teamA || !teamB) return;
 
-  const schemeA = TEAM_COLOR_SCHEMES[teamA.color] || TEAM_COLOR_SCHEMES.blue;
-  const schemeB = TEAM_COLOR_SCHEMES[teamB.color] || TEAM_COLOR_SCHEMES.red;
+  const schemeA = (typeof TEAM_COLOR_SCHEMES !== "undefined" && TEAM_COLOR_SCHEMES[teamA.color]) || { bg: "linear-gradient(135deg, #1e40af 0%, #3b82f6 100%)", border: "#60a5fa" };
+  const schemeB = (typeof TEAM_COLOR_SCHEMES !== "undefined" && TEAM_COLOR_SCHEMES[teamB.color]) || { bg: "linear-gradient(135deg, #991b1b 0%, #ef4444 100%)", border: "#f87171" };
+
+  currentLiveRoom.teamScores = currentLiveRoom.teamScores || {};
+  const scoreA = currentLiveRoom.teamScores[teamA.id] ?? currentLiveRoom.teamScores[teamA.name] ?? teamA.score ?? 0;
+  const scoreB = currentLiveRoom.teamScores[teamB.id] ?? currentLiveRoom.teamScores[teamB.name] ?? teamB.score ?? 0;
 
   if (flyerA) {
     flyerA.style.background = schemeA.bg;
@@ -15305,35 +15311,74 @@ function updateTeamScoreFlyers(winningTeamId = null, deltaPoints = 0) {
     const flyerNameA = document.getElementById("flyerTeamAName");
     const flyerScoreA = document.getElementById("flyerTeamAScore");
     if (flyerNameA) flyerNameA.textContent = teamA.name;
-    if (flyerScoreA) flyerScoreA.textContent = currentLiveRoom.teamScores?.[teamA.id] || 0;
+    if (flyerScoreA) flyerScoreA.textContent = String(scoreA);
+    flyerA.classList.remove("visible", "team-card-pulse-win");
+    void flyerA.offsetWidth;
     flyerA.classList.add("visible");
   }
+
   if (flyerB) {
     flyerB.style.background = schemeB.bg;
     flyerB.style.border = `2.5px solid ${schemeB.border}`;
     const flyerNameB = document.getElementById("flyerTeamBName");
     const flyerScoreB = document.getElementById("flyerTeamBScore");
     if (flyerNameB) flyerNameB.textContent = teamB.name;
-    if (flyerScoreB) flyerScoreB.textContent = currentLiveRoom.teamScores?.[teamB.id] || 0;
+    if (flyerScoreB) flyerScoreB.textContent = String(scoreB);
+    flyerB.classList.remove("visible", "team-card-pulse-win");
+    void flyerB.offsetWidth;
     flyerB.classList.add("visible");
   }
 
+  try { soundFX.pop(); } catch (e) {}
+
   if (winningTeamId) {
-    const winningFlyer = winningTeamId === teamA.id ? flyerA : flyerB;
+    const isTeamA = String(winningTeamId) === String(teamA.id) || winningTeamId === teamA.name;
+    const isTeamB = String(winningTeamId) === String(teamB.id) || winningTeamId === teamB.name;
+    const winningFlyer = isTeamA ? flyerA : (isTeamB ? flyerB : null);
     if (winningFlyer) {
       winningFlyer.classList.add("team-card-pulse-win");
       try { soundFX.celebrate(); } catch (e) {}
       setTimeout(() => {
         winningFlyer.classList.remove("team-card-pulse-win");
-      }, 1800);
+      }, 2000);
     }
   }
 
-  setTimeout(() => {
-    flyerA?.classList.remove("visible");
-    flyerB?.classList.remove("visible");
-  }, 2600);
+  if (teamScoreFlyersHideTimer) {
+    clearTimeout(teamScoreFlyersHideTimer);
+    teamScoreFlyersHideTimer = null;
+  }
+
+  teamScoreFlyersHideTimer = setTimeout(() => {
+    flyerA?.classList.remove("visible", "team-card-pulse-win");
+    flyerB?.classList.remove("visible", "team-card-pulse-win");
+    teamScoreFlyersHideTimer = null;
+  }, 3500);
 }
+
+window.updateTeamScoreFlyers = updateTeamScoreFlyers;
+window.showTeamScoreCards = updateTeamScoreFlyers;
+
+// تمكين النقر على خانة النقاط لعرض بطاقات نقاط الفريقين المنزلقة من اليمين واليسار في أي وقت
+document.querySelector(".contestant-score-box")?.addEventListener("click", () => {
+  if (currentLiveRoom?.isTeamMatch) {
+    updateTeamScoreFlyers();
+  }
+});
+
+document.getElementById("flyerTeamA")?.addEventListener("click", () => {
+  if (currentLiveRoom?.isTeamMatch) {
+    const tA = (currentLiveRoom.teams && currentLiveRoom.teams[0]) || currentLiveRoom.teamA;
+    updateTeamScoreFlyers(tA ? tA.id : null);
+  }
+});
+
+document.getElementById("flyerTeamB")?.addEventListener("click", () => {
+  if (currentLiveRoom?.isTeamMatch) {
+    const tB = (currentLiveRoom.teams && currentLiveRoom.teams[1]) || currentLiveRoom.teamB;
+    updateTeamScoreFlyers(tB ? tB.id : null);
+  }
+});
 
 // --------------------------------------------------------
 // تشغيل الجولة الحالية للمسابقة
@@ -17934,13 +17979,24 @@ function syncTeamStageRealtime(room) {
   }
 
   // تحديث نقاط الفريقين اللحظية في بطاقات النتائج الجانبية
-  const teamA = room.teams?.[0];
-  const teamB = room.teams?.[1];
+  const teamA = (room.teams && room.teams[0]) || room.teamA || room.tournamentState?.teams?.[0];
+  const teamB = (room.teams && room.teams[1]) || room.teamB || room.tournamentState?.teams?.[1];
   if (teamA && teamB && room.teamScores) {
+    const scoreA = room.teamScores[teamA.id] ?? room.teamScores[teamA.name] ?? teamA.score ?? 0;
+    const scoreB = room.teamScores[teamB.id] ?? room.teamScores[teamB.name] ?? teamB.score ?? 0;
     const elScoreA = document.getElementById("flyerTeamAScore");
     const elScoreB = document.getElementById("flyerTeamBScore");
-    if (elScoreA) elScoreA.textContent = String(room.teamScores[teamA.id] || 0);
-    if (elScoreB) elScoreB.textContent = String(room.teamScores[teamB.id] || 0);
+    if (elScoreA) elScoreA.textContent = String(scoreA);
+    if (elScoreB) elScoreB.textContent = String(scoreB);
+
+    if (typeof window.lastTrackedScoreA === "number" && typeof window.lastTrackedScoreB === "number") {
+      if (scoreA !== window.lastTrackedScoreA || scoreB !== window.lastTrackedScoreB) {
+        const winningId = scoreA > window.lastTrackedScoreA ? teamA.id : (scoreB > window.lastTrackedScoreB ? teamB.id : null);
+        updateTeamScoreFlyers(winningId);
+      }
+    }
+    window.lastTrackedScoreA = scoreA;
+    window.lastTrackedScoreB = scoreB;
   }
 
   // مزامنة حالة بدء الفقرة يدوياً بالضغط على زر التالي من المشرف
