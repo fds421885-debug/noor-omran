@@ -33,6 +33,7 @@
   "dependencies": {
     "canvas-confetti": "^1.9.4",
     "firebase": "^13.0.0",
+    "framer-motion": "^14.8.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   }

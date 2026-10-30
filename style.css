@@ -246,39 +246,63 @@ body {
 
 /* شريط المستخدم السريع في الهيدر */
 .user-quick-status {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   background: var(--duo-green-tint);
   border: 2px solid var(--duo-green-subtle);
   border-bottom: 3px solid var(--duo-green);
-  padding: 4px 14px;
+  padding: 4px 8px 4px 12px;
   border-radius: var(--radius-pill);
+  flex-shrink: 0;
+  max-width: 100%;
 }
 
 .quick-user-name {
   font-size: 13.5px;
   font-weight: 800;
   color: var(--duo-green-dark);
-  max-width: 140px;
+  max-width: 130px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .btn-logout-small {
-  background: none;
-  border: none;
-  color: var(--duo-red);
+  background: #fef2f2;
+  border: 1.5px solid #fca5a5;
+  color: #ef4444;
   cursor: pointer;
-  font-size: 14px;
-  display: flex;
+  font-size: 13.5px;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  border-radius: 9px;
+  display: inline-flex;
   align-items: center;
-  transition: transform 0.2s;
+  justify-content: center;
+  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 2px 0 #fecaca;
+  flex-shrink: 0 !important;
+  padding: 0;
+  margin: 0;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
 }
 
 .btn-logout-small:hover {
-  transform: scale(1.2);
+  background: #fee2e2;
+  color: #dc2626;
+  border-color: #f87171;
+  box-shadow: 0 3px 0 #fca5a5;
+  transform: translateY(-1px);
+}
+
+.btn-logout-small:active {
+  transform: translateY(2px);
+  box-shadow: none;
 }
 
 /* ========================================================
@@ -12285,21 +12309,39 @@ body:has(#supervisorLiveRaceMonitor:not(.hidden)) .main-content,
   }
 
   .user-quick-status {
-    padding: 4px 8px;
+    padding: 3px 6px 3px 8px;
     gap: 6px;
+    flex-shrink: 0;
+    max-width: 180px;
+    display: inline-flex;
+    align-items: center;
   }
 
   .quick-user-name {
-    max-width: 85px;
+    max-width: 75px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 12px;
+    font-size: 11.5px;
   }
 
   .quick-role-badge {
-    font-size: 11px;
+    font-size: 10.5px;
     padding: 2px 6px;
+  }
+
+  .btn-logout-small {
+    width: 32px !important;
+    height: 32px !important;
+    min-width: 32px !important;
+    min-height: 32px !important;
+    font-size: 13.5px !important;
+    border-radius: 8px !important;
+    display: inline-flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    flex-shrink: 0 !important;
   }
 
   /* الحاوية وبطاقات المحتوى */
@@ -13279,18 +13321,83 @@ body:has(#supervisorLiveRaceMonitor:not(.hidden)) .main-content,
    4. الهواتف الصغيرة جداً والشاشات الضيقة (480px وما دون)
    ======================================================== */
 @media screen and (max-width: 480px) {
+  .header-container {
+    padding: 6px 8px;
+    gap: 6px;
+    justify-content: space-between;
+  }
+
+  .logo-box {
+    gap: 6px;
+    min-width: 0;
+    flex-shrink: 1;
+  }
+
+  .logo-icon {
+    width: 34px;
+    height: 34px;
+    font-size: 16px;
+    border-radius: 10px;
+    border-bottom-width: 2px;
+  }
+
+  .logo-text {
+    min-width: 0;
+  }
+
   .logo-title {
-    font-size: 13.5px;
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .logo-subtitle {
-    font-size: 9px;
+    display: none; /* توفير مساحة لظهور شريط المستخدم وزر الخروج بوضوح */
+  }
+
+  .header-tools {
+    gap: 4px;
+    flex-shrink: 0;
   }
 
   .btn-honor-header,
   .btn-cloud-sync-header {
-    padding: 6px 9px;
-    min-height: 38px;
+    padding: 5px 8px;
+    min-height: 34px;
+    border-radius: 10px;
+  }
+
+  .user-quick-status {
+    padding: 2px 4px 2px 6px;
+    gap: 4px;
+    max-width: 145px;
+  }
+
+  .quick-role-badge {
+    display: none; /* إخفاء الرتبة في الشاشات الضيقة جداً للحفاظ على زر الخروج بارزاً */
+  }
+
+  .quick-user-name {
+    max-width: 65px;
+    font-size: 11px;
+  }
+
+  .btn-logout-small {
+    width: 32px !important;
+    height: 32px !important;
+    min-width: 32px !important;
+    min-height: 32px !important;
+    font-size: 13px !important;
+    border-radius: 8px !important;
+    background: #fee2e2 !important;
+    border: 1.5px solid #f87171 !important;
+    color: #dc2626 !important;
+    box-shadow: 0 2px 0 #fca5a5 !important;
+    display: inline-flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    flex-shrink: 0 !important;
   }
 
   .race-rank-badge {

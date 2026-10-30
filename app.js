@@ -71,6 +71,7 @@ import {
   getContestantTotalScore, 
   finalizeContestantScore 
 } from "./scoring-engine.js";
+import { animate } from "framer-motion";
 
 // --------------------------------------------------------
 // ثوابت النظام
@@ -776,6 +777,17 @@ function showView(viewName) {
       el.classList.remove("hidden");
       el.classList.add("active");
       activated = true;
+      try {
+        if (typeof animate === "function") {
+          animate(
+            el,
+            { opacity: [0, 1], y: [16, 0], scale: [0.985, 1] },
+            { duration: 0.38, ease: [0.22, 1, 0.36, 1] }
+          );
+        }
+      } catch (err) {
+        // Fallback to CSS transitions smoothly
+      }
     } else {
       el.classList.add("hidden");
       el.classList.remove("active");
@@ -840,7 +852,15 @@ document.querySelectorAll(".nav-tab").forEach(tabBtn => {
     document.querySelectorAll(".nav-tab").forEach(t => t.classList.remove("active"));
     document.querySelectorAll(".tab-content-panel").forEach(p => p.classList.remove("active"));
     tabBtn.classList.add("active");
-    document.getElementById(targetTabId)?.classList.add("active");
+    const activeTabPanel = document.getElementById(targetTabId);
+    if (activeTabPanel) {
+      activeTabPanel.classList.add("active");
+      try {
+        if (typeof animate === "function") {
+          animate(activeTabPanel, { opacity: [0, 1], y: [12, 0] }, { duration: 0.3, ease: [0.22, 1, 0.36, 1] });
+        }
+      } catch (e) {}
+    }
 
     // حفظ التبويب النشط حالياً للبقاء عليه عند تحديث الصفحة
     localStorage.setItem("nour_saved_tab", targetTabId);
@@ -1587,19 +1607,8 @@ function setupRealtimeCloudListeners() {
       // إذا كان المستخدم الحالي متواجداً داخل غرفة مسابقة
       if (currentLiveRoom) {
         const matchingCloudRoom = cloudRooms.find(r => r.id === currentLiveRoom.id);
-        if (!matchingCloudRoom) {
-          const wasInArena = views.liveArena && !views.liveArena.classList.contains("hidden");
-          currentLiveRoom = null;
-          currentContestant = null;
-          localStorage.removeItem("nour_saved_room_id");
-          clearInterval(liveTimerInterval);
-          clearInterval(cardsTimerInterval);
-          stopOfflineCountdown();
-
-          if (wasInArena) {
-            showView(currentUser ? (currentUser.role === 'student' ? "student" : "supervisor") : "hero");
-            showToast("قام المشرف بإغلاق الغرفة أو إنهاء المسابقة", "fa-door-closed");
-          }
+        if (!matchingCloudRoom || matchingCloudRoom.isClosed || matchingCloudRoom.status === "closed" || matchingCloudRoom.isRoomDeleted) {
+          handleParticipantRoomClosed("قام المشرف بإنهاء وتوثيق البطولة وحذف الغرفة للجميع 🏆");
         } else {
           currentLiveRoom = matchingCloudRoom;
           if (views.liveArena && !views.liveArena.classList.contains("hidden")) {
@@ -1632,6 +1641,60 @@ function setupRealtimeCloudListeners() {
 }
 
 // --------------------------------------------------------
+// خروج آمن وشامل لجميع المشاركين عند إغلاق أو حذف الغرفة
+// --------------------------------------------------------
+function handleParticipantRoomClosed(message = "قام المشرف بإنهاء وتوثيق البطولة وحذف الغرفة للجميع 🏆") {
+  // 1. إخفاء جميع النوافذ التراكبية واللافتات وشاشة التتويج نهائياً
+  document.getElementById("teamGrandFinaleOverlay")?.classList.add("hidden");
+  document.getElementById("teamRoundBannerOverlay")?.classList.add("hidden");
+  document.getElementById("teamEntranceOverlay")?.classList.add("hidden");
+  document.getElementById("teamFlippingModalWrapper")?.classList.add("hidden");
+  document.getElementById("teamStartCountdownWrapper")?.classList.add("hidden");
+  document.getElementById("arenaTeamSelectionOverlay")?.classList.add("hidden");
+  document.getElementById("reboundBannerOverlay")?.classList.add("hidden");
+  document.getElementById("tacticalCardsModal")?.classList.add("hidden");
+  if (stageQuestionCard) stageQuestionCard.classList.add("hidden");
+  if (stageInteractiveArea) stageInteractiveArea.innerHTML = "";
+
+  // 2. إيقاف وتجميد جميع المؤقتات والعدادات
+  if (liveTimerInterval) { clearInterval(liveTimerInterval); liveTimerInterval = null; }
+  if (cardsTimerInterval) { clearInterval(cardsTimerInterval); cardsTimerInterval = null; }
+  if (window.teamCountdownInterval) { clearInterval(window.teamCountdownInterval); window.teamCountdownInterval = null; }
+  if (window.interactiveCountdownInterval) { clearInterval(window.interactiveCountdownInterval); window.interactiveCountdownInterval = null; }
+  stopOfflineCountdown();
+
+  // 3. إلغاء اشتراك مستمع الغرفة
+  if (currentRoomUnsubscribe) {
+    try { currentRoomUnsubscribe(); } catch (e) {}
+    currentRoomUnsubscribe = null;
+  }
+
+  // 4. مسح بيانات الغرفة المحلية
+  const wasActive = Boolean(currentLiveRoom);
+  currentLiveRoom = null;
+  currentContestant = null;
+  localStorage.removeItem("nour_saved_room_id");
+  localStorage.removeItem("nour_live_rooms");
+
+  cleanupCompetitionThemeAndAura();
+
+  // 5. توجيه المشارك لواجهته الصحيحة وتحديث القوائم
+  const targetView = currentUser ? (currentUser.role === "student" ? "student" : "supervisor") : "hero";
+  showView(targetView);
+  if (targetView === "student") {
+    try { renderStudentPracticeQuizzes(); } catch (e) {}
+    try { renderLiveRoomsList(); } catch (e) {}
+  } else if (targetView === "supervisor") {
+    try { renderLiveRoomsList(); } catch (e) {}
+    try { renderPastTournamentsTab(); } catch (e) {}
+  }
+  if (wasActive && message) {
+    showToast(message, "fa-flag-checkered", 4000);
+  }
+}
+window.handleParticipantRoomClosed = handleParticipantRoomClosed;
+
+// --------------------------------------------------------
 // مستمع غرفة المسابقة الحية اللحظي المباشر (Dedicated Room Document Listener)
 // --------------------------------------------------------
 function listenToActiveRoom(roomId) {
@@ -1643,27 +1706,15 @@ function listenToActiveRoom(roomId) {
   const roomRef = doc(db, "live_rooms", roomId);
   currentRoomUnsubscribe = onSnapshot(roomRef, (docSnap) => {
     if (!docSnap.exists()) {
-      const wasInArena = views.liveArena && !views.liveArena.classList.contains("hidden");
-      currentLiveRoom = null;
-      currentContestant = null;
-      localStorage.removeItem("nour_saved_room_id");
-      clearInterval(liveTimerInterval);
-      clearInterval(cardsTimerInterval);
-      stopOfflineCountdown();
-
-      if (currentRoomUnsubscribe) {
-        currentRoomUnsubscribe();
-        currentRoomUnsubscribe = null;
-      }
-
-      if (wasInArena) {
-        showView(currentUser ? (currentUser.role === 'student' ? "student" : "supervisor") : "hero");
-        showToast("قام المشرف بإغلاق الغرفة أو إنهاء المسابقة نهائياً", "fa-door-closed");
-      }
+      handleParticipantRoomClosed("قام المشرف بإنهاء وتوثيق البطولة وحذف الغرفة للجميع 🏆");
       return;
     }
 
     const roomData = { id: docSnap.id, ...docSnap.data() };
+    if (roomData.isClosed || roomData.status === "closed" || roomData.isRoomDeleted) {
+      handleParticipantRoomClosed("تم إنهاء المسابقة وتوثيق نتائجها في الأرشيف وإغلاق الغرفة للجميع 🏆");
+      return;
+    }
     const prevUsers = Array.isArray(lastKnownUsersList) ? [...lastKnownUsersList] : [];
     const newUsers = Array.isArray(roomData.users) ? roomData.users : [];
     lastKnownUsersList = [...newUsers];
@@ -1914,10 +1965,39 @@ function updateArenaUIRealtime(room) {
     if (walletTrig) walletTrig.classList.add("hidden");
     document.getElementById("tacticalCardsModal")?.classList.add("hidden");
 
-    if (room.savedToArchive || room.isClosed || room.status === "closed" || room.tournamentEnded || room.phase === "team_finale" || room.isFinished) {
+    // رصد إغلاق الغرفة أو إنهاؤها للجميع
+    if (room.isClosed || room.status === "closed" || room.isRoomDeleted) {
+      handleParticipantRoomClosed("تم إنهاء المسابقة وتوثيق نتائجها في الأرشيف وإغلاق الغرفة للجميع 🏆");
+      return;
+    }
+
+    // رصد إشارة إعادة البطولة من البداية وتنبيه الجميع وإخفاء شاشة التتويج فورياً
+    if (room.tournamentRestartTs && room.tournamentRestartTs !== window.lastSeenTournamentRestartTs) {
+      window.lastSeenTournamentRestartTs = room.tournamentRestartTs;
+      document.getElementById("teamGrandFinaleOverlay")?.classList.add("hidden");
+      document.getElementById("teamRoundBannerOverlay")?.classList.add("hidden");
+      document.getElementById("teamEntranceOverlay")?.classList.add("hidden");
+      document.getElementById("teamFlippingModalWrapper")?.classList.add("hidden");
+      document.getElementById("teamStartCountdownWrapper")?.classList.add("hidden");
+      document.getElementById("reboundBannerOverlay")?.classList.add("hidden");
+      if (stageQuestionCard) stageQuestionCard.classList.add("hidden");
+      if (stageInteractiveArea) stageInteractiveArea.innerHTML = "";
+      arenaSelectedTeamA = null;
+      arenaSelectedTeamB = null;
+      currentActiveTeamSolver = null;
+      isTeamRollingCardActive = false;
+      currentActiveTeamRound = 1;
+      showToast("قام المشرف بإعادة بدء البطولة من البداية وتصفير النتائج! 🔄", "fa-rotate-right", 3500);
+    }
+
+    // إذا كانت المسابقة مكتملة ومنتهية وتوج البطل
+    if (room.savedToArchive || room.tournamentEnded || room.phase === "team_finale" || room.isFinished) {
       showTeamGrandFinaleModal(room);
       return;
     }
+
+    // إخفاء شاشة التتويج فوراً لجميع المشاركين عند استئناف أو إعادة البطولة
+    document.getElementById("teamGrandFinaleOverlay")?.classList.add("hidden");
 
     if (room.teamSelectionState === "selecting" || !room.teamA || !room.teamB) {
       renderArenaTeamPickerUI(room);
@@ -14401,11 +14481,13 @@ function renderArenaTeamPickerUI(room = null) {
 
   const isSup = currentUser && (currentUser.role === "supervisor" || isSupervisor(currentUser.name) || currentUser.name === targetRoom.leaderName);
 
-  // إخفاء كل النوافذ المنبثقة الأخرى والأسئلة لضمان ظهور واجهة الاختيار النقية
+  // إخفاء كل النوافذ المنبثقة الأخرى وشاشة التتويج والأسئلة لضمان ظهور واجهة الاختيار النقية
+  document.getElementById("teamGrandFinaleOverlay")?.classList.add("hidden");
   document.getElementById("teamEntranceOverlay")?.classList.add("hidden");
   document.getElementById("teamRoundBannerOverlay")?.classList.add("hidden");
   document.getElementById("teamFlippingModalWrapper")?.classList.add("hidden");
   document.getElementById("teamStartCountdownWrapper")?.classList.add("hidden");
+  document.getElementById("reboundBannerOverlay")?.classList.add("hidden");
   if (stageQuestionCard) stageQuestionCard.classList.add("hidden");
   if (stageInteractiveArea) stageInteractiveArea.innerHTML = "";
 
@@ -16117,7 +16199,23 @@ async function saveCurrentTournamentToArchive() {
     pastTournamentsCache.unshift(tournamentArchiveDoc);
     localStorage.setItem("nour_past_tournaments", JSON.stringify(pastTournamentsCache));
 
-    // حذف الغرفة نهائياً من Firestore لإغلاقها أمام الجميع وحذفها تماماً
+    // تحديث الغرفة سحابياً بالإغلاق والحذف لإعلام وإخراج جميع المشاركين فورياً قبل مسح المستند
+    try {
+      await updateDoc(doc(db, "live_rooms", roomId), {
+        isClosed: true,
+        status: "closed",
+        isRoomDeleted: true,
+        tournamentEnded: true,
+        savedToArchive: true,
+        lastUpdated: serverTimestamp()
+      });
+    } catch (e) {
+      console.warn("Update room closed notice:", e);
+    }
+
+    await new Promise(r => setTimeout(r, 250));
+
+    // حذف الغرفة نهائياً من Firestore لإغلاقها تماماً
     try {
       await deleteDoc(doc(db, "live_rooms", roomId));
     } catch (e) {
@@ -16129,21 +16227,8 @@ async function saveCurrentTournamentToArchive() {
     localStorage.removeItem("nour_live_rooms");
     localStorage.removeItem("nour_saved_room_id");
 
-    if (currentRoomUnsubscribe) {
-      try { currentRoomUnsubscribe(); } catch (e) {}
-      currentRoomUnsubscribe = null;
-    }
-
-    clearInterval(liveTimerInterval);
-    clearInterval(cardsTimerInterval);
-    stopOfflineCountdown();
-
-    currentLiveRoom = null;
-    currentContestant = null;
-
-    document.getElementById("teamGrandFinaleOverlay")?.classList.add("hidden");
-
-    showToast("🏆 تم توثيق البطولة في الأرشيف وحذف وإغلاق غرفة المسابقة للجميع بنجاح!", "fa-circle-check", 4000);
+    // إخراج المشرف وتوثيق الإنهاء في الأرشيف وإغلاق كافة النوافذ التراكبية
+    handleParticipantRoomClosed("🏆 تم توثيق البطولة في الأرشيف وحذف وإغلاق غرفة المسابقة للجميع بنجاح!");
 
     // توجيه المشرف لتبويب الأرشيف وتحديث القوائم
     showView("supervisor");
@@ -16397,26 +16482,30 @@ document.getElementById("btnRestartTeamContest")?.addEventListener("click", asyn
     currentUser.role === "supervisor" ||
     isSupervisor(currentUser.name) ||
     currentUser.name === currentLiveRoom.leaderName ||
-    currentUser.name === currentLiveRoom.creatorName
+    currentUser.name === currentLiveRoom.creatorName ||
+    currentUser.role === "teacher" ||
+    currentUser.role === "presenter"
   );
   if (!isSup) {
-    showToast("عذراً، إعادة المسابقة متاحة للمشرف فقط.", "fa-lock");
+    showToast("عذراً، إعادة المسابقة متاحة للمشرف وقائد الغرفة فقط.", "fa-lock");
     return;
   }
 
   showConfirmDialog(
     "إعادة البطولة من البداية",
-    "هل تريد إعادة بدء بطولة الفرق من الدور الأول وتصفير النتائج؟",
+    "هل تريد إعادة بدء بطولة الفرق من الدور الأول وتصفير النتائج؟ سيبدأ الجميع من جديد كأن الغرفة فُتحت للتو.",
     async () => {
+      // 1. إخفاء جميع النوافذ التراكبية واللافتات فوراً
       document.getElementById("teamGrandFinaleOverlay")?.classList.add("hidden");
       document.getElementById("teamRoundBannerOverlay")?.classList.add("hidden");
       document.getElementById("teamEntranceOverlay")?.classList.add("hidden");
       document.getElementById("teamFlippingModalWrapper")?.classList.add("hidden");
       document.getElementById("teamStartCountdownWrapper")?.classList.add("hidden");
+      document.getElementById("reboundBannerOverlay")?.classList.add("hidden");
       if (stageQuestionCard) stageQuestionCard.classList.add("hidden");
       if (stageInteractiveArea) stageInteractiveArea.innerHTML = "";
 
-      // إيقاف وتجميد أي مؤقت قديم تماماً
+      // 2. إيقاف وتجميد أي مؤقت قديم تماماً
       if (liveTimerInterval) {
         clearInterval(liveTimerInterval);
         liveTimerInterval = null;
@@ -16437,6 +16526,7 @@ document.getElementById("btnRestartTeamContest")?.addEventListener("click", asyn
       const topBar = document.querySelector(".team-entrance-top-bar");
       if (topBar) topBar.classList.remove("hidden");
 
+      // 3. إعادة تعيين متغيرات الجولة والمواجهة
       isQuestionTransitionRunning = false;
       isAdvancingQuestion = false;
       isTeamEntranceActive = false;
@@ -16457,8 +16547,17 @@ document.getElementById("btnRestartTeamContest")?.addEventListener("click", asyn
       lastTimerConfigKey = "team_picker_paused";
       if (stageTimerSeconds) stageTimerSeconds.textContent = "⏸️";
 
-      const originalTeams = currentLiveRoom.tournamentState?.teams || currentLiveRoom.teams || teamsCache;
-      currentLiveRoom.tournamentState = initTournamentBracket(originalTeams);
+      // 4. استرجاع الفرق الأصلية التي تم اختيارها عند إنشاء الغرفة
+      let originalTeams = currentLiveRoom.tournamentState?.teams;
+      if (!Array.isArray(originalTeams) || originalTeams.length < 2) {
+        originalTeams = (Array.isArray(currentLiveRoom.teams) && currentLiveRoom.teams.length >= 2)
+          ? currentLiveRoom.teams
+          : teamsCache.slice(0, 4);
+      }
+      const freshBracket = initTournamentBracket(originalTeams);
+
+      // 5. تصفير بيانات الغرفة بالكامل كأنها أنشئت الآن
+      currentLiveRoom.tournamentState = freshBracket;
       currentLiveRoom.teams = originalTeams;
       currentLiveRoom.teamA = null;
       currentLiveRoom.teamB = null;
@@ -16482,8 +16581,14 @@ document.getElementById("btnRestartTeamContest")?.addEventListener("click", asyn
       currentLiveRoom.savedToArchive = false;
       currentLiveRoom.status = "open";
       currentLiveRoom.isClosed = false;
+      currentLiveRoom.isRoomDeleted = false;
       currentLiveRoom.phase = "team_stage";
       currentLiveRoom.teamSelectionState = "selecting";
+      currentLiveRoom.championTeam = null;
+      currentLiveRoom.runnerUpTeam = null;
+      currentLiveRoom.finalStandings = null;
+      currentLiveRoom.mvpStudent = null;
+      currentLiveRoom.tournamentRestartTs = Date.now();
       currentLiveRoom.timerState = {
         isFrozen: true,
         remainingSeconds: currentLiveRoom.questionTimer || 25,
@@ -16495,12 +16600,17 @@ document.getElementById("btnRestartTeamContest")?.addEventListener("click", asyn
       // إعادة خلط أسئلة المسابقة من جديد للبطولة
       ensureTeamQuestionsPopulated(currentLiveRoom, true);
 
-      // استبدال المستند سحابياً بدون merge لمنع بقاء أي بيانات قديمة أو معلقة
+      // 6. استبدال المستند سحابياً بدون merge لضمان مسح أي بيانات سابقة وتنبيه الجميع
+      showGlobalLoader("جاري إعادة ضبط البطولة...", "يتم تصفير النتائج وإعادة فتح البطولة من البداية لجميع المشاركين");
       try {
         const cleanRoom = sanitizeForFirestore(currentLiveRoom);
         const roomRef = doc(db, "live_rooms", currentLiveRoom.id);
         await setDoc(roomRef, {
           ...cleanRoom,
+          championTeam: null,
+          runnerUpTeam: null,
+          finalStandings: null,
+          mvpStudent: null,
           teamActiveSolver: null,
           teamA: null,
           teamB: null,
@@ -16511,10 +16621,13 @@ document.getElementById("btnRestartTeamContest")?.addEventListener("click", asyn
       } catch (err) {
         console.warn("Firestore clean restart notice:", err);
         await saveRooms(currentLiveRoom);
+      } finally {
+        hideGlobalLoader();
       }
 
+      // 7. عرض واجهة تحديد الفرق للمشرف
       renderArenaTeamPickerUI(currentLiveRoom);
-      showToast("تمت إعادة البطولة من البداية وتصفير النتائج بنجاح!", "fa-rotate-right");
+      showToast("تمت إعادة البطولة من البداية وتصفير النتائج بنجاح! 🔄", "fa-rotate-right", 3500);
     },
     null,
     "نعم، أعد البطولة",
@@ -16524,53 +16637,21 @@ document.getElementById("btnRestartTeamContest")?.addEventListener("click", asyn
 
 // خروج المشارك أو المشرف من مسابقة الفرق والعودة للصفحة الرئيسية
 async function handleExitClosedTournamentToHome() {
-  const isSup = currentUser && (currentUser.role === "supervisor" || isSupervisor(currentUser.name));
-
-  if (currentRoomUnsubscribe) {
-    try {
-      currentRoomUnsubscribe();
-    } catch (e) {}
-    currentRoomUnsubscribe = null;
-  }
-
-  if (liveTimerInterval) {
-    clearInterval(liveTimerInterval);
-    liveTimerInterval = null;
-  }
-  if (cardsTimerInterval) {
-    clearInterval(cardsTimerInterval);
-    cardsTimerInterval = null;
-  }
-  stopOfflineCountdown();
-
-  currentLiveRoom = null;
-  currentContestant = null;
-  localStorage.removeItem("nour_saved_room_id");
-  localStorage.removeItem("nour_live_rooms");
-
-  document.getElementById("teamGrandFinaleOverlay")?.classList.add("hidden");
-
-  if (isSup) {
-    showView("supervisor");
-    renderPastTournamentsTab();
-    const tabPast = document.querySelector(".nav-tab[data-tab='tabPastTournaments']");
-    if (tabPast) tabPast.click();
-    showToast("تم إغلاق المسابقة وتوثيقها في الأرشيف بنجاح 🏆", "fa-box-archive");
-  } else if (currentUser && currentUser.role === "student") {
-    showView("student");
-    showToast("انتهت المسابقة وتم توثيق النتائج والمراكز في الأرشيف بنجاح!", "fa-trophy");
-  } else {
-    showView("hero");
-  }
-
-  renderLiveRoomsList();
+  handleParticipantRoomClosed("تم الخروج من المسابقة والعودة للمنصة الرئيسية");
 }
 
 document.getElementById("btnEndAndSaveTeamContest")?.addEventListener("click", () => {
   if (!currentLiveRoom) return;
-  const isSup = currentUser && (currentUser.role === "supervisor" || isSupervisor(currentUser.name) || currentUser.name === currentLiveRoom.leaderName);
+  const isSup = currentUser && (
+    currentUser.role === "supervisor" ||
+    isSupervisor(currentUser.name) ||
+    currentUser.name === currentLiveRoom.leaderName ||
+    currentUser.name === currentLiveRoom.creatorName ||
+    currentUser.role === "teacher" ||
+    currentUser.role === "presenter"
+  );
   if (!isSup) {
-    showToast("عذراً، حفظ وإنهاء المسابقة متاح للمشرف فقط.", "fa-lock");
+    showToast("عذراً، حفظ وإنهاء المسابقة متاح للمشرف وقائد الغرفة فقط.", "fa-lock");
     return;
   }
 
@@ -16637,6 +16718,9 @@ function syncTeamStageRealtime(room) {
     showTeamGrandFinaleModal(room);
     return;
   }
+
+  // إخفاء شاشة التتويج فوراً لجميع المشاركين عند استئناف أو إعادة البطولة
+  document.getElementById("teamGrandFinaleOverlay")?.classList.add("hidden");
 
   // إذا كانت الغرفة في وضع اختيار وتحديد فريقي المواجهة
   if (room.teamSelectionState === "selecting" || !room.teamA || !room.teamB) {

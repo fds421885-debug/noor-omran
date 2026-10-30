@@ -93,6 +93,7 @@ export const Header: React.FC = () => {
                 className="btn-logout-small"
                 onClick={logoutUser}
                 title="تسجيل الخروج"
+                aria-label="تسجيل الخروج"
               >
                 <i className="fa-solid fa-arrow-right-from-bracket"></i>
               </button>
