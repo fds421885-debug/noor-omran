@@ -456,23 +456,28 @@ export const LiveArena: React.FC = () => {
           </div>
 
           <div className="arena-role-status">
-            <div className="arena-connected-counter-badge" title="المتواجدون حالياً">
-              <i className="fa-solid fa-users" style={{ color: "var(--duo-blue)" }}></i>
-              <span>المتواجدون: <strong>{activeRoom.connectedUsers?.length || 1}</strong></span>
+            <div className="arena-status-badges-group">
+              <div className="arena-connected-counter-badge" title="المتواجدون حالياً">
+                <i className="fa-solid fa-users" style={{ color: "var(--duo-blue)" }}></i>
+                <span>المتواجدون: <strong>{activeRoom.connectedUsers?.length || 1}</strong></span>
+              </div>
+
+              <span className="role-pill-live">
+                {isSup ? "مشرف الغرفة" : currentUser?.role === "teacher" ? "معلم تحكيم" : currentUser?.role === "presenter" ? "شاشة المسرح" : "متسابق"}
+              </span>
             </div>
 
-            <span className="role-pill-live">
-              {isSup ? "مشرف الغرفة" : currentUser?.role === "teacher" ? "معلم تحكيم" : currentUser?.role === "presenter" ? "شاشة المسرح" : "متسابق"}
-            </span>
-
-            <button
-              type="button"
-              className="btn-duo-outline btn-sm"
-              style={{ borderColor: "#ff4b4b", color: "#ff4b4b" }}
-              onClick={exitLiveRoom}
-            >
-              <i className="fa-solid fa-person-walking-arrow-right"></i> مغادرة
-            </button>
+            <div className="arena-actions-buttons-group">
+              <button
+                type="button"
+                className="btn-duo-exit btn-sm"
+                onClick={exitLiveRoom}
+                title="مغادرة الغرفة والعودة للوحة التحكم"
+              >
+                <i className="fa-solid fa-person-walking-arrow-right"></i>
+                <span>مغادرة الغرفة</span>
+              </button>
+            </div>
           </div>
         </div>
 

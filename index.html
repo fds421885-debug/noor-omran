@@ -796,20 +796,25 @@
           </div>
 
           <div class="arena-role-status">
-            <div class="arena-connected-counter-badge" id="arenaConnectedBadge" title="المتواجدون حالياً في الغرفة">
-              <i class="fa-solid fa-users" style="color: var(--duo-blue);"></i>
-              <span>المتواجدون: <strong id="arenaConnectedCount">1</strong></span>
+            <div class="arena-status-badges-group">
+              <div class="arena-connected-counter-badge" id="arenaConnectedBadge" title="المتواجدون حالياً في الغرفة">
+                <i class="fa-solid fa-users" style="color: var(--duo-blue);"></i>
+                <span>المتواجدون: <strong id="arenaConnectedCount">1</strong></span>
+              </div>
+              <span class="role-pill-live" id="arenaUserRolePill">مشرف الغرفة</span>
             </div>
-            <span class="role-pill-live" id="arenaUserRolePill">مشرف الغرفة</span>
-            <button id="btnReturnToTeamSelect" class="btn-duo-outline btn-sm hidden" style="border-color: var(--duo-blue); color: var(--duo-blue); font-weight:800;" title="العودة لاختيار الفرق وتغييرها">
-              <i class="fa-solid fa-arrow-right"></i> العودة لاختيار الفرق
-            </button>
-            <button id="btnOpenRoomSettingsModal" class="btn-duo-yellow btn-sm" title="إعدادات الغرفة وصلاحيات الحل">
-              <i class="fa-solid fa-sliders"></i> إعدادات المسابقة
-            </button>
-            <button id="btnExitArena" class="btn-duo-outline btn-sm" style="border-color: #ff4b4b; color: #ff4b4b;">
-              <i class="fa-solid fa-person-walking-arrow-right"></i> مغادرة الغرفة
-            </button>
+
+            <div class="arena-actions-buttons-group">
+              <button type="button" id="btnReturnToTeamSelect" class="btn-duo-outline btn-sm hidden" style="border-color: var(--duo-blue); color: var(--duo-blue); font-weight:800;" title="العودة لاختيار الفرق وتغييرها">
+                <i class="fa-solid fa-arrow-right"></i> <span>العودة لاختيار الفرق</span>
+              </button>
+              <button type="button" id="btnOpenRoomSettingsModal" class="btn-duo-yellow btn-sm" title="إعدادات الغرفة وصلاحيات الحل">
+                <i class="fa-solid fa-sliders"></i> <span>إعدادات المسابقة</span>
+              </button>
+              <button type="button" id="btnExitArena" class="btn-duo-exit btn-sm btn-exit-arena" onclick="window.handleLeaveRoomRequest && window.handleLeaveRoomRequest(event)" title="مغادرة الغرفة والعودة للوحة التحكم">
+                <i class="fa-solid fa-person-walking-arrow-right"></i> <span>مغادرة الغرفة</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -1823,8 +1828,49 @@
     </div>
   </div>
 
+  <!-- مودال مغادرة الغرفة الفوري والأنيق لجميع الأدوار (المشرف، المعلم، الطالب، العارض) -->
+  <div id="roomExitConfirmModal" class="modal-overlay hidden" style="z-index: 100060;">
+    <div class="duo-modal-box" style="max-width: 500px; text-align: center;">
+      <div class="modal-header" style="justify-content: center; position: relative;">
+        <div class="modal-title-with-icon" style="flex-direction: column; align-items: center; gap: 8px;">
+          <div class="modal-icon-bubble danger" style="width: 54px; height: 54px; font-size: 22px;">
+            <i class="fa-solid fa-person-walking-arrow-right"></i>
+          </div>
+          <div>
+            <h3 style="font-size: 19px; font-weight: 900; color: #1e293b; margin: 0;">مغادرة غرفة المسابقة</h3>
+            <span class="modal-subtitle" id="exitModalSubtitle">العودة لشاشتك ولوحة التحكم</span>
+          </div>
+        </div>
+        <button class="btn-modal-close" data-close-modal="roomExitConfirmModal" title="إغلاق" style="position: absolute; top: 12px; left: 14px;">&times;</button>
+      </div>
+
+      <div class="modal-body-content" style="padding: 16px 12px 10px;">
+        <p id="exitModalDescription" style="font-size: 15px; color: #475569; margin-bottom: 22px; line-height: 1.6;">
+          هل ترغب في مغادرة غرفة المسابقة والعودة إلى لوحة التحكم؟
+        </p>
+
+        <div style="display: flex; flex-direction: column; gap: 12px; width: 100%;">
+          <!-- خيار 1: مغادرة عادية والعودة للوحة التحكم مع إبقاء الغرفة نشطة -->
+          <button type="button" id="btnConfirmLeaveKeepRoom" class="btn-duo-green" style="width: 100%; padding: 13px 20px; font-size: 15.5px; font-weight: 800; justify-content: center; box-shadow: 0 4px 14px rgba(34, 197, 94, 0.35);">
+            <i class="fa-solid fa-person-walking-arrow-right"></i> مغادرة الغرفة والعودة للوحة التحكم
+          </button>
+
+          <!-- خيار 2: إنهاء وإغلاق الغرفة لجميع المشاركين (للمشرف وقائد الغرفة فقط) -->
+          <button type="button" id="btnConfirmTerminateRoomForAll" class="btn-duo-red hidden" style="width: 100%; padding: 12px 20px; font-size: 14.5px; font-weight: 800; justify-content: center;">
+            <i class="fa-solid fa-door-closed"></i> إنهاء وإغلاق المسابقة لجميع المشاركين
+          </button>
+
+          <!-- خيار 3: إلغاء وتراجع -->
+          <button type="button" class="btn-duo-outline" data-close-modal="roomExitConfirmModal" style="width: 100%; padding: 11px 20px; font-size: 14px; font-weight: 800; justify-content: center; color: #64748b; border-color: #cbd5e1;">
+            <i class="fa-solid fa-xmark"></i> البقاء في المسابقة
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- مودال إدارة مغادرة قائد الغرفة (تسليم الإشراف أو إنهاء المسابقة) -->
-  <div id="leaderExitModal" class="modal-overlay hidden" style="z-index: 10006;">
+  <div id="leaderExitModal" class="modal-overlay hidden" style="z-index: 100060;">
     <div class="duo-modal-box">
       <div class="modal-header">
         <div class="modal-title-with-icon">
@@ -2756,15 +2802,15 @@
   <!-- نافذة اختيار وتحديد الفريقين من داخل المسرح بثيم دولينجو (In-Arena Team Picker Overlay) -->
   <div id="arenaTeamSelectionOverlay" class="arena-team-selection-overlay hidden">
     <div class="arena-team-picker-card">
-      <div class="team-picker-header" style="position: relative;">
-        <div style="position: absolute; top: 0; left: 0;">
-          <button type="button" id="btnExitFromTeamPicker" class="btn-duo-outline btn-sm" style="border-color: #ef4444; color: #ef4444; background: #ffffff; font-weight: 800;" title="مغادرة الغرفة والعودة للوحة التحكم">
+      <div class="team-picker-header">
+        <div class="team-picker-top-bar">
+          <div class="team-picker-badge">
+            <i class="fa-solid fa-crown" style="color: #facc15;"></i>
+            <span id="arenaTeamPickerRoleBadge">غرفة مسابقة الفرق الكبرى</span>
+          </div>
+          <button type="button" id="btnExitFromTeamPicker" class="btn-duo-exit btn-sm" onclick="window.handleLeaveRoomRequest && window.handleLeaveRoomRequest(event)" title="مغادرة الغرفة والعودة للوحة التحكم">
             <i class="fa-solid fa-person-walking-arrow-right"></i> مغادرة الغرفة
           </button>
-        </div>
-        <div class="team-picker-badge">
-          <i class="fa-solid fa-crown" style="color: #facc15;"></i>
-          <span id="arenaTeamPickerRoleBadge">غرفة مسابقة الفرق الكبرى</span>
         </div>
         <h2 class="team-picker-title" id="arenaTeamPickerTitle">اختيار فريقي المواجهة التنافسية</h2>
         <p class="team-picker-subtitle" id="arenaTeamPickerSubtitle">
@@ -2863,6 +2909,11 @@
         <p class="observer-waiting-desc" id="observerWaitingDesc">
           يقوم المشرف العام الآن بتحديد فريقي المواجهة من بين الفرق المشاركة، استعدوا للمواجهة الحماسية وتشجيع أبطالكم!
         </p>
+        <div style="margin-top: 18px; display: flex; justify-content: center;">
+          <button type="button" class="btn-duo-exit btn-sm" onclick="window.handleLeaveRoomRequest && window.handleLeaveRoomRequest(event)" title="مغادرة الغرفة والعودة للوحة التحكم">
+            <i class="fa-solid fa-person-walking-arrow-right"></i> مغادرة الغرفة والعودة
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -2874,7 +2925,7 @@
       <button type="button" id="btnEntranceReturnToTeamSelect" class="btn-duo-outline btn-sm" style="background: rgba(15, 23, 42, 0.75); color: #ffffff; border: 2px solid rgba(255, 255, 255, 0.35); backdrop-filter: blur(8px); font-size: 14px; font-weight: 800; padding: 8px 18px; border-radius: 12px; cursor: pointer; transition: all 0.2s ease;">
         <i class="fa-solid fa-arrow-right"></i> العودة لاختيار الفرق
       </button>
-      <button type="button" id="btnEntranceExitRoom" class="btn-duo-outline btn-sm" style="background: rgba(239, 68, 68, 0.25); color: #fee2e2; border: 2px solid #ef4444; backdrop-filter: blur(8px); font-size: 14px; font-weight: 800; padding: 8px 18px; border-radius: 12px; cursor: pointer; transition: all 0.2s ease;">
+      <button type="button" id="btnEntranceExitRoom" class="btn-duo-exit btn-sm" onclick="window.handleLeaveRoomRequest && window.handleLeaveRoomRequest(event)" title="مغادرة الغرفة والعودة للوحة التحكم">
         <i class="fa-solid fa-person-walking-arrow-right"></i> مغادرة الغرفة
       </button>
     </div>
