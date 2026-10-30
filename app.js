@@ -16782,188 +16782,216 @@ async function deletePastTournament(id) {
   );
 }
 
-// مستمعي أزرار شاشة التتويج والأرشيف
-document.getElementById("btnRestartTeamContest")?.addEventListener("click", async () => {
-  if (!currentLiveRoom) return;
+// ========================================================
+// وظيفة برمجية متخصصة لإعادة بطولة الفرق في قاعدة بيانات Firebase
+// تصفير نقاط الفرق، مسح بيانات التتويج، وإعادة الغرفة لحالة الـ Lobby الأصلية
+// مع مزامنة لحظية فورية لجميع المتصلين عبر السحابة
+// ========================================================
+async function restartTeamTournamentInFirebase(targetRoom = null, skipConfirm = false) {
+  const room = targetRoom || currentLiveRoom;
+  if (!room || !room.id) {
+    showToast("لا توجد غرفة مسابقة نشطة لإعادة بطولتها", "fa-triangle-exclamation");
+    return false;
+  }
+
   const isSup = currentUser && (
     currentUser.role === "supervisor" ||
     isSupervisor(currentUser.name) ||
-    currentUser.name === currentLiveRoom.leaderName ||
-    currentUser.name === currentLiveRoom.creatorName ||
+    currentUser.name === room.leaderName ||
+    currentUser.name === room.creatorName ||
     currentUser.role === "teacher" ||
     currentUser.role === "presenter"
   );
   if (!isSup) {
     showToast("عذراً، إعادة المسابقة متاحة للمشرف وقائد الغرفة فقط.", "fa-lock");
-    return;
+    return false;
+  }
+
+  const executeRestart = async () => {
+    // 1. إخفاء جميع النوافذ التراكبية واللافتات فوراً
+    document.getElementById("teamGrandFinaleOverlay")?.classList.add("hidden");
+    document.getElementById("teamRoundBannerOverlay")?.classList.add("hidden");
+    document.getElementById("teamEntranceOverlay")?.classList.add("hidden");
+    document.getElementById("teamFlippingModalWrapper")?.classList.add("hidden");
+    document.getElementById("teamStartCountdownWrapper")?.classList.add("hidden");
+    document.getElementById("arenaTeamSelectionOverlay")?.classList.add("hidden");
+    document.getElementById("reboundBannerOverlay")?.classList.add("hidden");
+    if (stageQuestionCard) stageQuestionCard.classList.add("hidden");
+    if (stageInteractiveArea) stageInteractiveArea.innerHTML = "";
+
+    // 2. إيقاف وتجميد أي مؤقت قديم تماماً
+    if (liveTimerInterval) {
+      clearInterval(liveTimerInterval);
+      liveTimerInterval = null;
+    }
+    if (window.teamCountdownInterval) {
+      clearInterval(window.teamCountdownInterval);
+      window.teamCountdownInterval = null;
+    }
+    if (window.interactiveCountdownInterval) {
+      clearInterval(window.interactiveCountdownInterval);
+      window.interactiveCountdownInterval = null;
+    }
+
+    const controls = document.getElementById("teamEntranceControls");
+    if (controls) controls.classList.remove("hidden");
+    const btnLaunch = document.getElementById("btnLaunchTeamContest");
+    if (btnLaunch) btnLaunch.classList.remove("hidden");
+    const topBar = document.querySelector(".team-entrance-top-bar");
+    if (topBar) topBar.classList.remove("hidden");
+
+    // 3. إعادة تعيين متغيرات الجولة والمواجهة بالكامل محلياً
+    isQuestionTransitionRunning = false;
+    isAdvancingQuestion = false;
+    isTeamEntranceActive = false;
+    currentActiveTeamSolver = null;
+    isTeamRollingCardActive = false;
+    currentTeamQuestionAnswered = false;
+    currentActiveTeamRound = 1;
+    arenaSelectedTeamA = null;
+    arenaSelectedTeamB = null;
+    window.lastHandledTeamSolverStartedAt = null;
+    window.lastHandledTeamAnswerTs = null;
+    window.lastHandledRoundStartTs = null;
+    window.lastShownRoundBannerNum = null;
+    window.lastHandledTeamLaunch = null;
+    window.lastSeenCinematicAlertTimestamp = null;
+    window.transitioningToFirstQ = false;
+    window.transitioningToLeaderboard = false;
+    lastTimerConfigKey = "team_picker_paused";
+    if (stageTimerSeconds) stageTimerSeconds.textContent = "⏸️";
+
+    // 4. استرجاع الفرق الأصلية وتصفير نقاطها
+    let originalTeams = room.tournamentState?.teams;
+    if (!Array.isArray(originalTeams) || originalTeams.length < 2) {
+      originalTeams = (Array.isArray(room.teams) && room.teams.length >= 2)
+        ? room.teams
+        : (teamsCache && teamsCache.length >= 2 ? teamsCache.slice(0, 4) : []);
+    }
+    originalTeams = originalTeams.map(t => ({
+      ...t,
+      score: 0
+    }));
+    const freshBracket = initTournamentBracket(originalTeams);
+
+    const restartTs = Date.now();
+    window.lastSeenTournamentRestartTs = restartTs;
+
+    // 5. تصفير بيانات الغرفة بالكامل كأنها أنشئت الآن والعودة لغرفة الانتظار (Lobby)
+    room.phase = "lobby";
+    room.status = "open";
+    room.isTeamMatch = true;
+    room.tournamentState = freshBracket;
+    room.teams = originalTeams;
+    room.teamA = null;
+    room.teamB = null;
+    room.teamScores = {};
+    room.teamScoresDetails = {};
+    room.teamPlayerScores = {};
+    room.teamPlayerStats = {};
+    room.currentTeamRound = 1;
+    room.currentQuestionIdx = 0;
+    room.teamMemberTurnPool = {};
+    room.lastPickedStudentByTeam = {};
+    room.teamRoundStarted = false;
+    room.teamRoundState = "selecting_teams";
+    room.teamSelectionState = "selecting";
+    room.teamLaunchTimestamp = null;
+    room.teamCountdownStartedAt = null;
+    room.teamActiveSolver = null;
+    room.lastCinematicAlert = null;
+    room.lastTeamAnswerEvent = null;
+    room.isFinished = false;
+    room.tournamentEnded = false;
+    room.savedToArchive = false;
+    room.isClosed = false;
+    room.isRoomDeleted = false;
+    room.championTeam = null;
+    room.runnerUpTeam = null;
+    room.thirdPlaceTeam = null;
+    room.fourthPlaceTeam = null;
+    room.finalStandings = null;
+    room.mvpStudent = null;
+    room.tournamentRestartTs = restartTs;
+    room.timerState = {
+      isFrozen: true,
+      remainingSeconds: room.questionTimer || 30,
+      isCorrectionPaused: false,
+      isWalletSelectionPaused: false,
+      updatedAt: restartTs
+    };
+
+    // إعادة خلط وتجديد أسئلة المسابقة للبطولة
+    ensureTeamQuestionsPopulated(room, true);
+
+    // 6. استبدال وتحديث المستند سحابياً في Firebase لضمان مسح أي بيانات تتويج وتصفير النقاط والعودة لحالة الـ Lobby بالتزامن
+    showGlobalLoader("جاري إعادة ضبط البطولة في Firebase...", "يتم تصفير النقاط ومسح بيانات التتويج وإعادة فتح غرفة الانتظار لجميع المشاركين بالتزامن اللحظي");
+    try {
+      const cleanRoom = sanitizeForFirestore(room);
+      const roomRef = doc(db, "live_rooms", room.id);
+      await setDoc(roomRef, {
+        ...cleanRoom,
+        phase: "lobby",
+        status: "open",
+        tournamentEnded: false,
+        savedToArchive: false,
+        isFinished: false,
+        isClosed: false,
+        championTeam: null,
+        runnerUpTeam: null,
+        thirdPlaceTeam: null,
+        fourthPlaceTeam: null,
+        finalStandings: null,
+        mvpStudent: null,
+        teamActiveSolver: null,
+        teamA: null,
+        teamB: null,
+        lastCinematicAlert: null,
+        lastTeamAnswerEvent: null,
+        teamScores: {},
+        teamScoresDetails: {},
+        teamPlayerScores: {},
+        teamPlayerStats: {},
+        tournamentRestartTs: restartTs,
+        lastUpdated: serverTimestamp()
+      });
+    } catch (err) {
+      console.warn("Firestore clean restart notice:", err);
+      await saveRooms(room);
+    } finally {
+      hideGlobalLoader();
+    }
+
+    // 7. تحديث واجهة المسرح فورياً للمشرف
+    updateArenaUIRealtime(room);
+    showToast("تمت إعادة البطولة من البداية وتصفير النتائج بنجاح كأن الغرفة فُتحت للتو! 🔄", "fa-rotate-right", 4000);
+    return true;
+  };
+
+  if (skipConfirm) {
+    return await executeRestart();
   }
 
   showConfirmDialog(
     "إعادة البطولة من البداية",
     "هل تريد إعادة بدء بطولة الفرق من البداية وتصفير النتائج؟ سيبدأ الجميع من جديد في غرفة الانتظار (Lobby) كأن الغرفة فُتحت للتو بالتزامن.",
     async () => {
-      // 1. إخفاء جميع النوافذ التراكبية واللافتات فوراً
-      document.getElementById("teamGrandFinaleOverlay")?.classList.add("hidden");
-      document.getElementById("teamRoundBannerOverlay")?.classList.add("hidden");
-      document.getElementById("teamEntranceOverlay")?.classList.add("hidden");
-      document.getElementById("teamFlippingModalWrapper")?.classList.add("hidden");
-      document.getElementById("teamStartCountdownWrapper")?.classList.add("hidden");
-      document.getElementById("arenaTeamSelectionOverlay")?.classList.add("hidden");
-      document.getElementById("reboundBannerOverlay")?.classList.add("hidden");
-      if (stageQuestionCard) stageQuestionCard.classList.add("hidden");
-      if (stageInteractiveArea) stageInteractiveArea.innerHTML = "";
-
-      // 2. إيقاف وتجميد أي مؤقت قديم تماماً
-      if (liveTimerInterval) {
-        clearInterval(liveTimerInterval);
-        liveTimerInterval = null;
-      }
-      if (window.teamCountdownInterval) {
-        clearInterval(window.teamCountdownInterval);
-        window.teamCountdownInterval = null;
-      }
-      if (window.interactiveCountdownInterval) {
-        clearInterval(window.interactiveCountdownInterval);
-        window.interactiveCountdownInterval = null;
-      }
-
-      const controls = document.getElementById("teamEntranceControls");
-      if (controls) controls.classList.remove("hidden");
-      const btnLaunch = document.getElementById("btnLaunchTeamContest");
-      if (btnLaunch) btnLaunch.classList.remove("hidden");
-      const topBar = document.querySelector(".team-entrance-top-bar");
-      if (topBar) topBar.classList.remove("hidden");
-
-      // 3. إعادة تعيين متغيرات الجولة والمواجهة بالكامل
-      isQuestionTransitionRunning = false;
-      isAdvancingQuestion = false;
-      isTeamEntranceActive = false;
-      currentActiveTeamSolver = null;
-      isTeamRollingCardActive = false;
-      currentTeamQuestionAnswered = false;
-      currentActiveTeamRound = 1;
-      arenaSelectedTeamA = null;
-      arenaSelectedTeamB = null;
-      window.lastHandledTeamSolverStartedAt = null;
-      window.lastHandledTeamAnswerTs = null;
-      window.lastHandledRoundStartTs = null;
-      window.lastShownRoundBannerNum = null;
-      window.lastHandledTeamLaunch = null;
-      window.lastSeenCinematicAlertTimestamp = null;
-      window.transitioningToFirstQ = false;
-      window.transitioningToLeaderboard = false;
-      lastTimerConfigKey = "team_picker_paused";
-      if (stageTimerSeconds) stageTimerSeconds.textContent = "⏸️";
-
-      // 4. استرجاع الفرق الأصلية وتصفير نقاطها
-      let originalTeams = currentLiveRoom.tournamentState?.teams;
-      if (!Array.isArray(originalTeams) || originalTeams.length < 2) {
-        originalTeams = (Array.isArray(currentLiveRoom.teams) && currentLiveRoom.teams.length >= 2)
-          ? currentLiveRoom.teams
-          : teamsCache.slice(0, 4);
-      }
-      originalTeams = originalTeams.map(t => ({
-        ...t,
-        score: 0
-      }));
-      const freshBracket = initTournamentBracket(originalTeams);
-
-      const restartTs = Date.now();
-      window.lastSeenTournamentRestartTs = restartTs;
-
-      // 5. تصفير بيانات الغرفة بالكامل كأنها أنشئت الآن والعودة لغرفة الانتظار (Lobby)
-      currentLiveRoom.phase = "lobby";
-      currentLiveRoom.status = "open";
-      currentLiveRoom.isTeamMatch = true;
-      currentLiveRoom.tournamentState = freshBracket;
-      currentLiveRoom.teams = originalTeams;
-      currentLiveRoom.teamA = null;
-      currentLiveRoom.teamB = null;
-      currentLiveRoom.teamScores = {};
-      currentLiveRoom.teamScoresDetails = {};
-      currentLiveRoom.teamPlayerScores = {};
-      currentLiveRoom.teamPlayerStats = {};
-      currentLiveRoom.currentTeamRound = 1;
-      currentLiveRoom.currentQuestionIdx = 0;
-      currentLiveRoom.teamMemberTurnPool = {};
-      currentLiveRoom.lastPickedStudentByTeam = {};
-      currentLiveRoom.teamRoundStarted = false;
-      currentLiveRoom.teamRoundState = "selecting_teams";
-      currentLiveRoom.teamSelectionState = "selecting";
-      currentLiveRoom.teamLaunchTimestamp = null;
-      currentLiveRoom.teamCountdownStartedAt = null;
-      currentLiveRoom.teamActiveSolver = null;
-      currentLiveRoom.lastCinematicAlert = null;
-      currentLiveRoom.lastTeamAnswerEvent = null;
-      currentLiveRoom.isFinished = false;
-      currentLiveRoom.tournamentEnded = false;
-      currentLiveRoom.savedToArchive = false;
-      currentLiveRoom.isClosed = false;
-      currentLiveRoom.isRoomDeleted = false;
-      currentLiveRoom.championTeam = null;
-      currentLiveRoom.runnerUpTeam = null;
-      currentLiveRoom.thirdPlaceTeam = null;
-      currentLiveRoom.fourthPlaceTeam = null;
-      currentLiveRoom.finalStandings = null;
-      currentLiveRoom.mvpStudent = null;
-      currentLiveRoom.tournamentRestartTs = restartTs;
-      currentLiveRoom.timerState = {
-        isFrozen: true,
-        remainingSeconds: currentLiveRoom.questionTimer || 30,
-        isCorrectionPaused: false,
-        isWalletSelectionPaused: false,
-        updatedAt: restartTs
-      };
-
-      // إعادة خلط وتجديد أسئلة المسابقة للبطولة
-      ensureTeamQuestionsPopulated(currentLiveRoom, true);
-
-      // 6. استبدال المستند سحابياً لضمان مسح أي بيانات سابقة وتنبيه الجميع بالتزامن
-      showGlobalLoader("جاري إعادة ضبط البطولة...", "يتم تصفير النتائج وإعادة فتح غرفة الانتظار لجميع المشاركين المتصلين بالتزامن");
-      try {
-        const cleanRoom = sanitizeForFirestore(currentLiveRoom);
-        const roomRef = doc(db, "live_rooms", currentLiveRoom.id);
-        await setDoc(roomRef, {
-          ...cleanRoom,
-          phase: "lobby",
-          status: "open",
-          tournamentEnded: false,
-          savedToArchive: false,
-          isFinished: false,
-          isClosed: false,
-          championTeam: null,
-          runnerUpTeam: null,
-          thirdPlaceTeam: null,
-          fourthPlaceTeam: null,
-          finalStandings: null,
-          mvpStudent: null,
-          teamActiveSolver: null,
-          teamA: null,
-          teamB: null,
-          lastCinematicAlert: null,
-          lastTeamAnswerEvent: null,
-          teamScores: {},
-          teamScoresDetails: {},
-          teamPlayerScores: {},
-          teamPlayerStats: {},
-          tournamentRestartTs: restartTs,
-          lastUpdated: serverTimestamp()
-        });
-      } catch (err) {
-        console.warn("Firestore clean restart notice:", err);
-        await saveRooms(currentLiveRoom);
-      } finally {
-        hideGlobalLoader();
-      }
-
-      // 7. تحديث واجهة المسرح فورياً للمشرف
-      updateArenaUIRealtime(currentLiveRoom);
-      showToast("تمت إعادة البطولة من البداية وتصفير النتائج بنجاح كأن الغرفة فُتحت للتو! 🔄", "fa-rotate-right", 4000);
+      await executeRestart();
     },
     null,
     "نعم، أعد البطولة",
     "إلغاء"
   );
+  return true;
+}
+
+// تصدير الوظيفة البرمجية على نطاق window لتمكين استدعائها برمجياً من أي مكان
+window.restartTeamTournamentInFirebase = restartTeamTournamentInFirebase;
+window.resetTeamTournamentInFirebase = restartTeamTournamentInFirebase;
+
+// مستمع زر أعد البطولة في شاشة التتويج
+document.getElementById("btnRestartTeamContest")?.addEventListener("click", () => {
+  restartTeamTournamentInFirebase(currentLiveRoom);
 });
 
 // خروج المشارك أو المشرف من مسابقة الفرق والعودة للصفحة الرئيسية

@@ -5,7 +5,8 @@
 
 import React from "react";
 import { useApp } from "../../context/AppContext.tsx";
-import { TournamentArchiveItem } from "../../types.ts";
+import { TournamentArchiveItem, LiveRoom } from "../../types.ts";
+import { isSupervisor } from "../../utils/arabic.ts";
 
 export const GrandFinaleModal: React.FC = () => {
   const { activeModal, closeModal, modalData, exitLiveRoom, activeRoom, updateLiveRoom, currentUser, participants, showToast } = useApp();
@@ -27,6 +28,14 @@ export const GrandFinaleModal: React.FC = () => {
 
   const handleRestartTournament = async () => {
     if (!activeRoom) return;
+
+    // Use the comprehensive window.restartTeamTournamentInFirebase if available (app.js)
+    if (typeof (window as any).restartTeamTournamentInFirebase === "function") {
+      closeModal();
+      await (window as any).restartTeamTournamentInFirebase(activeRoom);
+      return;
+    }
+
     if (window.confirm("هل تريد إعادة بطولة الفرق من البداية وتصفير النتائج؟ سيبدأ الجميع من جديد في غرفة الانتظار (Lobby) كأن الغرفة فُتحت للتو بالتزامن.")) {
       const resetTeams = (activeRoom.teams || []).map(t => ({
         ...t,
