@@ -74,14 +74,18 @@ export async function ensureFirebaseAuth(userName = null) {
 
   authInitPromise = (async () => {
     try {
-      const cred = await signInAnonymously(auth);
+      const signInPromise = signInAnonymously(auth);
+      const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve(null), 1500));
+      const cred = await Promise.race([signInPromise, timeoutPromise]);
       if (userName && cred?.user) {
         try {
           await updateProfile(cred.user, { displayName: userName });
         } catch (e) {}
       }
-      console.log("[FIREBASE AUTH] Anonymous session active, uid:", cred?.user?.uid);
-      return cred.user;
+      if (cred?.user) {
+        console.log("[FIREBASE AUTH] Anonymous session active, uid:", cred.user.uid);
+      }
+      return cred?.user || null;
     } catch (err) {
       console.info("[FIREBASE AUTH] Auth notice:", err?.code || err?.message || "unauthenticated");
       return null;

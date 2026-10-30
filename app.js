@@ -71,7 +71,19 @@ import {
   getContestantTotalScore, 
   finalizeContestantScore 
 } from "./scoring-engine.js";
-import { animate } from "framer-motion";
+function safeAnimateView(el) {
+  if (!el || typeof el.animate !== "function") return;
+  try {
+    el.animate([
+      { opacity: 0, transform: "translateY(16px) scale(0.985)" },
+      { opacity: 1, transform: "translateY(0) scale(1)" }
+    ], {
+      duration: 380,
+      easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+      fill: "forwards"
+    });
+  } catch (e) {}
+}
 
 // --------------------------------------------------------
 // ثوابت النظام
@@ -777,17 +789,7 @@ function showView(viewName) {
       el.classList.remove("hidden");
       el.classList.add("active");
       activated = true;
-      try {
-        if (typeof animate === "function") {
-          animate(
-            el,
-            { opacity: [0, 1], y: [16, 0], scale: [0.985, 1] },
-            { duration: 0.38, ease: [0.22, 1, 0.36, 1] }
-          );
-        }
-      } catch (err) {
-        // Fallback to CSS transitions smoothly
-      }
+      safeAnimateView(el);
     } else {
       el.classList.add("hidden");
       el.classList.remove("active");
@@ -3717,14 +3719,9 @@ function showOnboardingGradeStep() {
   }
 }
 
-// حفظ الطالب الجديد وإتمام الدخول في السحابة فوراً مع شاشة تحميل كاملة
+// حفظ الطالب الجديد وإتمام الدخول فوراً وبأعلى سرعة مع مزامنة سحابية في الخلفية
 async function completeNewStudentRegistration() {
-  showGlobalLoader("جاري إنشاء الحساب وحفظه سحابياً...", "يتم حفظ وتثبيت بيانات الطالب ومدرسته وفئته في قاعدة البيانات السحابية فوراً", 15000);
   try {
-    try {
-      await ensureFirebaseAuth(pendingNewStudent.rawName);
-    } catch (aErr) {}
-
     const nowIso = new Date().toISOString();
     const newStudentUser = {
       id: pendingNewStudent.docId,
@@ -3740,34 +3737,38 @@ async function completeNewStudentRegistration() {
       authUid: auth?.currentUser?.uid || null
     };
 
-    // حفظ في فايربيس مباشرة مع التأكيد
-    try {
-      const userDocRef = doc(db, "participants", pendingNewStudent.docId);
-      await setDoc(userDocRef, {
-        ...sanitizeForFirestore(newStudentUser),
-        firstLoginAt: serverTimestamp(),
-        lastLoginAt: serverTimestamp(),
-        lastUpdated: serverTimestamp()
-      }, { merge: true });
-      console.log("[LOGIN FLOW] Successfully created student document in Firestore:", pendingNewStudent.docId);
-    } catch (err) {
-      console.warn("Firebase save error for new student:", err);
-    }
-
-    // إضافة في السجل والذاكرة المحلية
+    // 1. إضافة فورية في الذاكرة والكاش والتخزين المحلي لضمان دخول فوري 0ms
+    participantsCache = participantsCache.filter(p => p.id !== newStudentUser.id);
     participantsCache.push(newStudentUser);
     saveParticipants();
 
-    // إعادة ضبط شاشات الدخول
+    // 2. إعادة ضبط شاشات الدخول وإنهاء الجلسة فورا
     resetLoginSteps();
-
-    // إتمام الجلسة وتوجيه الطالب
     finalizeUserSession(newStudentUser, false);
     showToast(`أهلاً بك يا ${newStudentUser.name}! تم تسجيل حسابك واختيار (${newStudentUser.school} - ${newStudentUser.grade}) بنجاح`, "fa-graduation-cap");
+
+    // 3. مزامنة سحابية هادئة في الخلفية دون تعليق واجهة المستخدم
+    (async () => {
+      try {
+        await ensureFirebaseAuth(pendingNewStudent.rawName);
+      } catch (e) {}
+      if (db) {
+        try {
+          const userDocRef = doc(db, "participants", pendingNewStudent.docId);
+          await withTimeout(setDoc(userDocRef, {
+            ...sanitizeForFirestore(newStudentUser),
+            firstLoginAt: serverTimestamp(),
+            lastLoginAt: serverTimestamp(),
+            lastUpdated: serverTimestamp()
+          }, { merge: true }), 4000, null);
+          console.log("[LOGIN FLOW] Successfully created student document in Firestore:", pendingNewStudent.docId);
+        } catch (err) {
+          console.warn("Firebase background save notice for new student:", err);
+        }
+      }
+    })();
   } catch (e) {
     console.error("completeNewStudentRegistration error:", e);
-  } finally {
-    hideGlobalLoader();
   }
 }
 
@@ -15489,20 +15490,292 @@ function renderTeamQuestion(q, globalQIdx, qIndex) {
       });
     }
   } else {
-    // الأسئلة الأخرى (شفهي، ترتيب، توصيل): عرض محتوى السؤال بوضوح وتحكم المشرف
+    // ========================================================
+    // الأسئلة التفاعلية للفرق (توصيل، ترتيب، شفهي) مع التزامن السحابي اللحظي للجميع
+    // ========================================================
     let specificContentHtml = "";
+
+    // ── 1. الشفهي ──
     if (q.targetOral) {
       specificContentHtml = `
-        <div style="margin: 12px auto; padding: 12px 18px; background: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 12px; font-size: 18px; font-weight: 800; color: #0f172a; max-width: 540px;">
-          📖 النص القرآني المطلوب تلاوته: <span class="font-${q.font || 'quran'}" style="color: #2563eb; display:inline-block; margin-top: 4px;">${escapeHtml(q.targetOral)}</span>
+        <div style="margin: 12px auto; padding: 14px 20px; background: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 14px; font-size: 18px; font-weight: 800; color: #0f172a; max-width: 560px;">
+          📖 النص القرآني المطلوب تلاوته: <span class="font-${q.font || 'quran'}" style="color: #2563eb; display:inline-block; margin-top: 6px; font-size: 20px;">${escapeHtml(q.targetOral)}</span>
         </div>
       `;
+
+      stageInteractiveArea.innerHTML = `
+        <div style="text-align:center;padding:16px;">
+          <div style="font-weight:900;font-size:16px;color:#1e293b;margin-bottom:12px;">
+            المتسابق المعني بالتلاوة: <strong style="color:#2563eb;">${escapeHtml(currentActiveTeamSolver.studentName)}</strong> (${escapeHtml(currentActiveTeamSolver.team.name)})
+          </div>
+          ${specificContentHtml}
+          ${isSup ? `
+            <div style="display:flex;justify-content:center;gap:12px;margin-top:16px;flex-wrap:wrap;">
+              <button type="button" id="btnTeamEvaluateCorrect" class="btn-duo-green" style="padding:10px 24px;">
+                <i class="fa-solid fa-circle-check"></i> إجابة صحيحة (+5 درجات)
+              </button>
+              <button type="button" id="btnTeamEvaluateWrong" class="btn-duo-outline" style="color:#dc2626;border-color:#ef4444;padding:10px 24px;">
+                <i class="fa-solid fa-circle-xmark"></i> إجابة غير صحيحة
+              </button>
+            </div>
+          ` : `
+            <div style="font-size:13.5px;color:#64748b;font-weight:700;margin-top:12px;">
+              <i class="fa-solid fa-microphone-lines" style="color:#2563eb;"></i> في انتظار استماع وتقييم المشرف لتلاوة البطل...
+            </div>
+          `}
+        </div>
+      `;
+
+      document.getElementById("btnTeamEvaluateCorrect")?.addEventListener("click", () => {
+        clearInterval(liveTimerInterval);
+        handleTeamQuestionResult(true, null, 5);
+      });
+      document.getElementById("btnTeamEvaluateWrong")?.addEventListener("click", () => {
+        clearInterval(liveTimerInterval);
+        handleTeamQuestionResult(false, null, 5);
+      });
+
+    // ── 2. ترتيب الكلمات التفاعلي المتزامن لحظياً لجميع الشاشات ──
     } else if (Array.isArray(q.items) && q.items.length > 0) {
-      specificContentHtml = `
-        <div style="display:flex;justify-content:center;gap:8px;margin:12px auto;flex-wrap:wrap;max-width:540px;">
-          ${q.items.map(it => `<span style="padding:8px 16px;background:#f1f5f9;border:1px solid #cbd5e1;border-radius:8px;font-weight:800;font-size:16px;color:#1e293b;">${escapeHtml(it)}</span>`).join("")}
-        </div>
-      `;
+      const originalWords = q.items.map((it, idx) => ({
+        id: `w_${qIndex}_${idx}`,
+        text: String(it).trim(),
+        origIdx: idx
+      }));
+
+      // ترتيب مبعثر أولي موحد وثابت لجميع الأجهزة باستخدام بذرة السؤال
+      let seedBank = [...originalWords];
+      const orderSeed = (globalQIdx * 17 + 5);
+      for (let i = seedBank.length - 1; i > 0; i--) {
+        const j = (orderSeed * (i + 1)) % (i + 1);
+        const temp = seedBank[i];
+        seedBank[i] = seedBank[j];
+        seedBank[j] = temp;
+      }
+      if (seedBank.length > 1 && seedBank.every((w, i) => w.origIdx === i)) {
+        seedBank.push(seedBank.shift());
+      }
+
+      let placedWords = [];
+      let bankWords = [...seedBank];
+
+      // استعادة الحالة التزامنية المسبقة إن كانت موجودة لنفس السؤال
+      if (currentLiveRoom?.teamLiveInteractiveState?.type === "ordering" && currentLiveRoom.teamLiveInteractiveState.questionIdx === qIndex) {
+        if (Array.isArray(currentLiveRoom.teamLiveInteractiveState.placedWords)) {
+          placedWords = [...currentLiveRoom.teamLiveInteractiveState.placedWords];
+        }
+        if (Array.isArray(currentLiveRoom.teamLiveInteractiveState.bankWords)) {
+          bankWords = [...currentLiveRoom.teamLiveInteractiveState.bankWords];
+        }
+      }
+
+      let isOrderingCorrectionRunning = false;
+
+      function renderTeamOrderingBoard() {
+        if (!stageInteractiveArea) return;
+
+        const isLocked = !canSolve || isOrderingCorrectionRunning;
+
+        stageInteractiveArea.innerHTML = `
+          <div style="text-align:center;padding:12px;">
+            ${!canSolve ? `
+              <div class="spectator-mode-banner" style="margin-bottom:12px;">
+                <i class="fa-solid fa-eye"></i>
+                <span>المتسابق البطل: <strong>${escapeHtml(currentActiveTeamSolver.studentName)}</strong> يقوم بترتيب الكلمات حالياً — يتزامن لحظياً على شاشتك</span>
+              </div>
+            ` : `
+              <div style="font-size:14px;font-weight:800;color:#2563eb;margin-bottom:10px;">
+                <i class="fa-solid fa-arrow-down-short-wide"></i> اضغط على الكلمات من البنك لترتيبها بالتسلسل الصحيح (تتزامن فوراً عند الجميع):
+              </div>
+            `}
+
+            <!-- خانات الترتيب المكتملة -->
+            <div style="margin: 0 auto 14px auto; max-width: 640px;">
+              <div style="font-size:13px;font-weight:800;color:#475569;margin-bottom:6px;text-align:right;">
+                <i class="fa-solid fa-list-check"></i> خانات الترتيب الحالية (${placedWords.length} من ${originalWords.length}):
+              </div>
+              <div id="teamOrderingPlacedZone" style="min-height:64px;display:flex;flex-wrap:wrap;gap:8px;padding:12px;background:#f8fafc;border:2.5px dashed #94a3b8;border-radius:16px;justify-content:center;align-items:center;transition:all 0.2s ease;">
+                ${placedWords.length === 0 ? `
+                  <div style="color:#94a3b8;font-size:13.5px;font-weight:700;">
+                    <i class="fa-solid fa-hand-pointer"></i> اضغط على الكلمات بالأسفل لإدراجها هنا
+                  </div>
+                ` : placedWords.map((w, sIdx) => `
+                  <button type="button" class="team-order-placed-chip font-${q.font || 'quran'}" data-placed-id="${w.id}" data-slot="${sIdx}" ${isLocked ? 'disabled style="cursor:default;"' : ''} style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;background:#ffffff;border:2px solid #3b82f6;border-radius:12px;font-size:16px;font-weight:800;color:#1e40af;box-shadow:0 3px 8px rgba(59,130,246,0.15);cursor:${isLocked ? 'default' : 'pointer'};transition:all 0.15s ease;">
+                    <span style="font-size:12px;color:#93c5fd;font-weight:900;">${sIdx + 1}.</span>
+                    <span>${escapeHtml(w.text)}</span>
+                    ${!isLocked ? '<i class="fa-solid fa-xmark" style="color:#ef4444;font-size:11px;margin-right:2px;"></i>' : ''}
+                  </button>
+                `).join("")}
+              </div>
+            </div>
+
+            <!-- بنك الكلمات المتاحة -->
+            <div style="margin: 0 auto 16px auto; max-width: 640px;">
+              <div style="font-size:13px;font-weight:800;color:#475569;margin-bottom:6px;text-align:right;">
+                <i class="fa-solid fa-cubes-stacked"></i> بنك الكلمات المتاحة للاختيار:
+              </div>
+              <div id="teamOrderingBankZone" style="min-height:56px;display:flex;flex-wrap:wrap;gap:8px;padding:10px;background:#f1f5f9;border-radius:14px;justify-content:center;align-items:center;">
+                ${bankWords.length === 0 ? `
+                  <span style="font-size:12.5px;color:#15803d;font-weight:800;"><i class="fa-solid fa-circle-check"></i> تم نقل جميع الكلمات إلى خانات الترتيب أعلاه</span>
+                ` : bankWords.map(w => `
+                  <button type="button" class="team-order-bank-chip font-${q.font || 'quran'}" data-bank-id="${w.id}" ${isLocked ? 'disabled style="cursor:default;"' : ''} style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;background:#ffffff;border:2px solid #cbd5e1;border-bottom:3.5px solid #94a3b8;border-radius:12px;font-size:16px;font-weight:800;color:#334155;cursor:${isLocked ? 'default' : 'pointer'};box-shadow:0 2px 6px rgba(0,0,0,0.05);transition:all 0.15s ease;">
+                    <span>${escapeHtml(w.text)}</span>
+                    ${!isLocked ? '<i class="fa-solid fa-plus" style="color:#0284c7;font-size:11px;margin-right:2px;"></i>' : ''}
+                  </button>
+                `).join("")}
+              </div>
+            </div>
+
+            <div id="teamOrderingRevealBox"></div>
+
+            <!-- أزرار الإجراءات والاعتماد للمتسابق والمشرف -->
+            <div style="display:flex;justify-content:center;gap:12px;align-items:center;flex-wrap:wrap;margin-top:12px;">
+              ${canSolve ? `
+                <button type="button" id="btnSubmitTeamOrder" class="btn-duo-green" style="font-size:15px;padding:9px 24px;" ${placedWords.length !== originalWords.length ? 'disabled' : ''}>
+                  <i class="fa-solid fa-check-double"></i> اعتماد الترتيب وفحص الإجابة بالتزامن (${placedWords.length}/${originalWords.length})
+                </button>
+                <button type="button" id="btnResetTeamOrder" class="btn-duo-outline" style="font-size:13px;padding:8px 16px;" ${placedWords.length === 0 ? 'disabled' : ''}>
+                  <i class="fa-solid fa-rotate-left"></i> إعادة الكلمات للبنك
+                </button>
+              ` : ''}
+
+              ${isSup ? `
+                <div style="display:inline-flex;gap:8px;background:#f8fafc;padding:6px 12px;border-radius:12px;border:1.5px solid var(--border-duo);align-items:center;">
+                  <span style="font-size:12px;font-weight:800;color:#64748b;">تقييم المشرف:</span>
+                  <button type="button" id="btnTeamEvaluateCorrect" class="btn-duo-green btn-sm" style="padding:6px 14px;">
+                    <i class="fa-solid fa-circle-check"></i> صحيح (+5)
+                  </button>
+                  <button type="button" id="btnTeamEvaluateWrong" class="btn-duo-outline btn-sm" style="color:#dc2626;border-color:#ef4444;padding:6px 14px;">
+                    <i class="fa-solid fa-circle-xmark"></i> خطأ
+                  </button>
+                </div>
+              ` : ''}
+            </div>
+          </div>
+        `;
+
+        // ربط تفاعلات النقر عند المتسابق أو المشرف
+        if (canSolve && !isOrderingCorrectionRunning) {
+          const bankContainer = document.getElementById("teamOrderingBankZone");
+          bankContainer?.querySelectorAll("[data-bank-id]").forEach(btn => {
+            btn.addEventListener("click", () => {
+              const bId = btn.getAttribute("data-bank-id");
+              const idx = bankWords.findIndex(w => w.id === bId);
+              if (idx > -1) {
+                placedWords.push(bankWords[idx]);
+                bankWords.splice(idx, 1);
+                try { soundFX.btnClick(); } catch (e) {}
+                renderTeamOrderingBoard();
+                broadcastTeamInteractiveState({
+                  type: "ordering",
+                  questionIdx: qIndex,
+                  globalQIndex: globalQIdx,
+                  placedWords: placedWords.map(w => ({ id: w.id, text: w.text, origIdx: w.origIdx })),
+                  bankWords: bankWords.map(w => ({ id: w.id, text: w.text, origIdx: w.origIdx }))
+                });
+              }
+            });
+          });
+
+          const placedContainer = document.getElementById("teamOrderingPlacedZone");
+          placedContainer?.querySelectorAll("[data-placed-id]").forEach(btn => {
+            btn.addEventListener("click", () => {
+              const pId = btn.getAttribute("data-placed-id");
+              const idx = placedWords.findIndex(w => w.id === pId);
+              if (idx > -1) {
+                bankWords.push(placedWords[idx]);
+                placedWords.splice(idx, 1);
+                try { soundFX.btnClick(); } catch (e) {}
+                renderTeamOrderingBoard();
+                broadcastTeamInteractiveState({
+                  type: "ordering",
+                  questionIdx: qIndex,
+                  globalQIndex: globalQIdx,
+                  placedWords: placedWords.map(w => ({ id: w.id, text: w.text, origIdx: w.origIdx })),
+                  bankWords: bankWords.map(w => ({ id: w.id, text: w.text, origIdx: w.origIdx }))
+                });
+              }
+            });
+          });
+
+          document.getElementById("btnResetTeamOrder")?.addEventListener("click", () => {
+            bankWords = [...bankWords, ...placedWords];
+            placedWords = [];
+            try { soundFX.btnClick(); } catch (e) {}
+            renderTeamOrderingBoard();
+            broadcastTeamInteractiveState({
+              type: "ordering",
+              questionIdx: qIndex,
+              globalQIndex: globalQIdx,
+              placedWords: [],
+              bankWords: bankWords.map(w => ({ id: w.id, text: w.text, origIdx: w.origIdx }))
+            });
+          });
+
+          document.getElementById("btnSubmitTeamOrder")?.addEventListener("click", () => {
+            executeOrderingCorrection(null);
+          });
+        }
+
+        document.getElementById("btnTeamEvaluateCorrect")?.addEventListener("click", () => {
+          executeOrderingCorrection(true);
+        });
+        document.getElementById("btnTeamEvaluateWrong")?.addEventListener("click", () => {
+          executeOrderingCorrection(false);
+        });
+      }
+
+      // دالة تنفيذ التصحيح اللحظي المتزامن للجميع
+      function executeOrderingCorrection(manualSupervisorChoice = null) {
+        if (isOrderingCorrectionRunning) return;
+        isOrderingCorrectionRunning = true;
+        clearInterval(liveTimerInterval);
+
+        const allCorrect = (manualSupervisorChoice !== null) 
+          ? manualSupervisorChoice 
+          : (placedWords.length === originalWords.length && placedWords.every((w, i) => w.origIdx === i));
+
+        const targetSentenceText = originalWords.map(w => w.text).join(" ");
+
+        // بث حدث التصحيح لجميع الشاشات فوراً عبر فايربيس
+        broadcastTeamInteractiveState({
+          type: "correction",
+          subtype: "ordering",
+          questionIdx: qIndex,
+          globalQIndex: globalQIdx,
+          placedWords: placedWords.map((w, i) => ({
+            id: w.id,
+            text: w.text,
+            origIdx: w.origIdx,
+            isCorrect: (w.origIdx === i)
+          })),
+          allCorrect: allCorrect,
+          targetSentence: targetSentenceText
+        });
+
+        // تشغيل أنيميشن التصحيح على الجهاز الحالي
+        applyTeamOrderingCorrectionUI(
+          placedWords.map((w, i) => ({ ...w, isCorrect: (w.origIdx === i) })),
+          allCorrect,
+          targetSentenceText
+        );
+
+        setTimeout(() => {
+          handleTeamQuestionResult(allCorrect, null, allCorrect ? 5 : 0);
+        }, 2400);
+      }
+
+      // تحديث خارجي عند وصول حركة كلمات من جهاز آخر
+      window.applyTeamOrderingUpdate = function(syncedPlaced, syncedBank, byUser) {
+        if (isOrderingCorrectionRunning) return;
+        if (Array.isArray(syncedPlaced)) placedWords = [...syncedPlaced];
+        if (Array.isArray(syncedBank)) bankWords = [...syncedBank];
+        renderTeamOrderingBoard();
+      };
+
+      renderTeamOrderingBoard();
+
+    // ── 3. التوصيل التفاعلي المتزامن لحظياً لجميع الشاشات ──
     } else if (Array.isArray(q.pairs) && q.pairs.length > 0) {
       const cleanPairs = q.pairs.map((p, pIdx) => {
         let left = "";
@@ -15527,174 +15800,390 @@ function renderTeamQuestion(q, globalQIdx, qIndex) {
         letter: ARABIC_LETTERS[idx] || String(idx + 1)
       }));
 
-      // خلط عشوائي حقيقي مبعثر ومؤكد بحيث لا تكون أي إجابة مقابلة لسؤالها أفقياً (Strict Scramble Derangement)
-      let scrambledRight = shuffleArray([...rightItems]);
+      // خلط عشوائي حقيقي مبعثر وموحد لجميع الأجهزة باستخدام بذرة السؤال
+      const matchSeed = (globalQIdx * 19 + 7);
+      for (let i = rightItems.length - 1; i > 0; i--) {
+        const j = (matchSeed * (i + 1)) % (i + 1);
+        const tmp = rightItems[i];
+        rightItems[i] = rightItems[j];
+        rightItems[j] = tmp;
+      }
       if (cleanPairs.length > 1) {
-        for (let tries = 0; tries < 25; tries++) {
-          let hasDirectMatch = false;
-          for (let i = 0; i < scrambledRight.length; i++) {
-            if (scrambledRight[i].origIdx === leftItems[i].origIdx) {
-              hasDirectMatch = true;
-              const swapIdx = (i + 1) % scrambledRight.length;
-              const tmp = scrambledRight[i];
-              scrambledRight[i] = scrambledRight[swapIdx];
-              scrambledRight[swapIdx] = tmp;
+        for (let tries = 0; tries < 20; tries++) {
+          let hasDirect = false;
+          for (let i = 0; i < rightItems.length; i++) {
+            if (rightItems[i].origIdx === leftItems[i]?.origIdx) {
+              hasDirect = true;
+              const nextI = (i + 1) % rightItems.length;
+              const tmp = rightItems[i];
+              rightItems[i] = rightItems[nextI];
+              rightItems[nextI] = tmp;
             }
           }
-          if (!hasDirectMatch) break;
+          if (!hasDirect) break;
         }
       }
 
-      specificContentHtml = `
-        <div class="team-matching-container">
-          <div style="font-size:14px;font-weight:800;color:#2563eb;margin-bottom:6px;">
-            <i class="fa-solid fa-arrows-split-up-and-left"></i> صِل بين كل عنصر في الطرف (أ) وما يناسبه في الطرف (ب) المبعثر:
-          </div>
-          <div class="team-matching-grid" id="teamMatchInteractiveGrid">
-            <div class="team-matching-col">
-              <div class="team-matching-header"><i class="fa-solid fa-list-ol"></i> الطرف (أ) [الأصول]:</div>
-              ${leftItems.map(it => `
-                <div class="team-match-tile team-match-tile-left font-${q.font || 'quran'}" data-left-id="${it.id}" data-orig-idx="${it.origIdx}" data-num="${it.num}">
-                  <span class="team-match-badge">${it.num}</span>
-                  <span style="flex:1;text-align:right;">${escapeHtml(it.text)}</span>
-                  <span class="match-conn-pill" style="font-size:12px;color:#2563eb;font-weight:900;"></span>
-                </div>
-              `).join("")}
-            </div>
-
-            <div class="team-matching-col">
-              <div class="team-matching-header"><i class="fa-solid fa-shuffle"></i> الطرف (ب) [مبعثر]:</div>
-              ${scrambledRight.map(it => `
-                <div class="team-match-tile team-match-tile-right font-${q.font || 'quran'}" data-right-id="${it.id}" data-orig-idx="${it.origIdx}" data-letter="${it.letter}">
-                  <span class="team-match-badge" style="background:#eff6ff;color:#1d4ed8;">${it.letter}</span>
-                  <span style="flex:1;text-align:right;">${escapeHtml(it.text)}</span>
-                  <span class="match-conn-pill" style="font-size:12px;color:#16a34a;font-weight:900;"></span>
-                </div>
-              `).join("")}
-            </div>
-          </div>
-          ${canSolve ? `
-            <div style="margin-top:10px;">
-              <button type="button" id="btnSubmitTeamMatch" class="btn-duo-green" style="font-size:15px;padding:8px 24px;display:none;">
-                <i class="fa-solid fa-check-double"></i> اعتماد التوصيل
-              </button>
-            </div>
-          ` : ''}
-        </div>
-      `;
-    }
-
-    stageInteractiveArea.innerHTML = `
-      <div style="text-align:center;padding:20px;">
-        <div style="font-weight:900;font-size:16px;color:#1e293b;margin-bottom:12px;">
-          المتسابق المعني بالإجابة: <strong style="color:#2563eb;">${escapeHtml(currentActiveTeamSolver.studentName)}</strong> (${escapeHtml(currentActiveTeamSolver.team.name)})
-        </div>
-        ${specificContentHtml}
-        ${isSup ? `
-          <div style="display:flex;justify-content:center;gap:12px;margin-top:14px;">
-            <button type="button" id="btnTeamEvaluateCorrect" class="btn-duo-green" style="padding:10px 24px;">
-              <i class="fa-solid fa-circle-check"></i> إجابة صحيحة (+5 درجات)
-            </button>
-            <button type="button" id="btnTeamEvaluateWrong" class="btn-duo-outline" style="color:#dc2626;border-color:#ef4444;padding:10px 24px;">
-              <i class="fa-solid fa-circle-xmark"></i> إجابة غير صحيحة
-            </button>
-          </div>
-        ` : `
-          <div style="font-size:13px;color:#64748b;font-weight:700;margin-top:10px;">في انتظار تقييم المشرف لإجابة المتسابق...</div>
-        `}
-      </div>
-    `;
-
-    // تفعيل تفاعل النقر للتوصيل إن وجد
-    if (canSolve) {
+      let connections = [];
       let selectedLeftTile = null;
-      const connections = [];
-      const grid = document.getElementById("teamMatchInteractiveGrid");
-      const btnSubMatch = document.getElementById("btnSubmitTeamMatch");
+      let isMatchingCorrectionRunning = false;
 
-      if (grid) {
-        grid.querySelectorAll(".team-match-tile-left").forEach(lTile => {
-          lTile.addEventListener("click", () => {
-            if (lTile.classList.contains("connected")) {
-              const idx = connections.findIndex(c => c.leftTile === lTile);
-              if (idx > -1) {
-                connections[idx].rightTile.classList.remove("connected");
-                connections[idx].rightTile.querySelector(".match-conn-pill").textContent = "";
-                connections.splice(idx, 1);
-              }
-              lTile.classList.remove("connected", "selected");
-              lTile.querySelector(".match-conn-pill").textContent = "";
-              if (btnSubMatch) btnSubMatch.style.display = (connections.length === grid.querySelectorAll(".team-match-tile-left").length) ? "inline-flex" : "none";
-              return;
-            }
-            grid.querySelectorAll(".team-match-tile-left").forEach(t => t.classList.remove("selected"));
-            lTile.classList.add("selected");
-            selectedLeftTile = lTile;
-            try { soundFX.btnClick(); } catch (e) {}
-          });
-        });
+      // استعادة التوصيل المتزامن إن وجد
+      if (currentLiveRoom?.teamLiveInteractiveState?.type === "matching" && currentLiveRoom.teamLiveInteractiveState.questionIdx === qIndex) {
+        if (Array.isArray(currentLiveRoom.teamLiveInteractiveState.connections)) {
+          connections = [...currentLiveRoom.teamLiveInteractiveState.connections];
+        }
+      }
 
-        grid.querySelectorAll(".team-match-tile-right").forEach(rTile => {
-          rTile.addEventListener("click", () => {
-            if (!selectedLeftTile) {
-              showToast("انقر على عنصر من الطرف (أ) أولاً ثم صله بالطرف (ب)", "fa-hand-pointer");
-              return;
-            }
-            if (rTile.classList.contains("connected")) {
-              const idx = connections.findIndex(c => c.rightTile === rTile);
-              if (idx > -1) {
-                connections[idx].leftTile.classList.remove("connected");
-                connections[idx].leftTile.querySelector(".match-conn-pill").textContent = "";
-                connections.splice(idx, 1);
-              }
-            }
-            const leftNum = selectedLeftTile.getAttribute("data-num");
-            const rightLetter = rTile.getAttribute("data-letter");
-            const leftOrig = parseInt(selectedLeftTile.getAttribute("data-orig-idx"));
-            const rightOrig = parseInt(rTile.getAttribute("data-orig-idx"));
+      function renderTeamMatchingBoard() {
+        if (!stageInteractiveArea) return;
 
-            selectedLeftTile.classList.remove("selected");
-            selectedLeftTile.classList.add("connected");
-            rTile.classList.add("connected");
+        const isLocked = !canSolve || isMatchingCorrectionRunning;
 
-            selectedLeftTile.querySelector(".match-conn-pill").textContent = `⟵ [${rightLetter}]`;
-            rTile.querySelector(".match-conn-pill").textContent = `[${leftNum}] ⟶`;
+        stageInteractiveArea.innerHTML = `
+          <div class="team-matching-container" style="text-align:center;padding:12px;">
+            ${!canSolve ? `
+              <div class="spectator-mode-banner" style="margin-bottom:12px;">
+                <i class="fa-solid fa-eye"></i>
+                <span>المتسابق البطل: <strong>${escapeHtml(currentActiveTeamSolver.studentName)}</strong> يصل الخيارات الآن — تظهر الوصلات متزامنة لحظياً على شاشتك</span>
+              </div>
+            ` : `
+              <div style="font-size:14px;font-weight:800;color:#2563eb;margin-bottom:10px;">
+                <i class="fa-solid fa-arrows-split-up-and-left"></i> صِل بين كل عنصر في الطرف (أ) وما يناسبه في الطرف (ب) المبعثر (يتزامن لحظياً للجميع):
+              </div>
+            `}
 
-            connections.push({ leftOrig, rightOrig, leftTile: selectedLeftTile, rightTile: rTile });
-            selectedLeftTile = null;
+            <div class="team-matching-grid" id="teamMatchInteractiveGrid">
+              <!-- الطرف أ -->
+              <div class="team-matching-col">
+                <div class="team-matching-header"><i class="fa-solid fa-list-ol"></i> الطرف (أ) [الأصول]:</div>
+                ${leftItems.map(it => {
+                  const conn = connections.find(c => c.leftId === it.id || c.leftOrig === it.origIdx);
+                  const isSel = selectedLeftTile && selectedLeftTile.getAttribute("data-left-id") === it.id;
+                  return `
+                    <div class="team-match-tile team-match-tile-left font-${q.font || 'quran'} ${conn ? 'connected' : ''} ${isSel ? 'selected' : ''}" 
+                         data-left-id="${it.id}" data-orig-idx="${it.origIdx}" data-num="${it.num}" 
+                         style="cursor:${isLocked ? 'default' : 'pointer'};">
+                      <span class="team-match-badge">${it.num}</span>
+                      <span style="flex:1;text-align:right;">${escapeHtml(it.text)}</span>
+                      <span class="match-conn-pill" style="font-size:12px;color:#2563eb;font-weight:900;">
+                        ${conn ? `⟵ [${conn.rightLetter}]` : ''}
+                      </span>
+                    </div>
+                  `;
+                }).join("")}
+              </div>
 
-            try { soundFX.btnClick(); } catch (e) {}
+              <!-- الطرف ب -->
+              <div class="team-matching-col">
+                <div class="team-matching-header"><i class="fa-solid fa-shuffle"></i> الطرف (ب) [مبعثر]:</div>
+                ${rightItems.map(it => {
+                  const conn = connections.find(c => c.rightId === it.id || c.rightOrig === it.origIdx);
+                  return `
+                    <div class="team-match-tile team-match-tile-right font-${q.font || 'quran'} ${conn ? 'connected' : ''}" 
+                         data-right-id="${it.id}" data-orig-idx="${it.origIdx}" data-letter="${it.letter}" 
+                         style="cursor:${isLocked ? 'default' : 'pointer'};">
+                      <span class="team-match-badge" style="background:#eff6ff;color:#1d4ed8;">${it.letter}</span>
+                      <span style="flex:1;text-align:right;">${escapeHtml(it.text)}</span>
+                      <span class="match-conn-pill" style="font-size:12px;color:#16a34a;font-weight:900;">
+                        ${conn ? `[${conn.leftNum}] ⟶` : ''}
+                      </span>
+                    </div>
+                  `;
+                }).join("")}
+              </div>
+            </div>
 
-            const totalLeft = grid.querySelectorAll(".team-match-tile-left").length;
-            if (btnSubMatch) {
-              btnSubMatch.style.display = (connections.length === totalLeft) ? "inline-flex" : "none";
-            }
-          });
-        });
+            <!-- أزرار الإجراءات -->
+            <div style="display:flex;justify-content:center;gap:12px;align-items:center;flex-wrap:wrap;margin-top:14px;">
+              ${canSolve ? `
+                <button type="button" id="btnSubmitTeamMatch" class="btn-duo-green" style="font-size:15px;padding:9px 24px;" ${connections.length !== leftItems.length ? 'disabled' : ''}>
+                  <i class="fa-solid fa-check-double"></i> اعتماد التوصيل والتصحيح للجميع (${connections.length}/${leftItems.length})
+                </button>
+                <button type="button" id="btnResetTeamMatch" class="btn-duo-outline" style="font-size:13px;padding:8px 16px;" ${connections.length === 0 ? 'disabled' : ''}>
+                  <i class="fa-solid fa-rotate-left"></i> مسح التوصيلات
+                </button>
+              ` : ''}
 
-        btnSubMatch?.addEventListener("click", () => {
-          clearInterval(liveTimerInterval);
-          const allCorrect = connections.every(c => c.leftOrig === c.rightOrig);
-          if (allCorrect) {
-            try { soundFX.correct(); } catch (e) {}
-          } else {
-            try { soundFX.wrong(); } catch (e) {}
+              ${isSup ? `
+                <div style="display:inline-flex;gap:8px;background:#f8fafc;padding:6px 12px;border-radius:12px;border:1.5px solid var(--border-duo);align-items:center;">
+                  <span style="font-size:12px;font-weight:800;color:#64748b;">تقييم المشرف:</span>
+                  <button type="button" id="btnTeamEvaluateCorrect" class="btn-duo-green btn-sm" style="padding:6px 14px;">
+                    <i class="fa-solid fa-circle-check"></i> صحيح (+5)
+                  </button>
+                  <button type="button" id="btnTeamEvaluateWrong" class="btn-duo-outline btn-sm" style="color:#dc2626;border-color:#ef4444;padding:6px 14px;">
+                    <i class="fa-solid fa-circle-xmark"></i> خطأ
+                  </button>
+                </div>
+              ` : ''}
+            </div>
+          </div>
+        `;
+
+        // تفعيل النقر والتوصيل
+        if (canSolve && !isMatchingCorrectionRunning) {
+          const grid = document.getElementById("teamMatchInteractiveGrid");
+          if (grid) {
+            grid.querySelectorAll(".team-match-tile-left").forEach(lTile => {
+              lTile.addEventListener("click", () => {
+                const lId = lTile.getAttribute("data-left-id");
+                if (lTile.classList.contains("connected")) {
+                  // إزالة التوصيل القائم
+                  connections = connections.filter(c => c.leftId !== lId);
+                  selectedLeftTile = null;
+                  renderTeamMatchingBoard();
+                  broadcastTeamInteractiveState({
+                    type: "matching",
+                    questionIdx: qIndex,
+                    globalQIndex: globalQIdx,
+                    connections: connections
+                  });
+                  return;
+                }
+
+                grid.querySelectorAll(".team-match-tile-left").forEach(t => t.classList.remove("selected"));
+                lTile.classList.add("selected");
+                selectedLeftTile = lTile;
+                try { soundFX.btnClick(); } catch (e) {}
+              });
+            });
+
+            grid.querySelectorAll(".team-match-tile-right").forEach(rTile => {
+              rTile.addEventListener("click", () => {
+                if (!selectedLeftTile) {
+                  showToast("انقر على عنصر من الطرف (أ) أولاً ثم صله بالطرف (ب)", "fa-hand-pointer");
+                  return;
+                }
+
+                const leftId = selectedLeftTile.getAttribute("data-left-id");
+                const leftNum = selectedLeftTile.getAttribute("data-num");
+                const leftOrig = parseInt(selectedLeftTile.getAttribute("data-orig-idx"));
+
+                const rightId = rTile.getAttribute("data-right-id");
+                const rightLetter = rTile.getAttribute("data-letter");
+                const rightOrig = parseInt(rTile.getAttribute("data-orig-idx"));
+
+                // حذف أي توصيل سابق لنفس الطرفين
+                connections = connections.filter(c => c.leftId !== leftId && c.rightId !== rightId);
+
+                // إضافة التوصيل الجديد
+                connections.push({
+                  leftId,
+                  rightId,
+                  leftNum,
+                  rightLetter,
+                  leftOrig,
+                  rightOrig
+                });
+
+                selectedLeftTile = null;
+                try { soundFX.btnClick(); } catch (e) {}
+
+                renderTeamMatchingBoard();
+
+                // بث التوصيل الجديد لجميع الأجهزة والفرق فوراً
+                broadcastTeamInteractiveState({
+                  type: "matching",
+                  questionIdx: qIndex,
+                  globalQIndex: globalQIdx,
+                  connections: connections
+                });
+              });
+            });
+
+            document.getElementById("btnResetTeamMatch")?.addEventListener("click", () => {
+              connections = [];
+              selectedLeftTile = null;
+              renderTeamMatchingBoard();
+              broadcastTeamInteractiveState({
+                type: "matching",
+                questionIdx: qIndex,
+                globalQIndex: globalQIdx,
+                connections: []
+              });
+            });
+
+            document.getElementById("btnSubmitTeamMatch")?.addEventListener("click", () => {
+              executeMatchingCorrection(null);
+            });
           }
-          handleTeamQuestionResult(allCorrect, null, allCorrect ? 5 : 0);
+        }
+
+        document.getElementById("btnTeamEvaluateCorrect")?.addEventListener("click", () => {
+          executeMatchingCorrection(true);
+        });
+        document.getElementById("btnTeamEvaluateWrong")?.addEventListener("click", () => {
+          executeMatchingCorrection(false);
         });
       }
-    }
 
-    document.getElementById("btnTeamEvaluateCorrect")?.addEventListener("click", () => {
-      clearInterval(liveTimerInterval);
-      handleTeamQuestionResult(true, null, 5);
-    });
-    document.getElementById("btnTeamEvaluateWrong")?.addEventListener("click", () => {
-      clearInterval(liveTimerInterval);
-      handleTeamQuestionResult(false, null, 5);
-    });
+      // دالة تنفيذ التصحيح اللحظي المتزامن للتوصيل
+      function executeMatchingCorrection(manualSupervisorChoice = null) {
+        if (isMatchingCorrectionRunning) return;
+        isMatchingCorrectionRunning = true;
+        clearInterval(liveTimerInterval);
+
+        const allCorrect = (manualSupervisorChoice !== null)
+          ? manualSupervisorChoice
+          : (connections.length === leftItems.length && connections.every(c => c.leftOrig === c.rightOrig));
+
+        const gradedConnections = connections.map(c => ({
+          ...c,
+          isCorrect: (c.leftOrig === c.rightOrig)
+        }));
+
+        // بث حدث التصحيح للجميع سحابياً
+        broadcastTeamInteractiveState({
+          type: "correction",
+          subtype: "matching",
+          questionIdx: qIndex,
+          globalQIndex: globalQIdx,
+          connections: gradedConnections,
+          allCorrect: allCorrect
+        });
+
+        // تشغيل أنيميشن التصحيح محلياً
+        applyTeamMatchingCorrectionUI(gradedConnections, allCorrect);
+
+        setTimeout(() => {
+          handleTeamQuestionResult(allCorrect, null, allCorrect ? 5 : 0);
+        }, 2400);
+      }
+
+      // تحديث خارجي عند وصول توصيلات من جهاز آخر
+      window.applyTeamMatchingConnectionUpdate = function(syncedConnections, byUser) {
+        if (isMatchingCorrectionRunning) return;
+        if (Array.isArray(syncedConnections)) connections = [...syncedConnections];
+        renderTeamMatchingBoard();
+      };
+
+      renderTeamMatchingBoard();
+    }
   }
 }
+
+// --------------------------------------------------------
+// وظائف المساعدة وأنيميشنات التصحيح المتزامنة للفرق (Team Interactive Correction Helpers)
+// --------------------------------------------------------
+function broadcastTeamInteractiveState(statePayload) {
+  if (!currentLiveRoom || !currentLiveRoom.id) return;
+  const now = Date.now();
+  const fullPayload = {
+    ...statePayload,
+    updatedBy: currentUser?.name || "المتسابق",
+    timestamp: now
+  };
+  currentLiveRoom.teamLiveInteractiveState = fullPayload;
+  window.lastSeenTeamInteractiveStateTs = now;
+  if (db) {
+    updateDoc(doc(db, "live_rooms", currentLiveRoom.id), {
+      teamLiveInteractiveState: fullPayload,
+      lastUpdated: serverTimestamp()
+    }).catch(err => console.warn("Broadcast teamLiveInteractiveState notice:", err));
+  }
+}
+
+function applyTeamOrderingCorrectionUI(placedWords, allCorrect, targetSentenceText) {
+  if (!stageInteractiveArea) return;
+  clearInterval(liveTimerInterval);
+
+  const placedZone = document.getElementById("teamOrderingPlacedZone");
+  if (placedZone && Array.isArray(placedWords)) {
+    placedZone.querySelectorAll(".team-order-placed-chip").forEach((chip, idx) => {
+      const item = placedWords[idx];
+      const isWordCorrect = item ? (item.isCorrect ?? (item.origIdx === idx)) : false;
+      if (isWordCorrect) {
+        chip.style.borderColor = "#22c55e";
+        chip.style.background = "#f0fdf4";
+        chip.style.color = "#15803d";
+        chip.style.boxShadow = "0 0 12px rgba(34, 197, 94, 0.4)";
+        const icon = chip.querySelector(".fa-xmark");
+        if (icon) {
+          icon.className = "fa-solid fa-check";
+          icon.style.color = "#22c55e";
+        }
+      } else {
+        chip.style.borderColor = "#ef4444";
+        chip.style.background = "#fef2f2";
+        chip.style.color = "#b91c1c";
+        chip.style.boxShadow = "0 0 12px rgba(239, 68, 68, 0.4)";
+      }
+    });
+  }
+
+  const revealBox = document.getElementById("teamOrderingRevealBox");
+  if (revealBox && targetSentenceText) {
+    revealBox.innerHTML = `
+      <div style="margin: 10px auto; padding: 10px 18px; background: ${allCorrect ? '#f0fdf4' : '#fef2f2'}; border: 2px solid ${allCorrect ? '#22c55e' : '#ef4444'}; border-radius: 12px; font-weight: 800; font-size: 15px; color: ${allCorrect ? '#15803d' : '#991b1b'}; max-width: 640px;">
+        <i class="fa-solid ${allCorrect ? 'fa-circle-check' : 'fa-circle-info'}"></i>
+        <span>الترتيب الصحيح: <strong>${escapeHtml(targetSentenceText)}</strong></span>
+      </div>
+    `;
+  }
+
+  if (allCorrect) {
+    try { soundFX.correct(); } catch (e) {}
+    showToast("⭐ إجابة نموذجية! تم ترتيب الكلمات بإتقان تام (+5 درجات)!", "fa-circle-check", 2600);
+  } else {
+    try { soundFX.wrong(); } catch (e) {}
+    showToast("❌ ترتيب غير دقيق للكلمات!", "fa-circle-xmark", 2400);
+  }
+}
+
+function applyTeamMatchingCorrectionUI(connections, allCorrect) {
+  if (!stageInteractiveArea) return;
+  clearInterval(liveTimerInterval);
+
+  const grid = document.getElementById("teamMatchInteractiveGrid");
+  if (grid && Array.isArray(connections)) {
+    connections.forEach(conn => {
+      const isPairCorrect = !!conn.isCorrect;
+      const leftTile = grid.querySelector(`[data-left-id="${conn.leftId}"]`) || grid.querySelector(`[data-orig-idx="${conn.leftOrig}"].team-match-tile-left`);
+      const rightTile = grid.querySelector(`[data-right-id="${conn.rightId}"]`) || grid.querySelector(`[data-orig-idx="${conn.rightOrig}"].team-match-tile-right`);
+
+      [leftTile, rightTile].forEach(tile => {
+        if (!tile) return;
+        if (isPairCorrect) {
+          tile.style.borderColor = "#22c55e";
+          tile.style.background = "#f0fdf4";
+          tile.style.boxShadow = "0 0 12px rgba(34, 197, 94, 0.4)";
+          const pill = tile.querySelector(".match-conn-pill");
+          if (pill) {
+            pill.style.color = "#16a34a";
+            pill.innerHTML = `<i class="fa-solid fa-check"></i> متطابق`;
+          }
+        } else {
+          tile.style.borderColor = "#ef4444";
+          tile.style.background = "#fef2f2";
+          tile.style.boxShadow = "0 0 12px rgba(239, 68, 68, 0.4)";
+          const pill = tile.querySelector(".match-conn-pill");
+          if (pill) {
+            pill.style.color = "#dc2626";
+            pill.innerHTML = `<i class="fa-solid fa-xmark"></i> خطأ`;
+          }
+        }
+      });
+    });
+  }
+
+  if (allCorrect) {
+    try { soundFX.correct(); } catch (e) {}
+    showToast("⭐ ما شاء الله! جميع التوصيلات صحيحة ومطابقة (+5 درجات)!", "fa-circle-check", 2600);
+  } else {
+    try { soundFX.wrong(); } catch (e) {}
+    showToast("❌ بعض التوصيلات غير مطابقة!", "fa-circle-xmark", 2400);
+  }
+}
+
+// معالج عام لاستقبال أحداث التصحيح القادمة من السحابة لجميع الأجهزة
+window.applyTeamCorrectionUpdate = function(correctionState) {
+  if (!correctionState) return;
+  if (correctionState.subtype === "ordering") {
+    applyTeamOrderingCorrectionUI(correctionState.placedWords, correctionState.allCorrect, correctionState.targetSentence);
+  } else if (correctionState.subtype === "matching") {
+    applyTeamMatchingCorrectionUI(correctionState.connections, correctionState.allCorrect);
+  }
+};
 
 // معالجة نتيجة الإجابة للفقرات المختلفة مع المزامنة السحابية اللحظية
 async function handleTeamQuestionResult(isCorrect, choiceIdx, earnedPoints) {
@@ -17227,6 +17716,19 @@ function syncTeamStageRealtime(room) {
       showTeamRollingStudentCard(targetTeam, room.teamActiveSolver.studentName, () => {
         renderTeamQuestion(targetQuestion, globalQIdx, room.teamActiveSolver.qIndex);
       });
+    }
+  }
+
+  // مزامنة حالة التوصيل وترتيب الكلمات والتصحيح اللحظية لجميع الأجهزة والفرق
+  if (room.teamLiveInteractiveState && room.teamLiveInteractiveState.timestamp && room.teamLiveInteractiveState.timestamp !== window.lastSeenTeamInteractiveStateTs) {
+    window.lastSeenTeamInteractiveStateTs = room.teamLiveInteractiveState.timestamp;
+    const st = room.teamLiveInteractiveState;
+    if (st.type === "matching" && typeof window.applyTeamMatchingConnectionUpdate === "function") {
+      window.applyTeamMatchingConnectionUpdate(st.connections, st.updatedBy);
+    } else if (st.type === "ordering" && typeof window.applyTeamOrderingUpdate === "function") {
+      window.applyTeamOrderingUpdate(st.placedWords, st.bankWords, st.updatedBy);
+    } else if (st.type === "correction" && typeof window.applyTeamCorrectionUpdate === "function") {
+      window.applyTeamCorrectionUpdate(st);
     }
   }
 

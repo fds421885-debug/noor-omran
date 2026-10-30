@@ -171,7 +171,7 @@
             </div>
           </div>
 
-          <form id="loginForm" class="login-form" novalidate>
+          <form id="loginForm" class="login-form" novalidate onsubmit="event.preventDefault(); if (window.handleManualLoginSubmit) { window.handleManualLoginSubmit(event); } return false;">
             <!-- حقل الاسم الرباعي -->
             <div class="input-group">
               <label for="fullNameInput" class="input-label">
