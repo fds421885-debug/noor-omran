@@ -3254,6 +3254,82 @@
     </div>
   </div>
 
+  <!-- نافذة حسم التعادل النهائي برأي المشرف بأسلوب دولينجو (عند استنفاد ربع أسئلة الاختبار في ركلات الترجيح) -->
+  <div id="supervisorTiebreakerOverlay" class="modal-overlay hidden" style="z-index:99997;background:rgba(15,23,42,0.85);backdrop-filter:blur(6px);">
+    <div class="modal-dialog-duo winner-celebration-dialog" style="max-width:620px;width:95%;text-align:center;animation:popIn 0.35s cubic-bezier(0.175,0.885,0.32,1.275);">
+      <div style="background:linear-gradient(135deg, #0284c7 0%, #0369a1 100%);color:#fff;padding:26px 20px 20px;border-radius:24px 24px 0 0;position:relative;border-bottom:5px solid #075985;">
+        <div style="width:76px;height:76px;background:#fff;border-radius:50%;margin:0 auto 12px;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 16px rgba(0,0,0,0.2);border:4px solid #38bdf8;">
+          <i class="fa-solid fa-scale-balanced" style="font-size:36px;color:#0284c7;"></i>
+        </div>
+        <h2 style="font-size:23px;font-weight:900;margin:0 0 6px;" id="supervisorTiebreakerTitle">حسم التعادل النهائي برأي المشرف ⚖️</h2>
+        <div style="font-size:14px;opacity:0.95;font-weight:800;" id="supervisorTiebreakerRoundSub">ضمن مرحلة التصفيات</div>
+      </div>
+
+      <div style="padding:22px 20px;background:#fff;border-radius:0 0 24px 24px;text-align:right;">
+        <!-- شارة إشعار دولينجو -->
+        <div style="background:#fefce8;border:2px solid #fde047;border-radius:16px;padding:12px 16px;margin-bottom:18px;display:flex;align-items:center;gap:12px;box-shadow:0 3px 0 #fef08a;">
+          <span style="font-size:26px;flex-shrink:0;">⚽</span>
+          <div>
+            <div style="font-size:13.5px;font-weight:900;color:#854d0e;">استنفدت ركلات الترجيح ربع أسئلة الاختبار واستمر التعادل!</div>
+            <div style="font-size:12.5px;color:#a16207;font-weight:700;margin-top:2px;">
+              يرجى من المشرف الحسم من عنده — يمكنك طرح سؤال شفهي فاصِل على الفريقين، ثم تحديد الفريق الفائز للتقدم لمنصة التتويج.
+            </div>
+          </div>
+        </div>
+
+        <!-- شبكة بطاقتي الفريقين للاختيار بثيم دولينجو -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px;">
+          <!-- بطاقة الفريق الأول -->
+          <div id="tiebreakerCardTeamA" class="duo-tiebreaker-team-card">
+            <div class="team-card-header">
+              <div class="team-avatar-pill">
+                <i class="fa-solid fa-shield-halved"></i>
+              </div>
+              <span class="team-score-chip"><span id="tiebreakerTeamAScore">0</span> نقطة</span>
+            </div>
+            <strong id="tiebreakerTeamAName" class="team-title-text">الفريق الأول</strong>
+            <div class="tiebreaker-pick-badge">
+              <i class="fa-solid fa-check"></i>
+              <span class="badge-text">اختيار الفريق</span>
+            </div>
+          </div>
+
+          <!-- بطاقة الفريق الثاني -->
+          <div id="tiebreakerCardTeamB" class="duo-tiebreaker-team-card">
+            <div class="team-card-header">
+              <div class="team-avatar-pill">
+                <i class="fa-solid fa-shield-halved"></i>
+              </div>
+              <span class="team-score-chip"><span id="tiebreakerTeamBScore">0</span> نقطة</span>
+            </div>
+            <strong id="tiebreakerTeamBName" class="team-title-text">الفريق الثاني</strong>
+            <div class="tiebreaker-pick-badge">
+              <i class="fa-solid fa-check"></i>
+              <span class="badge-text">اختيار الفريق</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- أزرار تحكم المشرف -->
+        <div id="supervisorTiebreakerControls" style="display:flex;flex-direction:column;gap:10px;">
+          <button type="button" id="btnConfirmSupervisorTiebreakerWinner" class="btn-duo-green" style="font-size:16px;padding:13px 24px;font-weight:900;border-radius:16px;box-shadow:0 5px 0 #15803d;width:100%;cursor:pointer;" disabled>
+            <i class="fa-solid fa-trophy"></i> موافق وتأكيد فوز الفريق والتقدم 🏆
+          </button>
+          <div style="text-align:center;font-size:12px;color:#64748b;font-weight:700;">
+            انقر على أحد الفريقين أولاً ثم اضغط زر التأكيد
+          </div>
+        </div>
+
+        <!-- إشعار انتظار الطلاب / الجمهور -->
+        <div id="studentTiebreakerWaitingNotice" class="hidden" style="font-size:14px;color:#0369a1;font-weight:800;padding:16px;background:#f0f9ff;border:2px dashed #bae6fd;border-radius:16px;text-align:center;">
+          <i class="fa-solid fa-spinner fa-spin" style="font-size:22px;color:#0284c7;display:block;margin-bottom:8px;"></i>
+          المشرف العام يقوم بحسم التعادل حالياً واختيار الفريق المتأهل ⚖️✨
+          <div style="font-size:12px;color:#0284c7;margin-top:4px;">يرجى الانتظار، ستظهر شاشة الفوز والتتويج فوراً...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- نافذة احتفالية نهاية المباراة بأسلوب دولينجو لجميع الطلاب والمشرف -->
   <div id="teamMatchWinnerOverlay" class="modal-overlay hidden" style="z-index:99998;background:rgba(15,23,42,0.85);backdrop-filter:blur(6px);">
     <div class="modal-dialog-duo winner-celebration-dialog" style="max-width:560px;width:94%;text-align:center;animation:popIn 0.35s cubic-bezier(0.175,0.885,0.32,1.275);">

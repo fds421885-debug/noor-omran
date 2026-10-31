@@ -14458,6 +14458,12 @@ const TEAM_ROUNDS_CONFIG = {
     tag: "الفقرة الثالثة والختامية",
     rule: "بطل من كل فريق في تحدي أسئلة سريعة ومكثفة (7 ثوانٍ) ونقاط إضافية وبونص حاسم للفريق الفائز!",
     icon: "fa-fire-flame-curved"
+  },
+  4: {
+    name: "ركلات الترجيح الحاسمة",
+    tag: "كسر التعادل النهائي",
+    rule: "مواجهة فاصلة بنظام ركلات الترجيح: من يضيع سؤاله ويجيب منافسه يخسر المواجهة!",
+    icon: "fa-futbol"
   }
 };
 
@@ -15067,6 +15073,8 @@ async function handleReturnToTeamSelection() {
   currentLiveRoom.teamLaunchTimestamp = null;
   currentLiveRoom.teamCountdownStartedAt = null;
   currentLiveRoom.teamActiveSolver = null;
+  currentLiveRoom.supervisorTiebreakerState = null;
+  currentLiveRoom.tiebreakerShootoutState = null;
   currentLiveRoom.lastCinematicAlert = null;
   currentLiveRoom.lastTeamAnswerEvent = null;
   currentLiveRoom.isFinished = false;
@@ -15088,6 +15096,7 @@ async function handleReturnToTeamSelection() {
   document.getElementById("teamGrandFinaleOverlay")?.classList.add("hidden");
   document.getElementById("teamCinematicPopupCard")?.classList.add("hidden");
   document.getElementById("teamStartCountdownWrapper")?.classList.add("hidden");
+  document.getElementById("supervisorTiebreakerOverlay")?.classList.add("hidden");
   if (stageQuestionCard) stageQuestionCard.classList.add("hidden");
   if (stageInteractiveArea) stageInteractiveArea.innerHTML = "";
 
@@ -16414,6 +16423,12 @@ window.applyTeamCorrectionUpdate = function(correctionState) {
 async function handleTeamQuestionResult(isCorrect, choiceIdx, earnedPoints) {
   if (!currentLiveRoom || !currentActiveTeamSolver) return;
 
+  // توجيه أسئلة ركلات الترجيح الحاسمة (كسر التعادل الفاصل)
+  if (currentActiveTeamSolver.isTiebreaker || currentLiveRoom?.tiebreakerShootoutState?.active) {
+    await handleTiebreakerQuestionResult(isCorrect, choiceIdx, earnedPoints);
+    return;
+  }
+
   const currentRound = currentActiveTeamRound;
   const activeTeam = currentActiveTeamSolver.team;
   const oppTeam = currentActiveTeamSolver.opponentTeam;
@@ -16599,9 +16614,368 @@ async function handleTeamQuestionResult(isCorrect, choiceIdx, earnedPoints) {
 // منصة التتويج النهائي للفرق الفائزة (Grand Finale Podium)
 // --------------------------------------------------------
 // --------------------------------------------------------
+// ركلات الترجيح الحاسمة لكسر التعادل (Penalty Shootout Engine)
+// --------------------------------------------------------
+let selectedTiebreakerWinnerId = null;
+
+async function startTeamTiebreakerShootout(room, teamA, teamB) {
+  if (!room) return;
+
+  const totalQuestions = room.roundQuestions?.length || 12;
+  // ربع أسئلة الاختبار كحد أقصى لحسم التعادل شفهياً من المشرف
+  const maxPenaltyQuestions = Math.max(2, Math.floor(totalQuestions * 0.25));
+
+  room.tiebreakerShootoutState = {
+    active: true,
+    roundNumber: 1,
+    teamAId: teamA.id,
+    teamBId: teamB.id,
+    currentTurnTeamId: teamA.id,
+    teamAResult: null,
+    teamBResult: null,
+    questionsAnsweredCount: 0,
+    maxPenaltyQuestions: maxPenaltyQuestions,
+    isWaitingSupervisor: false
+  };
+
+  room.currentTeamRound = 4; // طور ركلات الترجيح
+  room.currentQuestionIdx = 0;
+  room.teamRoundStarted = true;
+
+  try { soundFX.alert(); } catch (e) {}
+
+  const tieAlert = {
+    type: "tiebreaker_start",
+    tag: "⚽ ركلات الترجيح الحاسمة (كسر التعادل)! ⚡",
+    headline: "تعادل تاريخي ومثير بين الفريقين!",
+    studentName: `${teamA.name} ⚔️ ${teamB.name}`,
+    teamName: "جولة الحسم الفاصل",
+    teamColor: "#f59e0b",
+    subtext: `سؤال لكل فريق بنظام ركلات الترجيح حتى ربع أسئلة الاختبار (${maxPenaltyQuestions} أسئلة كحد أقصى)!`,
+    timestamp: Date.now()
+  };
+
+  window.lastSeenCinematicAlertTimestamp = tieAlert.timestamp;
+  triggerCinematicTeamAlert(tieAlert);
+  room.lastCinematicAlert = tieAlert;
+  await saveRooms(room);
+
+  showToast(`⚽ بدء ركلات الترجيح الحاسمة بين «${teamA.name}» و«${teamB.name}»!`, "fa-futbol", 3500);
+
+  setTimeout(() => {
+    executeNextTiebreakerQuestion();
+  }, 3200);
+}
+
+function executeNextTiebreakerQuestion() {
+  const room = currentLiveRoom;
+  if (!room || !room.tiebreakerShootoutState || !room.tiebreakerShootoutState.active) return;
+
+  const state = room.tiebreakerShootoutState;
+  const teamA = room.teams?.[0] || room.teamA;
+  const teamB = room.teams?.[1] || room.teamB;
+  if (!teamA || !teamB) return;
+
+  const activeTeam = (state.currentTurnTeamId === teamA.id) ? teamA : teamB;
+  const opponentTeam = (state.currentTurnTeamId === teamA.id) ? teamB : teamA;
+
+  // اختيار عشوائي عادل للطالب
+  const chosenStudent = pickFairRandomStudentForTeam(activeTeam, room);
+
+  // اختيار سؤال من بنك أسئلة الاختبار (تفضيل الأسئلة الخفيفة والسرعة)
+  const questions = room.roundQuestions || [];
+  if (questions.length === 0) return;
+
+  const speedQPool = questions.filter(q => !isLongInteractiveQuestion(q));
+  const pool = speedQPool.length > 0 ? speedQPool : questions;
+  const targetQ = pool[state.questionsAnsweredCount % pool.length];
+  const globalQIdx = questions.indexOf(targetQ) >= 0 ? questions.indexOf(targetQ) : (state.questionsAnsweredCount % questions.length);
+
+  currentActiveTeamSolver = {
+    team: activeTeam,
+    opponentTeam: opponentTeam,
+    studentName: chosenStudent.name,
+    isRebound: false,
+    qIndex: state.questionsAnsweredCount,
+    globalQIndex: globalQIdx,
+    isTiebreaker: true
+  };
+
+  const solverStamp = Date.now();
+  window.lastHandledTeamSolverStartedAt = solverStamp;
+  room.currentQuestionIdx = state.questionsAnsweredCount;
+  room.currentTeamRound = 4;
+  room.teamActiveSolver = {
+    teamId: activeTeam.id,
+    teamName: activeTeam.name,
+    teamColor: activeTeam.color,
+    studentName: chosenStudent.name,
+    qIndex: state.questionsAnsweredCount,
+    globalQIndex: globalQIdx,
+    roundNum: 4,
+    isTiebreaker: true,
+    startedAt: solverStamp
+  };
+
+  saveRooms(room).catch(e => console.warn("Notice saving tiebreaker solver:", e));
+
+  if (stageQuestionCard) stageQuestionCard.classList.add("hidden");
+
+  showTeamRollingStudentCard(activeTeam, chosenStudent.name, () => {
+    renderTeamQuestion(targetQ, globalQIdx, state.questionsAnsweredCount);
+  });
+}
+
+async function handleTiebreakerQuestionResult(isCorrect, choiceIdx, earnedPoints) {
+  const room = currentLiveRoom;
+  if (!room || !room.tiebreakerShootoutState) return;
+
+  const state = room.tiebreakerShootoutState;
+  const teamA = room.teams?.[0] || room.teamA;
+  const teamB = room.teams?.[1] || room.teamB;
+  if (!teamA || !teamB) return;
+
+  const activeTeam = currentActiveTeamSolver.team;
+  const solverName = currentActiveTeamSolver.studentName;
+  const answerTimestamp = Date.now();
+  window.lastHandledTeamAnswerTs = answerTimestamp;
+
+  room.teamScores = room.teamScores || {};
+  room.teamPlayerScores = room.teamPlayerScores || {};
+  room.teamPlayerStats = room.teamPlayerStats || {};
+
+  if (!room.teamPlayerStats[solverName]) {
+    room.teamPlayerStats[solverName] = {
+      name: solverName,
+      score: 0,
+      correctCount: 0,
+      teamName: activeTeam.name,
+      teamId: activeTeam.id
+    };
+  }
+
+  if (isCorrect) {
+    room.teamScores[activeTeam.id] = (room.teamScores[activeTeam.id] || 0) + earnedPoints;
+    room.teamPlayerScores[solverName] = (room.teamPlayerScores[solverName] || 0) + earnedPoints;
+    room.teamPlayerStats[solverName].score += earnedPoints;
+    room.teamPlayerStats[solverName].correctCount += 1;
+    showToast(`⚽ هدف في ركلات الترجيح من البطل ${escapeHtml(solverName)} (+${earnedPoints} درجات)!`, "fa-futbol", 2400);
+    try { soundFX.correct(); } catch (e) {}
+  } else {
+    showToast(`❌ إخفاق في ركلة الترجيح للبطل ${escapeHtml(solverName)} من ${escapeHtml(activeTeam.name)}!`, "fa-circle-xmark", 2400);
+    try { soundFX.wrong(); } catch (e) {}
+  }
+
+  updateTeamScoreFlyers(isCorrect ? activeTeam.id : null, earnedPoints);
+  state.questionsAnsweredCount = (state.questionsAnsweredCount || 0) + 1;
+
+  if (activeTeam.id === teamA.id) {
+    // اكتملت ركلة الفريق الأول، الانتقال لدور الفريق الثاني في نفس الجولة
+    state.teamAResult = isCorrect;
+    state.currentTurnTeamId = teamB.id;
+    await saveRooms(room);
+
+    showToast(`⏳ الدور الآن في ركلات الترجيح على فريق: «${teamB.name}»...`, "fa-arrow-left", 2200);
+    setTimeout(() => {
+      executeNextTiebreakerQuestion();
+    }, 2400);
+  } else {
+    // اكتملت ركلة الفريق الثاني، الآن نقيم الجولة المشتركة بين الفريقين
+    state.teamBResult = isCorrect;
+    await saveRooms(room);
+
+    const teamAWon = (state.teamAResult === true && state.teamBResult === false);
+    const teamBWon = (state.teamAResult === false && state.teamBResult === true);
+
+    if (teamAWon) {
+      showToast(`🏆 حسمت ركلات الترجيح! فوز مستحق لفريق «${teamA.name}»!`, "fa-trophy", 3200);
+      try { soundFX.celebrate(); } catch (e) {}
+      state.active = false;
+      await saveRooms(room);
+      setTimeout(() => {
+        handleTournamentMatchFinished(teamA);
+      }, 1600);
+      return;
+    }
+
+    if (teamBWon) {
+      showToast(`🏆 حسمت ركلات الترجيح! فوز مستحق لفريق «${teamB.name}»!`, "fa-trophy", 3200);
+      try { soundFX.celebrate(); } catch (e) {}
+      state.active = false;
+      await saveRooms(room);
+      setTimeout(() => {
+        handleTournamentMatchFinished(teamB);
+      }, 1600);
+      return;
+    }
+
+    // التعادل مستمر بعد الركلتين! فحص هل تم استنفاد ربع أسئلة الاختبار
+    if (state.questionsAnsweredCount >= state.maxPenaltyQuestions) {
+      // ربع أسئلة الاختبار انتهت دون خاسر -> الحسم برأي المشرف
+      state.active = false;
+      state.isWaitingSupervisor = true;
+
+      room.supervisorTiebreakerState = {
+        isOpen: true,
+        teamA: {
+          id: teamA.id,
+          name: teamA.name,
+          color: teamA.color,
+          score: room.teamScores?.[teamA.id] || 0,
+          membersCount: teamA.members?.length || 0
+        },
+        teamB: {
+          id: teamB.id,
+          name: teamB.name,
+          color: teamB.color,
+          score: room.teamScores?.[teamB.id] || 0,
+          membersCount: teamB.members?.length || 0
+        },
+        maxPenaltyQuestions: state.maxPenaltyQuestions,
+        roundName: room.tournamentState?.rounds?.[room.tournamentState?.currentRoundIndex]?.roundName || "المواجهة الحالية",
+        updatedAt: Date.now()
+      };
+
+      await saveRooms(room);
+      showSupervisorTiebreakerModal(room.supervisorTiebreakerState);
+      return;
+    }
+
+    // استمرار ركلات الترجيح إلى الركلة التالية
+    state.roundNumber += 1;
+    state.currentTurnTeamId = teamA.id;
+    state.teamAResult = null;
+    state.teamBResult = null;
+    await saveRooms(room);
+
+    showToast(`⚡ استمرار التعادل في ركلات الترجيح! الانتقال للركلة رقم ${state.roundNumber}...`, "fa-arrows-rotate", 2400);
+    setTimeout(() => {
+      executeNextTiebreakerQuestion();
+    }, 2400);
+  }
+}
+
+function showSupervisorTiebreakerModal(modalState) {
+  const overlay = document.getElementById("supervisorTiebreakerOverlay");
+  if (!overlay || !modalState) return;
+
+  const isSup = currentUser && (
+    currentUser.role === "supervisor" ||
+    isSupervisor(currentUser.name) ||
+    currentUser.name === currentLiveRoom?.leaderName ||
+    currentUser.name === currentLiveRoom?.creatorName
+  );
+
+  const teamANameEl = document.getElementById("tiebreakerTeamAName");
+  const teamAScoreEl = document.getElementById("tiebreakerTeamAScore");
+  const teamBNameEl = document.getElementById("tiebreakerTeamBName");
+  const teamBScoreEl = document.getElementById("tiebreakerTeamBScore");
+  const supControls = document.getElementById("supervisorTiebreakerControls");
+  const studentNotice = document.getElementById("studentTiebreakerWaitingNotice");
+  const subEl = document.getElementById("supervisorTiebreakerRoundSub");
+  const confirmBtn = document.getElementById("btnConfirmSupervisorTiebreakerWinner");
+
+  if (teamANameEl) teamANameEl.textContent = modalState.teamA?.name || "الفريق الأول";
+  if (teamAScoreEl) teamAScoreEl.textContent = String(modalState.teamA?.score ?? 0);
+  if (teamBNameEl) teamBNameEl.textContent = modalState.teamB?.name || "الفريق الثاني";
+  if (teamBScoreEl) teamBScoreEl.textContent = String(modalState.teamB?.score ?? 0);
+  if (subEl) subEl.textContent = modalState.roundName || "ضمن مرحلة التصفيات";
+
+  selectedTiebreakerWinnerId = null;
+  document.getElementById("tiebreakerCardTeamA")?.classList.remove("selected");
+  document.getElementById("tiebreakerCardTeamB")?.classList.remove("selected");
+  if (confirmBtn) confirmBtn.disabled = true;
+
+  if (isSup) {
+    supControls?.classList.remove("hidden");
+    studentNotice?.classList.add("hidden");
+  } else {
+    supControls?.classList.add("hidden");
+    studentNotice?.classList.remove("hidden");
+  }
+
+  if (liveTimerInterval) {
+    clearInterval(liveTimerInterval);
+    liveTimerInterval = null;
+  }
+  if (stageQuestionCard) stageQuestionCard.classList.add("hidden");
+
+  overlay.classList.remove("hidden");
+  try { soundFX.alert(); } catch (e) {}
+}
+
+function hideSupervisorTiebreakerModal() {
+  const overlay = document.getElementById("supervisorTiebreakerOverlay");
+  if (overlay) overlay.classList.add("hidden");
+}
+
+function setupSupervisorTiebreakerModalListeners() {
+  const cardA = document.getElementById("tiebreakerCardTeamA");
+  const cardB = document.getElementById("tiebreakerCardTeamB");
+  const confirmBtn = document.getElementById("btnConfirmSupervisorTiebreakerWinner");
+
+  cardA?.addEventListener("click", () => {
+    const isSup = currentUser && (
+      currentUser.role === "supervisor" ||
+      isSupervisor(currentUser.name) ||
+      currentUser.name === currentLiveRoom?.leaderName ||
+      currentUser.name === currentLiveRoom?.creatorName
+    );
+    if (!isSup) return;
+    const teamA = currentLiveRoom?.teams?.[0] || currentLiveRoom?.teamA;
+    if (!teamA) return;
+    selectedTiebreakerWinnerId = teamA.id;
+    cardA.classList.add("selected");
+    cardB?.classList.remove("selected");
+    if (confirmBtn) confirmBtn.disabled = false;
+    try { soundFX.click(); } catch (e) {}
+  });
+
+  cardB?.addEventListener("click", () => {
+    const isSup = currentUser && (
+      currentUser.role === "supervisor" ||
+      isSupervisor(currentUser.name) ||
+      currentUser.name === currentLiveRoom?.leaderName ||
+      currentUser.name === currentLiveRoom?.creatorName
+    );
+    if (!isSup) return;
+    const teamB = currentLiveRoom?.teams?.[1] || currentLiveRoom?.teamB;
+    if (!teamB) return;
+    selectedTiebreakerWinnerId = teamB.id;
+    cardB.classList.add("selected");
+    cardA?.classList.remove("selected");
+    if (confirmBtn) confirmBtn.disabled = false;
+    try { soundFX.click(); } catch (e) {}
+  });
+
+  confirmBtn?.addEventListener("click", async () => {
+    if (!selectedTiebreakerWinnerId || !currentLiveRoom) return;
+    confirmBtn.disabled = true;
+
+    const teamA = currentLiveRoom.teams?.[0] || currentLiveRoom.teamA;
+    const teamB = currentLiveRoom.teams?.[1] || currentLiveRoom.teamB;
+    const winnerTeam = (selectedTiebreakerWinnerId === teamA.id) ? teamA : teamB;
+
+    currentLiveRoom.teamScores = currentLiveRoom.teamScores || {};
+    currentLiveRoom.teamScores[winnerTeam.id] = (currentLiveRoom.teamScores[winnerTeam.id] || 0) + 1;
+
+    currentLiveRoom.supervisorTiebreakerState = {
+      isOpen: false,
+      updatedAt: Date.now()
+    };
+    currentLiveRoom.tiebreakerShootoutState = null;
+
+    hideSupervisorTiebreakerModal();
+    showToast(`🏆 تم حسم المواجهة من قبل المشرف العام بفوز فريق «${winnerTeam.name}»!`, "fa-crown", 3500);
+
+    await handleTournamentMatchFinished(winnerTeam);
+  });
+}
+
+// --------------------------------------------------------
 // معالجة نتيجة مواجهة الفرق وشجرة التصفيات (Tournament Knockout Engine)
 // --------------------------------------------------------
-async function handleTournamentMatchFinished() {
+async function handleTournamentMatchFinished(forcedWinnerTeam = null) {
   const room = currentLiveRoom;
   if (!room || !room.isTeamMatch) return;
 
@@ -16622,9 +16996,22 @@ async function handleTournamentMatchFinished() {
   const scoreA = room.teamScores?.[teamA.id] || 0;
   const scoreB = room.teamScores?.[teamB.id] || 0;
 
+  // فحص حالة التعادل الفاصلة (Sudden Death Penalty Shootout)
+  if (!forcedWinnerTeam && scoreA === scoreB) {
+    await startTeamTiebreakerShootout(room, teamA, teamB);
+    return;
+  }
+
   // تحديد الفائز والخاسر
-  let winner = scoreA >= scoreB ? teamA : teamB;
-  let loser = scoreA >= scoreB ? teamB : teamA;
+  let winner;
+  let loser;
+  if (forcedWinnerTeam) {
+    winner = (forcedWinnerTeam.id === teamA.id) ? teamA : teamB;
+    loser = (forcedWinnerTeam.id === teamA.id) ? teamB : teamA;
+  } else {
+    winner = scoreA > scoreB ? teamA : teamB;
+    loser = scoreA > scoreB ? teamB : teamA;
+  }
 
   if (!room.tournamentState) {
     const allT = (Array.isArray(room.teams) && room.teams.length >= 2) ? room.teams : teamsCache;
@@ -17065,6 +17452,9 @@ document.getElementById("btnConfirmMatchWinnerAndNext")?.addEventListener("click
   if (btn) btn.disabled = false;
   await handleReturnToTeamSelection();
 });
+
+// تهيئة تفاعلات واجهة حسم التعادل الإشرافي
+setupSupervisorTiebreakerModalListeners();
 
 // --------------------------------------------------------
 // حساب هداف البطولة ونجم المسابقة (MVP) بدقة واحترافية
@@ -17927,6 +18317,14 @@ function syncTeamStageRealtime(room) {
 
   // إخفاء شاشة التتويج فوراً لجميع المشاركين عند استئناف أو إعادة البطولة
   document.getElementById("teamGrandFinaleOverlay")?.classList.add("hidden");
+
+  // مزامنة شاشة حسم التعادل برأي المشرف بأسلوب دولينجو لجميع الأجهزة
+  if (room.supervisorTiebreakerState && room.supervisorTiebreakerState.isOpen) {
+    showSupervisorTiebreakerModal(room.supervisorTiebreakerState);
+    return;
+  } else {
+    hideSupervisorTiebreakerModal();
+  }
 
   // مزامنة نافذة احتفالية نهاية المباراة بأسلوب دولينجو لجميع الأجهزة
   if (room.matchWinnerModalState && room.matchWinnerModalState.isOpen) {
