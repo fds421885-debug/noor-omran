@@ -894,7 +894,20 @@ document.querySelectorAll(".nav-tab").forEach(tabBtn => {
   });
 });
 
-// --------------------------------------------------------
+// تبديل تبويبات بوابة الطالب بثيم دولينجو وتقسيم المحتوى
+document.querySelectorAll(".student-duo-tab-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const targetTab = btn.getAttribute("data-student-tab");
+    document.querySelectorAll(".student-duo-tab-btn").forEach(b => b.classList.remove("active"));
+    document.querySelectorAll(".student-tab-panel").forEach(p => p.classList.remove("active"));
+    btn.classList.add("active");
+    const panel = document.getElementById(targetTab);
+    if (panel) {
+      panel.classList.add("active");
+    }
+    try { soundFX.btnClick(); } catch (e) {}
+  });
+});
 // تحميل وتهيئة البيانات المحلية والسحابية (خالية من أي بيانات وهمية)
 // --------------------------------------------------------
 function loadInitialStorage() {
@@ -3936,16 +3949,23 @@ function finalizeUserSession(user, isReturning = true) {
       if (studentRegDate) studentRegDate.textContent = formatArabicDate(user.firstLoginAt);
       if (studentLastActive) studentLastActive.textContent = formatArabicDate(user.lastLoginAt);
 
+      // تحديث شارات البنر العلوية السريعة
+      const bannerSchool = document.getElementById("studentBannerSchool");
+      const bannerGrade = document.getElementById("studentBannerGrade");
+      const bannerScore = document.getElementById("studentBannerScore");
+      if (bannerSchool) bannerSchool.textContent = user.school || "مدرسة نور البيان";
+      if (bannerGrade) bannerGrade.textContent = user.grade || "صف أول";
+
       // عرض نقاط الطالب المحفوظة في حسابه أو من لوحة الشرف
       const scoreEl = document.getElementById("studentTotalScoreDisplay");
-      if (scoreEl) {
-        const honorEntry = honorLeaderboardCache.find(x => x.name === user.name);
-        const pts = user.totalScore !== undefined ? user.totalScore : (honorEntry ? honorEntry.score : 0);
-        scoreEl.textContent = `${pts} نقطة`;
-      }
+      const honorEntry = honorLeaderboardCache.find(x => x.name === user.name);
+      const pts = user.totalScore !== undefined ? user.totalScore : (honorEntry ? honorEntry.score : 0);
+      if (scoreEl) scoreEl.textContent = `${pts} نقطة`;
+      if (bannerScore) bannerScore.textContent = String(pts);
 
       try { renderStudentPracticeQuizzes(); } catch (e) { console.warn(e); }
       try { renderHonorLeaderboardTab(); } catch (e) { console.warn(e); }
+      try { renderPastTournamentsTab(); } catch (e) { console.warn(e); }
       showView("student");
     }
   } catch (err) {

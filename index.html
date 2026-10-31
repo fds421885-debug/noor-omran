@@ -1282,123 +1282,171 @@
     <section id="studentSection" class="view-section hidden">
       <div class="student-wrapper">
         
-        <!-- بطاقة تحية الطالب دولينجو -->
+        <!-- بطاقة تحية الطالب بثيم دولينجو المبهج والمختصر -->
         <div class="welcome-banner student-banner">
           <div class="banner-badge-icon student-cap">
             <i class="fa-solid fa-graduation-cap"></i>
           </div>
 
           <div class="banner-content">
-            <span class="role-pill student-pill">
-              <i class="fa-solid fa-graduation-cap"></i> طالب مشارك
-            </span>
-            <h2 id="studentGreetingTitle" class="welcome-title">
-              <!-- أهلاً بك أيها الطالب أو مرحباً بعودتك -->
+            <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+              <span class="role-pill student-pill">
+                <i class="fa-solid fa-graduation-cap"></i> طالب متسابق
+              </span>
+              <span class="badge-active" style="padding: 4px 10px; font-size: 12px;">
+                <i class="fa-solid fa-circle-check"></i> حساب موثق
+              </span>
+            </div>
+            <h2 id="studentGreetingTitle" class="welcome-title" style="margin: 2px 0;">
+              مرحباً بك يا بطل القرآن!
             </h2>
-            <p class="student-name-highlight">
-              اسم المتسابق: <strong id="studentNameDisplay">...</strong>
+            <p class="student-name-highlight" style="margin: 0; font-size: 17px;">
+              المتسابق: <strong id="studentNameDisplay">...</strong>
             </p>
-            <p class="welcome-text">
-              مسابقة نور البيان للعام 1448 - 1449 هـ. نسأل الله لك التوفيق والتميز ونيل أعلى المراتب في كتاب الله.
-            </p>
+            <div class="student-quick-pills" style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px;">
+              <span class="stat-pill-duo gold">
+                <i class="fa-solid fa-trophy"></i>
+                <span>الرصيد: <strong id="studentBannerScore">0</strong> نقطة</span>
+              </span>
+              <span class="stat-pill-duo emerald">
+                <i class="fa-solid fa-school"></i>
+                <span id="studentBannerSchool">--</span>
+              </span>
+              <span class="stat-pill-duo teal">
+                <i class="fa-solid fa-layer-group"></i>
+                <span id="studentBannerGrade">--</span>
+              </span>
+            </div>
           </div>
 
           <div class="banner-action">
             <button class="btn-duo-outline" data-action="logout" style="border-color: #ff4b4b; color: #ff4b4b;">
-              <i class="fa-solid fa-arrow-right-from-bracket"></i> تسجيل الخروج
+              <i class="fa-solid fa-arrow-right-from-bracket"></i> خروج
             </button>
           </div>
         </div>
 
-        <!-- بطاقة تفاصيل تسجيل المتسابق -->
-        <div class="student-status-card">
-          <div class="card-title-flex">
-            <h3><i class="fa-solid fa-certificate"></i> بطاقة المشاركة المعتمدة</h3>
-            <span class="badge-active"><i class="fa-solid fa-circle-check"></i> مسجل ومعتمد</span>
+        <!-- شريط تبويبات بوابة الطالب بثيم دولينجو (تقسيم المحتوى) -->
+        <nav class="student-duo-nav-tabs">
+          <button type="button" class="student-duo-tab-btn active" data-student-tab="tabStudentPractice">
+            <i class="fa-solid fa-dumbbell"></i>
+            <span>التدريب والمسابقات</span>
+          </button>
+          <button type="button" class="student-duo-tab-btn" data-student-tab="tabStudentHonor">
+            <i class="fa-solid fa-trophy"></i>
+            <span>لوحة الشرف</span>
+          </button>
+          <button type="button" class="student-duo-tab-btn" data-student-tab="tabStudentTournaments">
+            <i class="fa-solid fa-box-archive"></i>
+            <span>سجل البطولات</span>
+          </button>
+          <button type="button" class="student-duo-tab-btn" data-student-tab="tabStudentProfile">
+            <i class="fa-solid fa-id-card"></i>
+            <span>بطاقتي وبياناتي</span>
+          </button>
+        </nav>
+
+        <!-- التبويب 1: التدريب والمسابقات الحية -->
+        <div id="tabStudentPractice" class="student-tab-panel active">
+          <!-- تنبيه المسابقات الحية الجارية إن وُجدت -->
+          <div id="studentLiveRoomsSection" class="student-live-rooms-section hidden" style="margin-bottom: 22px;">
+            <div class="student-live-card">
+              <div class="student-live-header">
+                <span class="room-pulse-dot" title="بث حي"></span>
+                <h4 style="margin: 0;"><i class="fa-solid fa-tv" style="color: #ca8a04;"></i> مسابقة حية جارية الآن في المسرح!</h4>
+              </div>
+              <div id="studentLiveRoomsList" class="student-live-rooms-list" style="margin-top: 12px;"></div>
+              
+              <!-- دخول سريع برمز الغرفة -->
+              <div class="student-quick-join-bar" style="margin-top: 14px; padding-top: 12px; border-top: 1.5px dashed #fde047; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                <span style="font-weight: 800; font-size: 13.5px; color: #713f12;"><i class="fa-solid fa-hashtag"></i> رمز الغرفة:</span>
+                <input type="text" id="inputStudentRoomCode" placeholder="123456" class="input-room-code-clean" maxlength="20" autocomplete="off" spellcheck="false" style="color: #0f172a !important; background: #ffffff !important; font-size: 18px !important; font-weight: 900 !important; text-align: center !important; direction: ltr !important; min-width: 140px; padding: 6px 12px;">
+                <button id="btnStudentJoinByCode" class="btn-duo-green btn-sm"><i class="fa-solid fa-arrow-right-to-bracket"></i> دخول</button>
+              </div>
+            </div>
           </div>
-          <div class="info-grid">
-            <div class="info-block">
-              <span class="info-label">المدرسة / المركز:</span>
-              <span class="info-val" id="studentSchoolDisplay">--</span>
+
+          <!-- بطاقة التدريب الذاتي -->
+          <div class="practice-tests-section">
+            <div class="section-title-with-badge">
+              <h3><i class="fa-solid fa-dumbbell"></i> التدريب الذاتي</h3>
+              <span class="practice-badge">⚡ تدريب حر</span>
             </div>
-            <div class="info-block">
-              <span class="info-label">الصف / الفئة:</span>
-              <span class="info-val" id="studentGradeDisplay">--</span>
-            </div>
-            <div class="info-block" style="background:#fefce8;border:1.5px solid #fde047;border-radius:10px;padding:8px 12px;">
-              <span class="info-label" style="color:#854d0e;"><i class="fa-solid fa-trophy" style="color:#eab308;"></i> نقاط المسابقة الرسمية:</span>
-              <span class="info-val" id="studentTotalScoreDisplay" style="font-weight:900;color:#ca8a04;font-size:18px;">0 نقطة</span>
-            </div>
-            <div class="info-block">
-              <span class="info-label">تاريخ التسجيل:</span>
-              <span class="info-val" id="studentRegDate">--</span>
-            </div>
-            <div class="info-block">
-              <span class="info-label">آخر ظهور:</span>
-              <span class="info-val" id="studentLastActive">اليوم</span>
+            <p class="section-hint-text">
+              تمرّن على أسئلة فئتك لتعزيز الحفظ وضبط أحكام نور البيان.
+            </p>
+
+            <div id="studentPracticeQuizzesList" class="practice-quizzes-grid">
+              <!-- اختبارات التدريب الذاتي تظهر هنا -->
             </div>
           </div>
         </div>
 
-        <!-- قسم المسابقات الحية الجارية للطالب -->
-        <div id="studentLiveRoomsSection" class="student-live-rooms-section hidden">
-          <div class="student-live-card">
-            <div class="student-live-header">
-              <span class="room-pulse-dot" title="بث حي"></span>
-              <h4><i class="fa-solid fa-tv" style="color: #ca8a04;"></i> توجد مسابقة حية جارية الآن في المسرح الحي!</h4>
+        <!-- التبويب 2: لوحة الشرف المباشرة -->
+        <div id="tabStudentHonor" class="student-tab-panel">
+          <div class="student-honor-board-section">
+            <div class="section-title-with-badge">
+              <h3><i class="fa-solid fa-trophy" style="color: #eab308;"></i> لوحة الشرف</h3>
+              <span class="practice-badge" style="background:#fef08a;color:#854d0e;border-color:#ca8a04;">🏆 ترتيب لحظي</span>
             </div>
-            <div id="studentLiveRoomsList" class="student-live-rooms-list">
-              <!-- تُملأ عند وجود غرف نشطة -->
-            </div>
-            <!-- دخول مباشر برمز الغرفة -->
-            <div class="student-quick-join-bar" style="margin-top: 15px; padding-top: 15px; border-top: 1.5px dashed #fde047; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-              <span style="font-weight: 700; font-size: 13.5px; color: #713f12;"><i class="fa-solid fa-hashtag"></i> أو أدخل رمز الغرفة مباشرة:</span>
-              <input type="text" id="inputStudentRoomCode" placeholder="مثال: 123456" class="input-room-code-clean" maxlength="20" autocomplete="off" spellcheck="false" style="color: #0f172a !important; background: #ffffff !important; font-size: 20px !important; font-weight: 900 !important; text-align: center !important; direction: ltr !important; min-width: 180px;">
-              <button id="btnStudentJoinByCode" class="btn-duo-green btn-sm"><i class="fa-solid fa-arrow-right-to-bracket"></i> دخول الغرفة</button>
+            <p class="section-hint-text">
+              ترتيب المتسابقين الأبطال بناءً على درجات المسابقات المعتمدة.
+            </p>
+            <div id="studentHonorBoardList" class="honor-board-tab-list">
+              <!-- تُملأ تلقائياً -->
             </div>
           </div>
         </div>
 
-        <!-- قسم التدريب الذاتي المتاح للطلاب -->
-        <div class="practice-tests-section">
-          <div class="section-title-with-badge">
-            <h3><i class="fa-solid fa-dumbbell"></i> التدريب الذاتي والتمرين على الأسئلة</h3>
-            <span class="practice-badge">متاح مجاناً لا يؤثر على درجات المسابقة الرسمية</span>
-          </div>
-          <p class="section-hint-text">
-            هذه الاختبارات المخصصة لفئتك مصرح بها للتدريب الذاتي لتثبيت الحفظ ومراجعة أحكام نور البيان.
-          </p>
-
-          <div id="studentPracticeQuizzesList" class="practice-quizzes-grid">
-            <!-- اختبارات التدريب الذاتي تظهر هنا -->
-          </div>
-        </div>
-
-        <!-- قسم لوحة الشرف المباشرة للطالب -->
-        <div class="student-honor-board-section" style="margin-top: 30px;">
-          <div class="section-title-with-badge">
-            <h3><i class="fa-solid fa-trophy" style="color: #eab308;"></i> لوحة الشرف — ترتيب المتسابقين</h3>
-            <span class="practice-badge" style="background:#fef08a;color:#854d0e;border-color:#ca8a04;">نقاط معتمدة ومحفوظة</span>
-          </div>
-          <p class="section-hint-text">
-            يتم تحديث الترتيب والنقاط تلقائياً ومباشرة مع كل مسابقة تجريها.
-          </p>
-          <div id="studentHonorBoardList" class="honor-board-tab-list">
-            <!-- تُملأ تلقائياً -->
+        <!-- التبويب 3: أرشيف البطولات السابقة -->
+        <div id="tabStudentTournaments" class="student-tab-panel">
+          <div class="student-past-tournaments-section">
+            <div class="section-title-with-badge">
+              <h3><i class="fa-solid fa-box-archive" style="color: #2563eb;"></i> سجل البطولات</h3>
+              <span class="practice-badge" style="background:#dbeafe;color:#1e40af;border-color:#93c5fd;">🎖️ سجل الأبطال</span>
+            </div>
+            <p class="section-hint-text">
+              تاريخ المسابقات ونتائج الفرق المتوجة في نور البيان.
+            </p>
+            <div id="studentPastTournamentsList" class="past-tournaments-cards-grid">
+              <!-- تُملأ تلقائياً -->
+            </div>
           </div>
         </div>
 
-        <!-- قسم أرشيف المسابقات السابقة للطلاب -->
-        <div class="student-past-tournaments-section" style="margin-top: 30px;">
-          <div class="section-title-with-badge">
-            <h3><i class="fa-solid fa-box-archive" style="color: #2563eb;"></i> أرشيف المسابقات والبطولات السابقة</h3>
-            <span class="practice-badge" style="background:#dbeafe;color:#1e40af;border-color:#93c5fd;">تاريخ الأبطال</span>
-          </div>
-          <p class="section-hint-text">
-            سجل البطولات ومراكز الفرق المتوجة في مسابقات نور البيان السابقة.
-          </p>
-          <div id="studentPastTournamentsList" class="past-tournaments-cards-grid">
-            <!-- تُملأ تلقائياً -->
+        <!-- التبويب 4: بطاقة المشارك المعتمدة وتفاصيل الحساب -->
+        <div id="tabStudentProfile" class="student-tab-panel">
+          <div class="student-status-card">
+            <div class="card-title-flex">
+              <h3><i class="fa-solid fa-id-card"></i> بطاقة المشاركة المعتمدة</h3>
+              <span class="badge-active"><i class="fa-solid fa-circle-check"></i> مسجل رسمي</span>
+            </div>
+            <div class="info-grid">
+              <div class="info-block">
+                <span class="info-label">المدرسة / المركز:</span>
+                <span class="info-val" id="studentSchoolDisplay">--</span>
+              </div>
+              <div class="info-block">
+                <span class="info-label">الصف / الفئة:</span>
+                <span class="info-val" id="studentGradeDisplay">--</span>
+              </div>
+              <div class="info-block" style="background:#fefce8;border:2px solid #fde047;border-radius:14px;padding:12px 14px;">
+                <span class="info-label" style="color:#854d0e;"><i class="fa-solid fa-trophy" style="color:#eab308;"></i> نقاط المسابقة الرسمية:</span>
+                <span class="info-val" id="studentTotalScoreDisplay" style="font-weight:900;color:#ca8a04;font-size:20px;">0 نقطة</span>
+              </div>
+              <div class="info-block">
+                <span class="info-label">تاريخ التسجيل:</span>
+                <span class="info-val" id="studentRegDate">--</span>
+              </div>
+              <div class="info-block">
+                <span class="info-label">آخر ظهور:</span>
+                <span class="info-val" id="studentLastActive">اليوم</span>
+              </div>
+              <div class="info-block">
+                <span class="info-label">حالة الحساب:</span>
+                <span class="info-val" style="color:#16a34a;font-weight:800;">جاهز للتنافس</span>
+              </div>
+            </div>
           </div>
         </div>
 
