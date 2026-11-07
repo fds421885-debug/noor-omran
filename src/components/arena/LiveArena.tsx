@@ -128,11 +128,34 @@ export const LiveArena: React.FC = () => {
   // السؤال الحالي المعروض
   const currentQuestionIdx = activeRoom?.currentQuestionIdx || 0;
   const currentQuestion: Question | undefined = useMemo(() => {
+    let rawQ: Question | undefined;
     if (activeRoom?.type === "tournament") {
-      return roundQuestions[currentQuestionIdx % roundQuestions.length];
+      rawQ = roundQuestions[currentQuestionIdx % roundQuestions.length];
+    } else {
+      rawQ = roomQuestions[currentQuestionIdx % roomQuestions.length];
     }
-    return roomQuestions[currentQuestionIdx % roomQuestions.length];
-  }, [activeRoom?.type, roundQuestions, roomQuestions, currentQuestionIdx]);
+    if (!rawQ) return undefined;
+
+    // صمام أمان صارم: استبعاد الأسئلة الشفهية والمقالية والتوصيل والترتيب من فقرة تحت الضغط (Round 3)
+    if (activeRoom?.type === "tournament" && currentTeamRound === 3) {
+      const isOralOrEssay = rawQ.type === "oral" || !!rawQ.targetOral || rawQ.type === "essay" || rawQ.type === "matching" || rawQ.type === "ordering";
+      if (isOralOrEssay || !rawQ.options || rawQ.options.length < 2) {
+        const fallbackMCQ = roomQuestions.find(q => q.type === "mcq" && !q.targetOral && Array.isArray(q.options) && q.options.length >= 2);
+        if (fallbackMCQ) {
+          return fallbackMCQ;
+        }
+        return {
+          ...rawQ,
+          type: "mcq",
+          targetOral: undefined,
+          options: ["صحيح", "خطأ"],
+          correct: 0,
+          points: 5
+        };
+      }
+    }
+    return rawQ;
+  }, [activeRoom?.type, roundQuestions, roomQuestions, currentQuestionIdx, currentTeamRound]);
 
   // إعادة ضبط الترتيب والتوصيل عند تغير السؤال
   useEffect(() => {
@@ -891,37 +914,50 @@ export const LiveArena: React.FC = () => {
                     </div>
                   )}
 
-                  {/* منطقة التفاعل: توصيل (Matching) */}
+                  {/* منطقة التفاعل: توصيل (Matching) متكيف لجميع الشاشات والبروجكتور */}
                   {currentQuestion.type === "matching" && currentQuestion.pairs && (
-                    <div style={{ marginTop: "20px" }}>
-                      <p style={{ textAlign: "center", color: "#64748b", fontWeight: 700, marginBottom: "12px" }}>
+                    <div className="team-matching-container" style={{ marginTop: "16px", width: "100%", margin: "0 auto" }}>
+                      <p style={{ textAlign: "center", color: "#64748b", fontWeight: 700, marginBottom: "12px", fontSize: "15px" }}>
                         اختر الطرف الأيمن ثم الطرف المقابل له للتوصيل:
                       </p>
-                      <div className="team-matching-grid" style={{ maxWidth: "600px", margin: "0 auto" }}>
-                        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                      <div className="team-matching-grid" style={{ width: "100%", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                        <div className="team-matching-col" style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                           {currentQuestion.pairs.map((p, i) => (
                             <button
                               key={i}
                               type="button"
-                              className="btn-choice-duo"
+                              className="btn-choice-duo team-match-tile"
                               style={{
                                 background: matchingSelectedLeft === p[0] ? "#e0f2fe" : matchedPairs[p[0]] ? "#f0fdf4" : undefined,
-                                borderColor: matchingSelectedLeft === p[0] ? "var(--duo-blue)" : undefined
+                                borderColor: matchingSelectedLeft === p[0] ? "var(--duo-blue)" : undefined,
+                                width: "100%",
+                                minHeight: "48px",
+                                padding: "10px 14px",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between"
                               }}
                               onClick={() => setMatchingSelectedLeft(p[0])}
                             >
-                              {p[0]}
+                              <span>{p[0]}</span>
+                              {matchedPairs[p[0]] && <span style={{ color: "#16a34a", fontWeight: 900, fontSize: "13px" }}>✓</span>}
                             </button>
                           ))}
                         </div>
-                        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                        <div className="team-matching-col" style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                           {currentQuestion.pairs.map((p, i) => (
                             <button
                               key={i}
                               type="button"
-                              className="btn-choice-duo"
+                              className="btn-choice-duo team-match-tile"
                               style={{
-                                background: Object.values(matchedPairs).includes(p[1]) ? "#f0fdf4" : undefined
+                                background: Object.values(matchedPairs).includes(p[1]) ? "#f0fdf4" : undefined,
+                                width: "100%",
+                                minHeight: "48px",
+                                padding: "10px 14px",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between"
                               }}
                               onClick={() => {
                                 if (matchingSelectedLeft) {
@@ -935,7 +971,8 @@ export const LiveArena: React.FC = () => {
                                 }
                               }}
                             >
-                              {p[1]}
+                              <span>{p[1]}</span>
+                              {Object.values(matchedPairs).includes(p[1]) && <span style={{ color: "#16a34a", fontWeight: 900, fontSize: "13px" }}>✓</span>}
                             </button>
                           ))}
                         </div>
@@ -943,8 +980,8 @@ export const LiveArena: React.FC = () => {
                     </div>
                   )}
 
-                  {/* منطقة التفاعل: تقييم المعلمين الشفهي (Oral) */}
-                  {currentQuestion.type === "oral" && (
+                  {/* منطقة التفاعل: تقييم المعلمين الشفهي (Oral) حصرياً في الفقرتين 1 و 2 وممنوع في فقرة تحت الضغط */}
+                  {currentQuestion.type === "oral" && currentTeamRound !== 3 && (
                     <div className="live-eval-box" style={{ marginTop: "24px" }}>
                       <div className="eval-header-flex">
                         <span><i className="fa-solid fa-star-half-stroke"></i> تقييم لجنة المعلمين الشفهي المباشر:</span>

@@ -9,6 +9,27 @@ function isLongInteractiveQuestion(q) {
   return false;
 }
 
+function isSubjectiveSupervisorQuestion(q) {
+  if (!q) return false;
+  if (q.targetOral && String(q.targetOral).trim().length > 0) return true;
+  if (q.type === "oral" || q.type === "recite" || q.type === "recitation" || q.type === "speech") return true;
+  if (q.type === "essay" || q.type === "subjective" || q.type === "text" || q.type === "written") return true;
+  if (!Array.isArray(q.options) || q.options.length < 2) {
+    if (q.type !== "matching" && q.type !== "ordering" && q.type !== "order") {
+      return true;
+    }
+  }
+  return false;
+}
+
+function isObjectiveSpeedQuestion(q) {
+  if (!q) return false;
+  if (isLongInteractiveQuestion(q)) return false;
+  if (isSubjectiveSupervisorQuestion(q)) return false;
+  if (Array.isArray(q.options) && q.options.length >= 2) return true;
+  return false;
+}
+
 function ensureTeamQuestionsPopulated(room, forceFresh = false) {
   if (!room || !room.isTeamMatch) return;
   if (forceFresh || !room.roundQuestions || !Array.isArray(room.roundQuestions) || room.roundQuestions.length === 0 || !room.roundQuestionConfig) {
@@ -21,17 +42,19 @@ function ensureTeamQuestionsPopulated(room, forceFresh = false) {
     }
 
     const longInteractiveQ = allQ.filter(q => isLongInteractiveQuestion(q));
-    const speedQ = allQ.filter(q => !isLongInteractiveQuestion(q));
+    const subjectiveSupervisorQ = allQ.filter(q => !isLongInteractiveQuestion(q) && isSubjectiveSupervisorQuestion(q));
+    const pureObjectiveSpeedQ = allQ.filter(q => isObjectiveSpeedQuestion(q));
 
-    if (speedQ.length < 2) {
-      longInteractiveQ.forEach(lq => {
-        speedQ.push({
-          text: lq.text || "سؤال سريع تحت الضغط",
+    if (pureObjectiveSpeedQ.length < 2) {
+      const sourceQuestions = [...longInteractiveQ, ...subjectiveSupervisorQ, ...allQ];
+      sourceQuestions.forEach((sq, idx) => {
+        pureObjectiveSpeedQ.push({
+          text: sq.text || `سؤال حاسم وسريع تحت الضغط #${idx + 1}`,
           type: "mcq",
           options: ["صحيح", "خطأ"],
           correct: 0,
           points: 5,
-          sectionName: lq.sectionName || "تحت الضغط"
+          sectionName: sq.sectionName || "تحت الضغط"
         });
       });
     }
@@ -45,18 +68,23 @@ function ensureTeamQuestionsPopulated(room, forceFresh = false) {
       else round2Pool.push(q);
     });
 
-    const countR3 = Math.max(2, Math.floor(speedQ.length / 3));
-    round3Pool.push(...speedQ.slice(0, countR3));
-    const remainingSpeed = speedQ.slice(countR3);
-
-    remainingSpeed.forEach((q, idx) => {
+    subjectiveSupervisorQ.forEach((q, idx) => {
       if (idx % 2 === 0) round1Pool.push(q);
       else round2Pool.push(q);
     });
 
-    while (round1Pool.length < 2) round1Pool.push(round3Pool[0]);
-    while (round2Pool.length < 2) round2Pool.push(round3Pool[1] || round3Pool[0]);
-    while (round3Pool.length < 2) round3Pool.push(speedQ[0]);
+    const countR3 = Math.max(2, Math.floor(pureObjectiveSpeedQ.length / 3));
+    round3Pool.push(...pureObjectiveSpeedQ.slice(0, countR3));
+    const remainingPureSpeed = pureObjectiveSpeedQ.slice(countR3);
+
+    remainingPureSpeed.forEach((q, idx) => {
+      if (idx % 2 === 0) round1Pool.push(q);
+      else round2Pool.push(q);
+    });
+
+    while (round1Pool.length < 2) round1Pool.push(round3Pool[0] || { text: "سؤال تنافسي", type: "mcq", options: ["نعم", "لا"], correct: 0, points: 5 });
+    while (round2Pool.length < 2) round2Pool.push(round3Pool[1] || round3Pool[0] || { text: "سؤال تنافسي", type: "mcq", options: ["نعم", "لا"], correct: 0, points: 5 });
+    while (round3Pool.length < 2) round3Pool.push({ text: "سؤال حاسم تحت الضغط", type: "mcq", options: ["صحيح", "خطأ"], correct: 0, points: 5, sectionName: "تحت الضغط" });
 
     const finalQuestions = [...round1Pool, ...round2Pool, ...round3Pool];
     const roundConfig = {
@@ -70,15 +98,17 @@ function ensureTeamQuestionsPopulated(room, forceFresh = false) {
   }
 }
 
-test("1. فحص استبعاد أسئلة التوصيل والترتيب نهائياً من فقرة تحت الضغط (Round 3)", () => {
+test("1. فحص استبعاد أسئلة المقالي والشفهي (تقييم المشرف صح أو خطأ) والتوصيل والترتيب نهائياً من فقرة تحت الضغط (Round 3)", () => {
   const mixedQuiz = {
-    title: "اختبار تجريبي",
+    title: "اختبار شامل تجريبي",
     sections: [
       {
-        sectionName: "قسم التوصيل والترتيب",
+        sectionName: "قسم شامل",
         questions: [
           { type: "matching", pairs: [["1", "أ"], ["2", "ب"]], text: "صل الكلمات" },
           { type: "order", items: ["الحمد", "لله", "رب", "العالمين"], text: "رتب الآية" },
+          { type: "oral", targetOral: "كَتَبَ - بَلَغَ - وَجَدَ", text: "اقرأ الكلمات الآتية بضبط الحركات" },
+          { type: "essay", text: "اشرح معنى الآية الكريمة باختصار" },
           { type: "mcq", options: ["خيار 1", "خيار 2"], correct: 0, text: "سؤال اختيار 1" },
           { type: "mcq", options: ["خيار 1", "خيار 2"], correct: 1, text: "سؤال اختيار 2" },
           { type: "mcq", options: ["خيار 1", "خيار 2"], correct: 0, text: "سؤال اختيار 3" },
@@ -105,7 +135,26 @@ test("1. فحص استبعاد أسئلة التوصيل والترتيب نها
       false,
       `السؤال رقم ${idx + 1} في فقرة تحت الضغط يجب ألا يكون توصيل أو ترتيب أبداً`
     );
+    assert.strictEqual(
+      isSubjectiveSupervisorQuestion(q),
+      false,
+      `السؤال رقم ${idx + 1} في فقرة تحت الضغط يجب ألا يكون شفهي أو مقالي يعتمد على تحكيم المشرف`
+    );
+    assert.strictEqual(
+      isObjectiveSpeedQuestion(q),
+      true,
+      `السؤال رقم ${idx + 1} في فقرة تحت الضغط يجب أن يكون موضوعياً سريعاً (MCQ) مؤتمت التقييم`
+    );
   });
+
+  // التأكد من أن الأسئلة الشفهية والمقالية تم توجيهها للفقرتين الأولى والثانية
+  const r1AndR2Questions = room.roundQuestions.slice(0, cfgR3.start);
+  const foundOral = r1AndR2Questions.some(q => q.type === "oral" || !!q.targetOral);
+  const foundEssay = r1AndR2Questions.some(q => q.type === "essay");
+  const foundMatching = r1AndR2Questions.some(q => q.type === "matching");
+  assert.ok(foundOral, "الأسئلة الشفهية يجب أن تكون في الفقرة الأولى أو الثانية");
+  assert.ok(foundEssay, "الأسئلة المقالية يجب أن تكون في الفقرة الأولى أو الثانية");
+  assert.ok(foundMatching, "أسئلة التوصيل يجب أن تكون في الفقرة الأولى أو الثانية");
 });
 
 test("2. فحص إزالة أي تكرار للمراكز ومنع لاق المراكز (Deduplication of Standings)", () => {

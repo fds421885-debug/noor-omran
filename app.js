@@ -14102,8 +14102,39 @@ function isLongInteractiveQuestion(q) {
 }
 
 // --------------------------------------------------------
+// فحص الأسئلة المقالية أو الشفهية التي تعتمد على تقييم وتحكيم المشرف ("صح ولا غلط")
+// --------------------------------------------------------
+function isSubjectiveSupervisorQuestion(q) {
+  if (!q) return false;
+  // 1. أسئلة التلاوة والشفهي
+  if (q.targetOral && String(q.targetOral).trim().length > 0) return true;
+  if (q.type === "oral" || q.type === "recite" || q.type === "recitation" || q.type === "speech") return true;
+  // 2. أسئلة مقالية أو نصية تحتاج تحكيم وتقييم يدوي
+  if (q.type === "essay" || q.type === "subjective" || q.type === "text" || q.type === "written") return true;
+  // 3. أسئلة تفتقر إلى خيارات اختيار من متعدد واضحة وليست تفاعلية
+  if (!Array.isArray(q.options) || q.options.length < 2) {
+    if (q.type !== "matching" && q.type !== "ordering" && q.type !== "order") {
+      return true;
+    }
+  }
+  return false;
+}
+
+// --------------------------------------------------------
+// فحص الأسئلة الموضوعية السريعة (MCQ) الخالصة المؤتمتة لفقرة تحت الضغط (Round 3)
+// --------------------------------------------------------
+function isObjectiveSpeedQuestion(q) {
+  if (!q) return false;
+  if (isLongInteractiveQuestion(q)) return false;
+  if (isSubjectiveSupervisorQuestion(q)) return false;
+  if (Array.isArray(q.options) && q.options.length >= 2) return true;
+  return false;
+}
+
+// --------------------------------------------------------
 // استخراج وتأمين توزيع أسئلة الاختبار كاملة بالتساوي على الفقرات
-// مع استبعاد أسئلة التوصيل وترتيب الجمل نهائياً وباتاً من فقرة تحت الضغط (Round 3)
+// مع استبعاد أسئلة المقالي والشفهي (تقييم المشرف صح أو خطأ) والتوصيل والترتيب
+// نهائياً وباتاً من فقرة تحت الضغط (Round 3) لتكون حصرياً موضوعية مباشرة ومؤتمتة
 // --------------------------------------------------------
 function ensureTeamQuestionsPopulated(room, forceFresh = false) {
   if (!room || !room.isTeamMatch) return;
@@ -14127,30 +14158,36 @@ function ensureTeamQuestionsPopulated(room, forceFresh = false) {
       });
     }
 
-    // فصل أسئلة التوصيل والترتيب عن الأسئلة السريعة (MCQ وشفهي)
-    // منعاً باتاً لوجود أي سؤال توصيل أو ترتيب في فقرة تحت الضغط (Round 3)
+    // تصنيف الأسئلة إلى ثلاث فئات واضحة:
+    // 1. أسئلة تفاعلية طويلة: توصيل وترتيب (محصورة في الفقرتين 1 و 2)
     const longInteractiveQ = allQ.filter(q => isLongInteractiveQuestion(q));
-    const speedQ = allQ.filter(q => !isLongInteractiveQuestion(q));
+    // 2. أسئلة شفهية ومقالية تعتمد على تقييم وتحكيم المشرف ("صح ولا غلط") (محصورة في الفقرتين 1 و 2)
+    const subjectiveSupervisorQ = allQ.filter(q => !isLongInteractiveQuestion(q) && isSubjectiveSupervisorQuestion(q));
+    // 3. أسئلة موضوعية سريعة وخالصة (MCQ) ذات خيارات صريحة ومؤتمتة التقييم
+    const pureObjectiveSpeedQ = allQ.filter(q => isObjectiveSpeedQuestion(q));
 
-    // ضمان توفر أسئلة سريعة كافية لفقرة تحت الضغط (سؤالان على الأقل)
-    if (speedQ.length < 2) {
-      longInteractiveQ.forEach(lq => {
-        speedQ.push({
-          text: lq.text || "سؤال سريع تحت الضغط",
+    // ضمان توفر أسئلة سريعة موضوعية كافية لفقرة تحت الضغط (سؤالان على الأقل)
+    if (pureObjectiveSpeedQ.length < 2) {
+      const sourceQuestions = [...longInteractiveQ, ...subjectiveSupervisorQ, ...allQ];
+      sourceQuestions.forEach((sq, idx) => {
+        pureObjectiveSpeedQ.push({
+          text: sq.text || `سؤال حاسم وسريع تحت الضغط #${idx + 1}`,
           type: "mcq",
           options: ["صحيح", "خطأ"],
           correct: 0,
           points: 5,
-          sectionName: lq.sectionName || "تحت الضغط"
+          sectionName: sq.sectionName || "تحت الضغط"
         });
       });
     }
 
-    const shuffledLong = longInteractiveQ.sort(() => Math.random() - 0.5);
-    const shuffledSpeed = speedQ.sort(() => Math.random() - 0.5);
+    const shuffledLong = [...longInteractiveQ].sort(() => Math.random() - 0.5);
+    const shuffledSubjective = [...subjectiveSupervisorQ].sort(() => Math.random() - 0.5);
+    const shuffledPureSpeed = [...pureObjectiveSpeedQ].sort(() => Math.random() - 0.5);
 
-    // توزيع الأسئلة: الفقرة 1 و 2 تأخذ الأسئلة التفاعلية والأسئلة العامة
-    // والفقرة 3 (تحت الضغط) تأخذ حصرياً من الأسئلة السريعة (speedQ) فقط!
+    // توزيع الأسئلة:
+    // الفقرة 1 والفقرة 2 تأخذان الأسئلة التفاعلية (توصيل/ترتيب) والأسئلة الشفهية والمقالية
+    // والفقرة 3 (تحت الضغط) تأخذ حصرياً من الأسئلة الموضوعية السريعة (MCQ) فقط وبشكل قاطع!
     const round1Pool = [];
     const round2Pool = [];
     const round3Pool = [];
@@ -14161,12 +14198,19 @@ function ensureTeamQuestionsPopulated(room, forceFresh = false) {
       else round2Pool.push(q);
     });
 
-    // توزيع الأسئلة السريعة مع حجز حصة وافرة لفقرة تحت الضغط (الفقرة 3)
-    const countR3 = Math.max(2, Math.floor(shuffledSpeed.length / 3));
-    round3Pool.push(...shuffledSpeed.slice(0, countR3));
-    const remainingSpeed = shuffledSpeed.slice(countR3);
+    // توزيع الأسئلة الشفهية والمقالية الخاضعة للمشرف حصرياً بين الفقرتين 1 و 2 فقط
+    shuffledSubjective.forEach((q, idx) => {
+      if (idx % 2 === 0) round1Pool.push(q);
+      else round2Pool.push(q);
+    });
 
-    remainingSpeed.forEach((q, idx) => {
+    // تخصيص حصة وافرة لفقرة تحت الضغط (الفقرة 3) حصرياً من الأسئلة الموضوعية السريعة MCQ
+    const countR3 = Math.max(2, Math.floor(shuffledPureSpeed.length / 3));
+    round3Pool.push(...shuffledPureSpeed.slice(0, countR3));
+    const remainingPureSpeed = shuffledPureSpeed.slice(countR3);
+
+    // توزيع الفائض من الأسئلة الموضوعية بين الفقرتين 1 و 2
+    remainingPureSpeed.forEach((q, idx) => {
       if (idx % 2 === 0) round1Pool.push(q);
       else round2Pool.push(q);
     });
@@ -14179,7 +14223,7 @@ function ensureTeamQuestionsPopulated(room, forceFresh = false) {
       round2Pool.push(round3Pool[1] || round3Pool[0] || { text: "سؤال تنافسي", type: "mcq", options: ["نعم", "لا"], correct: 0, points: 5 });
     }
     while (round3Pool.length < 2) {
-      round3Pool.push(remainingSpeed[0] || { text: "سؤال سريع تحت الضغط", type: "mcq", options: ["صحيح", "خطأ"], correct: 0, points: 5, sectionName: "تحت الضغط" });
+      round3Pool.push({ text: "سؤال حاسم تحت الضغط", type: "mcq", options: ["صحيح", "خطأ"], correct: 0, points: 5, sectionName: "تحت الضغط" });
     }
 
     const finalQuestions = [...round1Pool, ...round2Pool, ...round3Pool];
@@ -15632,15 +15676,15 @@ function executeNextTeamQuestion(qIndex) {
 function renderTeamQuestion(q, globalQIdx, qIndex) {
   if (!q || !stageInteractiveArea) return;
 
-  // صمام أمان صارم: استبعاد التوصيل وترتيب الكلمات نهائياً من فقرة تحت الضغط (Round 3)
-  if (currentActiveTeamRound === 3 && isLongInteractiveQuestion(q)) {
+  // صمام أمان صارم: استبعاد التوصيل والترتيب والأسئلة المقالية والشفهية (تقييم المشرف صح أو خطأ) نهائياً من فقرة تحت الضغط (Round 3)
+  if (currentActiveTeamRound === 3 && (!isObjectiveSpeedQuestion(q) || isLongInteractiveQuestion(q) || isSubjectiveSupervisorQuestion(q))) {
     const questions = currentLiveRoom?.roundQuestions || [];
-    const speedQ = questions.find(item => !isLongInteractiveQuestion(item) && item.type === "mcq");
+    const speedQ = questions.find(item => isObjectiveSpeedQuestion(item));
     if (speedQ) {
       q = speedQ;
     } else {
       q = {
-        text: q.text || "سؤال سريع تحت الضغط",
+        text: (q.text && !isSubjectiveSupervisorQuestion(q)) ? q.text : "سؤال حاسم وسريع تحت الضغط",
         type: "mcq",
         options: ["صحيح", "خطأ"],
         correct: 0,
@@ -15729,11 +15773,12 @@ function renderTeamQuestion(q, globalQIdx, qIndex) {
     // ========================================================
     let specificContentHtml = "";
 
-    // ── 1. الشفهي ──
-    if (q.targetOral) {
+    // ── 1. الشفهي والمقالي الخاضع لتقييم وتحكيم المشرف (حصرياً في الفقرتين 1 و 2 وممنوع في فقرة تحت الضغط) ──
+    if ((q.targetOral || q.type === "oral" || q.type === "essay" || q.type === "subjective" || isSubjectiveSupervisorQuestion(q)) && currentActiveTeamRound !== 3) {
+      const displayText = q.targetOral || q.text || "المطلوب: أجب أو اقرأ أمام المشرف";
       specificContentHtml = `
         <div style="margin: 12px auto; padding: 14px 20px; background: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 14px; font-size: 18px; font-weight: 800; color: #0f172a; max-width: 560px;">
-          📖 النص القرآني المطلوب تلاوته: <span class="font-${q.font || 'quran'}" style="color: #2563eb; display:inline-block; margin-top: 6px; font-size: 20px;">${escapeHtml(q.targetOral)}</span>
+          📖 النص المطلوب: <span class="font-${q.font || 'quran'}" style="color: #2563eb; display:inline-block; margin-top: 6px; font-size: 20px;">${escapeHtml(displayText)}</span>
         </div>
       `;
 
