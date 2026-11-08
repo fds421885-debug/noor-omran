@@ -2922,15 +2922,29 @@ function updateImpersonationBanner() {
 function extractAuthTokenFromUrl() {
   try {
     const params = new URLSearchParams(window.location.search);
-    let token = params.get("auth") || params.get("token") || params.get("user") || params.get("id");
+    let token = params.get("auth") || 
+                params.get("token") || 
+                params.get("user") || 
+                params.get("id") || 
+                params.get("student") || 
+                params.get("studentId") || 
+                params.get("participant") || 
+                params.get("profile");
     if (!token && window.location.hash) {
       const hashStr = window.location.hash.replace(/^#\/?/, "");
       const hashParams = new URLSearchParams(hashStr.includes("?") ? hashStr.split("?")[1] : hashStr);
-      token = hashParams.get("auth") || hashParams.get("token") || hashParams.get("user") || hashParams.get("id");
+      token = hashParams.get("auth") || 
+              hashParams.get("token") || 
+              hashParams.get("user") || 
+              hashParams.get("id") || 
+              hashParams.get("student") || 
+              hashParams.get("studentId") || 
+              hashParams.get("participant") || 
+              hashParams.get("profile");
     }
     if (token) {
       try {
-        return decodeURIComponent(token).trim();
+        return decodeURIComponent(token.replace(/\+/g, " ")).trim();
       } catch (e) {
         return token.trim();
       }
@@ -2941,69 +2955,116 @@ function extractAuthTokenFromUrl() {
   return null;
 }
 
-async function checkDirectUrlAuthentication(overrideToken = null) {
+async function checkDirectUrlAuthentication(overrideToken = null, options = {}) {
   const rawToken = overrideToken || extractAuthTokenFromUrl();
   if (!rawToken) return false;
 
   const directToken = rawToken.trim();
-  const tokenNorm = normalizeArabic(directToken);
+  let decodedToken = directToken;
+  try {
+    decodedToken = decodeURIComponent(directToken.replace(/\+/g, " ")).trim();
+  } catch (e) {}
+
+  const tokenNorm = normalizeArabic(decodedToken);
+  const rawTokenNorm = normalizeArabic(directToken);
   const derivedDocId = getDocumentId(tokenNorm);
+  const derivedRawDocId = getDocumentId(rawTokenNorm);
 
   // استخراج النص العربي إذا كان المعرف مرمّزاً بصيغة user__...
   let decodedFromToken = "";
-  if (directToken.startsWith("user__")) {
+  if (directToken.startsWith("user__") || decodedToken.startsWith("user__")) {
     try {
-      const percentStr = directToken.replace(/^user_/, "").replace(/_/g, "%");
+      const targetStr = directToken.startsWith("user__") ? directToken : decodedToken;
+      const percentStr = targetStr.replace(/^user_/, "").replace(/_/g, "%");
       decodedFromToken = decodeURIComponent(percentStr);
     } catch (e) {}
   }
   const decodedNorm = decodedFromToken ? normalizeArabic(decodedFromToken) : "";
 
-  // 1. البحث في الكاش أولاً بكل الاحتمالات
+  // 1. البحث في الكاش أولاً بكل الاحتمالات والاشتقاقات
   let user = participantsCache.find(u => 
     u.id === directToken || 
-    u.id === derivedDocId ||
+    u.id === decodedToken ||
+    u.id === derivedDocId || 
+    u.id === derivedRawDocId ||
     u.id === rawToken || 
-    (u.normalizedName && (u.normalizedName === tokenNorm || (decodedNorm && u.normalizedName === decodedNorm))) || 
-    (u.name && (u.name.trim() === directToken || normalizeArabic(u.name) === tokenNorm || (decodedNorm && normalizeArabic(u.name) === decodedNorm)))
+    (u.normalizedName && (u.normalizedName === tokenNorm || u.normalizedName === rawTokenNorm || (decodedNorm && u.normalizedName === decodedNorm))) || 
+    (u.name && (u.name.trim() === decodedToken || u.name.trim() === directToken || normalizeArabic(u.name) === tokenNorm || normalizeArabic(u.name) === rawTokenNorm || (decodedNorm && normalizeArabic(u.name) === decodedNorm)))
   );
 
-  // 2. إذا لم يوجد في الكاش، نجلبه مباشرة من Cloud Firestore
-  if (!user) {
+  // 2. إذا لم يوجد في الكاش، نجلبه مباشرة وبقوة من Cloud Firestore
+  if (!user && db) {
     try {
-      let snap = null;
-      try {
-        snap = await getDoc(doc(db, "participants", directToken));
-      } catch (e) {}
+      try { await ensureFirebaseAuth(); } catch (aErr) {}
 
-      if ((!snap || !snap.exists()) && derivedDocId !== directToken) {
+      // أ. فحص مباشر بالمعرفات المحتملة
+      const candidateDocIds = [directToken, decodedToken, derivedDocId, derivedRawDocId].filter(Boolean);
+      for (const cId of candidateDocIds) {
         try {
-          snap = await getDoc(doc(db, "participants", derivedDocId));
+          const snap = await getDoc(doc(db, "participants", cId));
+          if (snap.exists()) {
+            const snapData = snap.data();
+            user = { ...snapData, id: snap.id, normalizedName: snapData.normalizedName || normalizeArabic(snapData.name || "") };
+            break;
+          }
         } catch (e) {}
       }
-      
-      if (snap && snap.exists()) {
-        const snapData = snap.data();
-        user = { ...snapData, id: snap.id, normalizedName: snapData.normalizedName || normalizeArabic(snapData.name || "") };
-      } else {
-        const allSnap = await getDocs(collection(db, "participants"));
-        allSnap.forEach(d => {
-          const dData = d.data();
-          const dNorm = dData.normalizedName || normalizeArabic(dData.name || "");
-          if (
-            d.id === directToken || 
-            d.id === derivedDocId || 
-            d.id === rawToken || 
-            dNorm === tokenNorm || 
-            (decodedNorm && dNorm === decodedNorm) || 
-            (dData.name && (dData.name.trim() === directToken || (decodedFromToken && dData.name.trim() === decodedFromToken)))
-          ) {
-            user = { ...dData, id: d.id, normalizedName: dNorm };
+
+      // ب. فحص بالاستعلام السحابي عن الاسم المطابق
+      if (!user) {
+        try {
+          const qNorm = query(collection(db, "participants"), where("normalizedName", "==", tokenNorm), limit(1));
+          const qSnap = await getDocs(qNorm);
+          if (!qSnap.empty) {
+            const d = qSnap.docs[0];
+            const dData = d.data();
+            user = { ...dData, id: d.id, normalizedName: dData.normalizedName || normalizeArabic(dData.name || "") };
           }
-        });
+        } catch (e) {}
+      }
+
+      if (!user && decodedToken && decodedToken !== tokenNorm) {
+        try {
+          const qName = query(collection(db, "participants"), where("name", "==", decodedToken), limit(1));
+          const qSnap = await getDocs(qName);
+          if (!qSnap.empty) {
+            const d = qSnap.docs[0];
+            const dData = d.data();
+            user = { ...dData, id: d.id, normalizedName: dData.normalizedName || normalizeArabic(dData.name || "") };
+          }
+        } catch (e) {}
+      }
+
+      // ج. مسح شامل لمجموعة المشاركين كخط أمان نهائي
+      if (!user) {
+        try {
+          const allSnap = await getDocs(collection(db, "participants"));
+          allSnap.forEach(d => {
+            const dData = d.data();
+            const dNorm = dData.normalizedName || normalizeArabic(dData.name || "");
+            const dName = dData.name ? dData.name.trim() : "";
+            if (
+              d.id === directToken || 
+              d.id === decodedToken ||
+              d.id === derivedDocId || 
+              d.id === derivedRawDocId || 
+              d.id === rawToken || 
+              dNorm === tokenNorm || 
+              dNorm === rawTokenNorm ||
+              (decodedNorm && dNorm === decodedNorm) || 
+              dName === decodedToken ||
+              dName === directToken ||
+              (decodedFromToken && dName === decodedFromToken)
+            ) {
+              user = { ...dData, id: d.id, normalizedName: dNorm };
+            }
+          });
+        } catch (e) {}
       }
 
       if (user) {
+        user.isPermanent = true;
+        user.isRegistered = true;
         const existingIdx = participantsCache.findIndex(p => p.id === user.id);
         if (existingIdx >= 0) {
           participantsCache[existingIdx] = user;
@@ -3018,8 +3079,10 @@ async function checkDirectUrlAuthentication(overrideToken = null) {
   }
 
   if (user) {
+    user.isPermanent = true;
+    user.isRegistered = true;
+
     // إزالة وحذف أي جلسة إشراف سابقة تماماً عند فتح الرابط المباشر
-    // لحماية حساب المشرف ومنع ظهور شريط "العودة لحساب المشرف العام" لأولياء الأمور والطلاب نهائياً
     sessionStorage.removeItem("nour_supervisor_impersonation");
     localStorage.removeItem("nour_previous_supervisor");
     const existingBanner = document.getElementById("impersonationNoticeBar");
@@ -3037,10 +3100,12 @@ async function checkDirectUrlAuthentication(overrideToken = null) {
       window.history.replaceState({}, document.title, cleanUrl);
     } catch (e) {}
 
-    showToast(`مرحباً بعودتك! تم الدخول المباشر لحساب: ${user.name}`, "fa-circle-check");
+    showToast(`مرحباً بك يا بطل! تم فتح ملف الطالب (${user.name}) بنجاح ✨`, "fa-circle-check");
     return true;
   } else {
-    showToast("تعذر العثور على الحساب المرتبط بالرابط!", "fa-triangle-exclamation");
+    if (!options.silent) {
+      showToast("تعذر العثور على ملف الطالب المرتبط بالرابط! تأكد من صحة الرابط من المشرف", "fa-triangle-exclamation");
+    }
   }
   return false;
 }
@@ -4177,9 +4242,14 @@ function renderAccountsTable() {
         <td>${u.grade || "صف أول"}</td>
         <td><small style="color: #64748b;">${formatArabicDate(u.lastLoginAt)}</small></td>
         <td>
-          <button type="button" class="btn-open-direct-link" data-id="${safeUserDocId}" title="فتح هذا الحساب ومعاينته مباشرة">
-            <i class="fa-solid fa-right-to-bracket"></i> فتح الحساب
-          </button>
+          <div style="display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap;">
+            <button type="button" class="btn-open-direct-link" data-id="${safeUserDocId}" title="فتح هذا الحساب ومعاينته مباشرة">
+              <i class="fa-solid fa-right-to-bracket"></i> فتح الحساب
+            </button>
+            <button type="button" class="btn-copy-student-link btn-duo-outline btn-sm" data-url="${directUrl}" title="نسخ رابط ملف الطالب المباشر">
+              <i class="fa-solid fa-copy"></i> نسخ الرابط
+            </button>
+          </div>
         </td>
         <td>
           <div class="actions-cell-flex">
@@ -4200,6 +4270,19 @@ function renderAccountsTable() {
       </tr>
     `;
   }).join("");
+
+  // مستمعات نسخ رابط ملف الطالب المباشر لمشاركته
+  accountsTableBody.querySelectorAll(".btn-copy-student-link").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const url = btn.getAttribute("data-url");
+      try {
+        await navigator.clipboard.writeText(url);
+        showToast("تم نسخ رابط ملف الطالب بنجاح! أرسله للطالب لفتح ملفه مباشرة ✨", "fa-copy");
+      } catch (e) {
+        showDirectUrlDialog(url);
+      }
+    });
+  });
 
   // مستمعات فتح الحساب مباشرة والدخول به (متاحة حصرياً للمشرف في جلسته المحلية)
   accountsTableBody.querySelectorAll(".btn-open-direct-link").forEach(btn => {
@@ -20335,35 +20418,64 @@ async function initApp() {
     console.warn("Storage initial load notice:", err);
   }
 
-  // تهيئة مصادقة فايربيس السحابية في الخلفية فورياً
-  ensureFirebaseAuth().catch(e => console.info("Initial auth setup notice:", e?.message));
+  // 1. ضمان تفعيل مصادقة فايربيس السحابية أولاً بشكل مؤكد قبل أي قراءات سحابية
+  try {
+    await ensureFirebaseAuth();
+  } catch (e) {
+    console.info("Initial auth setup notice:", e?.message);
+  }
 
-  // 1. فحص مباشر وفوري لرابط الدخول المباشر (?auth=...) قبل أي استعادة للجلسة السابقة
+  // فحص معلمات الرابط
   const directAuthToken = extractAuthTokenFromUrl();
+  const urlParams = new URLSearchParams(window.location.search);
+  const interactiveRoomId = urlParams.get("interactiveRoom") || urlParams.get("room");
+
   let directLoginSucceeded = false;
 
+  // أ. إذا فتح الطالب رابطه المباشر لملفه الخاص (?auth=... أو ?student=...)
   if (directAuthToken) {
-    showGlobalLoader("مسابقة نور البيان", "جاري التحقق من رابط الحساب وتسجيل الدخول المباشر...", 3000);
+    showGlobalLoader("ملف الطالب", "جاري فتح ملف الطالب وتحميل البيانات المعتمدة من السحابة...", 10000);
     try {
       await loadCloudData();
-      directLoginSucceeded = await checkDirectUrlAuthentication(directAuthToken);
+      directLoginSucceeded = await checkDirectUrlAuthentication(directAuthToken, { silent: true });
+      if (!directLoginSucceeded) {
+        // محاولة ثانية سريعة لضمان اكتمال المزامنة السحابية وجلب المستندات
+        await new Promise(r => setTimeout(r, 600));
+        await loadCloudData(true);
+        directLoginSucceeded = await checkDirectUrlAuthentication(directAuthToken, { silent: false });
+      }
     } catch (e) {
       console.warn("Direct auth on start notice:", e);
     } finally {
       hideGlobalLoader();
     }
+
+    if (directLoginSucceeded) {
+      try {
+        setupRealtimeCloudListeners();
+        setupPlatformThemedStickers();
+      } catch (e) {
+        console.warn(e);
+      } finally {
+        hideGlobalLoader();
+      }
+      return;
+    }
   }
 
-  if (directLoginSucceeded) {
+  // ب. إذا فتح الطالب أو المشرف رابط المسابقة التفاعلية المباشر (?interactiveRoom=...)
+  if (interactiveRoomId) {
+    showGlobalLoader("المسابقة التفاعلية", "جاري الاتصال بالغرفة وتحميل البيانات...", 8000);
     try {
+      await loadCloudData();
+      await handleInteractiveUrlJoin(interactiveRoomId);
       setupRealtimeCloudListeners();
-      setupPlatformThemedStickers();
+      hideGlobalLoader();
+      return;
     } catch (e) {
-      console.warn(e);
-    } finally {
+      console.warn("Direct interactive join notice:", e);
       hideGlobalLoader();
     }
-    return;
   }
 
   // 2. استعادة الجلسة السابقة ومطابقتها فورياً وبشكل متزامن قبل أي استدعاءات شبكية
@@ -20416,12 +20528,13 @@ async function initApp() {
         isTeacher(parsedUser.name) ||
         isPresenter(parsedUser.name) ||
         parsedUser.isPermanent === true ||
+        parsedUser.isRegistered === true ||
+        (parsedUser.role === "student" && parsedUser.name && parsedUser.name !== "زائر" && !parsedUser.isGuest) ||
         (parsedUser.password && typeof parsedUser.password === "string" && parsedUser.password.trim().length > 0)
       );
 
       if (!isOfficialAccount && (parsedUser.role === "student" || parsedUser.isGuest)) {
         // طالب مؤقت بدون حساب رسمي:
-        // بناءً على رغبة المستخدم: لو حدثوا الموقع أو فتحوه لن يفتح لهم حسابهم لأنهم بلا حساب، بل يدخلهم كزوار جدد للرئيسية
         console.info("[AUTH] Guest student without registered account detected on reload/open; purging temporary session to return to hero");
         localStorage.removeItem("active_quran_user");
         localStorage.removeItem("nour_saved_user");
@@ -20488,18 +20601,15 @@ async function initApp() {
     setupRealtimeCloudListeners();
     await loadCloudData();
 
-    // فحص رابط الدخول المباشر (?auth=...) إن وجد
-    const urlParams = new URLSearchParams(window.location.search);
-    const hasDirectAuth = urlParams.has("auth") || urlParams.has("token");
-    if (hasDirectAuth) {
-      const isDirectLoggedIn = await checkDirectUrlAuthentication();
+    // فحص رابط الدخول المباشر (?auth=...) إن وجد ولم يسبق نجاحه
+    if (directAuthToken && !directLoginSucceeded) {
+      const isDirectLoggedIn = await checkDirectUrlAuthentication(directAuthToken);
       if (isDirectLoggedIn) {
         return;
       }
     }
 
     // فحص رابط الدخول المباشر للمسابقة التفاعلية (?interactiveRoom=... أو ?room=...)
-    const interactiveRoomId = urlParams.get("interactiveRoom") || urlParams.get("room");
     if (interactiveRoomId) {
       await handleInteractiveUrlJoin(interactiveRoomId);
       return;

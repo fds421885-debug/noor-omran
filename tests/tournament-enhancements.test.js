@@ -201,3 +201,65 @@ test("3. فحص كائن نافذة الاحتفال بنهاية كل مواج�
   assert.strictEqual(state.winnerTeam.id, "team_a");
   assert.strictEqual(state.loserTeam.id, "team_b");
 });
+
+test("4. فحص مطابقة وتعرف رابط ملف الطالب المباشر بكل الصيغ والترميزات (Student Direct Link Resolution)", () => {
+  function normalizeArabic(text) {
+    if (!text) return "";
+    return String(text)
+      .trim()
+      .replace(/[\u064B-\u065F\u0670]/g, "")
+      .replace(/[إأآا]/g, "ا")
+      .replace(/ة/g, "ه")
+      .replace(/ى/g, "ي")
+      .replace(/[\s\t\n\r]+/g, " ");
+  }
+
+  function getDocumentId(norm) {
+    return "user_" + encodeURIComponent(norm).replace(/%/g, "_").toLowerCase();
+  }
+
+  const student = {
+    id: "user__d8_a7_d8_ad_d9_85_d8_af",
+    name: "أحمد محمد علي",
+    normalizedName: normalizeArabic("أحمد محمد علي"),
+    role: "student",
+    school: "مدرسة الفتح",
+    grade: "صف أول"
+  };
+
+  const participants = [student];
+
+  function resolveUserFromToken(rawToken) {
+    const directToken = rawToken.trim();
+    let decodedToken = directToken;
+    try {
+      decodedToken = decodeURIComponent(directToken.replace(/\+/g, " ")).trim();
+    } catch (e) {}
+
+    const tokenNorm = normalizeArabic(decodedToken);
+    const rawTokenNorm = normalizeArabic(directToken);
+    const derivedDocId = getDocumentId(tokenNorm);
+    const derivedRawDocId = getDocumentId(rawTokenNorm);
+
+    return participants.find(u => 
+      u.id === directToken || 
+      u.id === decodedToken ||
+      u.id === derivedDocId || 
+      u.id === derivedRawDocId ||
+      u.id === rawToken || 
+      (u.normalizedName && (u.normalizedName === tokenNorm || u.normalizedName === rawTokenNorm)) || 
+      (u.name && (u.name.trim() === decodedToken || u.name.trim() === directToken || normalizeArabic(u.name) === tokenNorm))
+    );
+  }
+
+  // 1. الفحص بالمعرف المباشر
+  assert.ok(resolveUserFromToken("user__d8_a7_d8_ad_d9_85_d8_af"));
+  // 2. الفحص بالاسم العربي الكامل
+  assert.ok(resolveUserFromToken("أحمد محمد علي"));
+  // 3. الفحص بالاسم مع علامات + بدلاً من المسافات كما يحدث في الروابط
+  assert.ok(resolveUserFromToken("أحمد+محمد+علي"));
+  // 4. الفحص بالترميز المشفر %
+  assert.ok(resolveUserFromToken(encodeURIComponent("أحمد محمد علي")));
+  // 5. الفحص بالاسم بدون همزات
+  assert.ok(resolveUserFromToken("احمد محمد علي"));
+});
